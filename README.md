@@ -1,24 +1,22 @@
 # simulation-lab-web 实验仿真平台网站源代码
 
-船舶/工业自动化与电气**仿真实验 Web 端**源代码集合。本仓库收录尚未独立维护的各实验模块源码，已独立维护的项目请见下方独立仓库列表。
+船舶/工业自动化与电气**仿真实验 Web 端**源代码集合。各实验模块源码均收录于本仓库，仅部分 blog / 支付项目在独立仓库中维护。
 
 ## 目录结构
 
 | 目录 | 内容 |
 |---|---|
-| `lab_03` ~ `lab_07` | 各类仿真实验模块（传感器、控制回路、电路仿真等） |
+| `lab_01` ~ `lab_07` | 各类仿真实验模块（传感器、控制回路、CAN、电路仿真等） |
 | `blog/todo-app` | 待办事项 Demo 应用 |
 | `claude` | 测试用素材 |
 | `temp` | 临时草稿/原型（lab 副本等） |
 | `lastproj` | 早期项目汇总（consys/digital 等） |
 | `cloudflare d1和r2.js` | Cloudflare D1/R2 配置参考片段 |
 
-> `lab_01`、`lab_02`、`lab-simulator-pay`、`blog/my-blog`、`blog/tech-blog` 已在独立仓库中维护，未收录进本仓库。
+> `lab-simulator-pay`、`blog/my-blog`、`blog/tech-blog` 仍在独立仓库中维护，未收录进本仓库。
 
 ## 独立仓库
 
-- <https://github.com/nthq2004/lab_01>
-- <https://github.com/nthq2004/lab_02>
 - <https://github.com/nthq2004/lab-simulator-pay>
 - <https://github.com/nthq2004/my-blog>
 - <https://github.com/nthq2004/blog>
