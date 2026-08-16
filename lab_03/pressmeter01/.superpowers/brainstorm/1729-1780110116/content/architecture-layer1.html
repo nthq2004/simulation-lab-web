@@ -1,0 +1,98 @@
+<h2>第一层：整体架构</h2>
+<p class="subtitle">三层结构 + 模块划分</p>
+
+<div class="section">
+  <h3>架构总图</h3>
+  <div style="background:#f5f5f5;padding:16px;border-radius:8px;font-family:monospace;font-size:13px;line-height:1.6">
+<pre style="margin:0">
+┌──────────────────────────────────────────────────────────────────┐
+│  🖥️ 表示层 (Presentation Layer)                                   │
+│                                                                  │
+│  ┌─ Konva 2D Canvas ─────────────────────┐                       │
+│  │  • 系统原理图 (P&amp;ID 风格)              │  ← 完全复用现有平台     │
+│  │  • 设备符号 / 管路 / 仪表              │                       │
+│  │  • 现有组件 + 新建船舶专用组件          │                       │
+│  └────────────────────────────────────────┘                       │
+│                                                                  │
+│  ┌─ Three.js 3D Scene ────────────────────┐                       │
+│  │  • 机舱空间布局 (多层甲板)              │  ← 新建模块           │
+│  │  • 设备 3D 模型 (LOD 分级)             │                       │
+│  │  • 第一/三人称漫游 / 俯视              │                       │
+│  │  • 设备状态可视化 (颜色/粒子/标注)     │                       │
+│  └────────────────────────────────────────┘                       │
+└──────────────────────────────────┬───────────────────────────────┘
+                                   │
+┌──────────────────────────────────▼───────────────────────────────┐
+│  🔌 事件总线 (Event Bus)                                          │
+│                                                                  │
+│  • 2D↔3D 双向同步：设备选中/高亮/状态变更                         │
+│  • 发布-订阅模式：topic → subscribers                              │
+│  • topics: equipment:select, equipment:stateChange,               │
+│    camera:focus, view:switch                                     │
+│  • 不传递物理数据（物理数据在孪生层内部流转）                        │
+└──────────────────────────────────┬───────────────────────────────┘
+                                   │
+┌──────────────────────────────────▼───────────────────────────────┐
+│  🧠 数字孪生层 (Digital Twin Layer)                               │
+│                                                                  │
+│  ┌─ 设备对象池 ───────────────────────────────────────────────┐   │
+│  │  Equipment{ id, type, konvaRef, threeRef, sensors, state } │   │
+│  │  每个机舱设备 = 一个孪生对象                                 │   │
+│  ├─ 物理仿真引擎 ─────────────────────────────────────────────┤   │
+│  │  CircuitSolver (电站电气)  ← 复用                            │   │
+│  │  PneumaticSolver (管路)     ← 复用 + 扩展水/油/气多介质     │   │
+│  │  MCS51Solver (PLC/控制器)   ← 复用                          │   │
+│  │  新增: ThermalSolver (热力)  → 主机/锅炉热力计算             │   │
+│  ├─ 状态管理器 ────────────────────────────────────────────────┤   │
+│  │  统一状态树: { pressure, temp, flow, level, speed, ... }   │   │
+│  ├─ 场景管理器 ────────────────────────────────────────────────┤   │
+│  │  工况场景: 正常航行 / 备车 / 应急 / 故障                     │   │
+│  └─ 教学流程引擎 ──────────────────────────────────────────────┘   │
+│     Workflow.js  ← 完全复用，定义船舶操作流程                      │
+└──────────────────────────────────┬───────────────────────────────┘
+                                   │
+┌──────────────────────────────────▼───────────────────────────────┐
+│  📊 数据层 (Data Layer)                                          │
+│                                                                  │
+│  • 设备参数配置 (JSON)                                            │
+│  • 3D 模型资产 (glTF/GLB 文件)                                    │
+│  • 教学大纲 / 故障库 / 评估题库                                   │
+│  • 运行日志 / 历史数据回放                                        │
+└──────────────────────────────────────────────────────────────────┘
+</pre>
+  </div>
+</div>
+
+<div class="section">
+  <h3>模块清单</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="background:#e8f5e9;padding:12px;border-radius:8px">
+      <b>复用模块 (零改动)</b>
+      <ul style="margin:4px 0 0;padding-left:16px;font-size:13px">
+        <li>ControlSystem / consys.js</li>
+        <li>BaseComponent 组件体系</li>
+        <li>CircuitSolver / MNA</li>
+        <li>PneumaticSolver</li>
+        <li>DigitalSolver / MCS51Solver</li>
+        <li>Workflow 教学流程引擎</li>
+        <li>Show 视觉展示工具</li>
+        <li>ConnectionManager / Renderer</li>
+        <li>CAN / Modbus 通信</li>
+      </ul>
+    </div>
+    <div style="background:#e3f2fd;padding:12px;border-radius:8px">
+      <b>新建模块</b>
+      <ul style="margin:4px 0 0;padding-left:16px;font-size:13px">
+        <li>Three.js 3D 场景管理器</li>
+        <li>3D 设备模型组件库</li>
+        <li>事件总线 (EventBus)</li>
+        <li>船舶专用 Konva 组件</li>
+        <li>ThermalSolver 热力求解器</li>
+        <li>多介质管路系统扩展</li>
+        <li>机舱场景配置数据</li>
+        <li>数字孪生设备对象池</li>
+        <li>工况/故障场景编辑器</li>
+      </ul>
+    </div>
+  </div>
+</div>

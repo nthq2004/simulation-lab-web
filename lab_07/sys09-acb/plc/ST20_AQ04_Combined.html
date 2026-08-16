@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S7-200 SMART · ST20 + AQ04 联合仿真</title>
+<style>
+:root {
+  --blue: #1a6fa8; --blue-l: #2a9fd8; --blue-ll: #5abde8;
+  --bg0: #0e1218; --bg1: #14181f; --bg2: #1c2230; --bg3: #242c3a;
+  --bg4: #2c3548; --border: #2e3c50; --border2: #3a4a62;
+  --text: #c8d4e0; --text2: #8090a8; --text3: #4a5870;
+  --green: #44cc66; --red: #ee4444; --orange: #f07030;
+  --yellow: #f5c842; --cyan: #44cccc; --teal: #44ddaa;
+  --font-mono: 'Consolas', 'Courier New', monospace;
+  --font-ui: 'Segoe UI', Arial, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg0); color: var(--text); font-family: var(--font-ui);
+       font-size: 12px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ─── 顶栏 ─── */
+.topbar { background: var(--blue); padding: 5px 14px;
+          display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+.topbar .brand { font-weight: 900; font-size: 14px; letter-spacing: 1px; color: #fff; }
+.topbar .sub   { font-size: 10px; color: #a0c8e0; }
+.topbar-spacer { flex: 1; }
+.btn { padding: 4px 12px; border-radius: 3px; border: none; font-size: 11px;
+       font-weight: 700; cursor: pointer; transition: all .12s; letter-spacing: 0.3px; }
+.btn:active { transform: scale(0.96); }
+.btn-run  { background: var(--green);  color: #041008; }
+.btn-stop { background: var(--red);    color: #fff; }
+.btn-rst  { background: #364050;       color: #aac; }
+.btn-conn { background: var(--cyan);   color: #041414; }
+.btn-disc { background: #364050;       color: #99bbcc; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.status-pill { padding: 2px 10px; border-radius: 10px; font-size: 10px; font-weight: 700;
+               letter-spacing: 0.5px; }
+.pill-run  { background: rgba(68,204,102,.18); border: 1px solid #44cc66; color: var(--green); }
+.pill-stop { background: rgba(238,68,68,.18);  border: 1px solid #ee4444; color: var(--red); }
+.pill-conn { background: rgba(68,204,204,.18); border: 1px solid #44cccc; color: var(--cyan); }
+.pill-disc { background: rgba(50,60,80,.4);    border: 1px solid #3a4a62; color: var(--text2); }
+
+/* ─── 主布局 ─── */
+.main { flex: 1; display: grid; grid-template-columns: 300px 230px 1fr; overflow: hidden; }
+
+/* ─── 面板通用 ─── */
+.panel { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.panel-title { padding: 7px 12px; font-size: 10px; font-weight: 700; letter-spacing: 1px;
+               text-transform: uppercase; color: var(--text3); background: var(--bg2);
+               border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.panel-title .dot { width: 7px; height: 7px; border-radius: 50%; }
+.dot-blue  { background: var(--blue-l); }
+.dot-cyan  { background: var(--cyan); }
+.dot-green { background: var(--green); }
+
+/* ─── ST20 面板 ─── */
+.cpu-body { margin: 10px 10px 6px; background: #c8ccd0;
+            border-radius: 4px; box-shadow: 2px 3px 10px rgba(0,0,0,.5),
+            inset 0 1px 0 rgba(255,255,255,.25); flex-shrink: 0; }
+.cpu-topbar { background: var(--blue); border-radius: 4px 4px 0 0; padding: 4px 8px;
+              display: flex; align-items: baseline; gap: 6px; }
+.cpu-topbar .brand2 { color: #fff; font-weight: 900; font-size: 10px; letter-spacing: 1px; }
+.cpu-topbar .model  { color: #9ac8e0; font-size: 8px; }
+.cpu-mid { padding: 6px 8px; display: flex; gap: 6px; }
+.cpu-ports-col { flex: 1; }
+.port-chip { display: inline-block; background: #1a1a1a; border: 1px solid #444;
+             border-radius: 2px; padding: 2px 5px; font-size: 7px; color: #aaa; margin: 1px; }
+.knob-wrap { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+.mode-knob { width: 32px; height: 32px; background: radial-gradient(circle at 40% 35%,#555,#111);
+             border-radius: 50%; border: 2px solid #111; cursor: pointer; position: relative;
+             box-shadow: 0 2px 5px rgba(0,0,0,.6); transition: transform .2s; flex-shrink: 0; }
+.mode-knob:hover { transform: scale(1.07); }
+.mode-knob .needle { position: absolute; width: 2px; height: 11px; background: var(--green);
+                     border-radius: 1px; left: 50%; top: 4px; transform-origin: 50% 100%;
+                     transition: transform .3s, background .3s; }
+.mode-knob.stop .needle { transform: translateX(-50%) rotate(30deg); background: var(--red); }
+.mode-knob.run  .needle { transform: translateX(-50%) rotate(-30deg); background: var(--green); }
+.mode-txt { font-size: 9px; }
+.status-leds-col { display: flex; flex-direction: column; gap: 4px; }
+.sled-row { display: flex; align-items: center; gap: 4px; }
+.sled { width: 8px; height: 8px; border-radius: 50%; background: #1a1a1a; border: 1px solid #333; transition: all .15s; }
+.sled.on-g { background: var(--green); box-shadow: 0 0 5px var(--green); }
+.sled.on-r { background: var(--red);   box-shadow: 0 0 5px var(--red); }
+.sled-lbl  { font-size: 8px; color: #777; font-weight: 700; }
+
+/* IO LED 行 */
+.io-sec { padding: 3px 8px; }
+.io-lbl { font-size: 8px; font-weight: 700; margin-bottom: 2px; }
+.io-lbl.i { color: var(--blue-ll); }
+.io-lbl.q { color: var(--orange); }
+.io-row { display: flex; flex-wrap: wrap; gap: 2px; }
+.io-led { width: 16px; height: 16px; border-radius: 50%; background: #1a1a1a;
+          border: 1px solid #333; cursor: pointer; transition: all .1s;
+          display: flex; align-items: center; justify-content: center; font-size: 6px; color: transparent; }
+.io-led:hover { border-color: #668; }
+.io-led.on-i { background: var(--yellow); box-shadow: 0 0 4px var(--yellow); color: #2a2000; }
+.io-led.on-q { background: var(--orange); box-shadow: 0 0 4px var(--orange); color: #fff; }
+
+/* 端子排 */
+.terminals { margin: 3px 8px 5px; background: #2a2a2a; border-radius: 2px;
+             padding: 3px 5px; display: flex; gap: 6px; }
+.term-grp .term-lbl { font-size: 7px; font-weight: 700; margin-bottom: 2px; }
+.term-grp.i .term-lbl { color: var(--blue-ll); }
+.term-grp.q .term-lbl { color: var(--orange); }
+.term-pins { display: flex; flex-wrap: wrap; gap: 1px; }
+.term-pin { width: 7px; height: 12px; background: #888; border-radius: 1px; border: 0.5px solid #666; }
+.din-rail { background: #a0a4a8; height: 10px; border-radius: 0 0 4px 4px;
+            display: flex; align-items: center; justify-content: space-between; padding: 0 12px; }
+.din-clip { width: 12px; height: 9px; background: #707070; border-radius: 0 0 2px 2px; }
+
+.scan-bar { margin: 4px 10px; padding: 4px 8px; background: var(--bg2);
+            border: 1px solid var(--border); border-radius: 3px; font-family: var(--font-mono);
+            font-size: 10px; color: var(--text2); display: flex; justify-content: space-between; flex-shrink: 0; }
+.scan-bar .sv { color: var(--green); }
+
+/* ─── AQ04 面板 ─── */
+.aq-body { margin: 8px 8px 4px; background: #c0c4c8; border-radius: 4px;
+           box-shadow: 2px 3px 8px rgba(0,0,0,.4); flex-shrink: 0; }
+.aq-topbar { background: var(--blue); border-radius: 4px 4px 0 0; padding: 3px 7px;
+             display: flex; align-items: baseline; gap: 5px; }
+.bus-conn-strip { margin: 2px 8px; height: 8px; border-radius: 1px; transition: background .3s;
+                  display: flex; align-items: center; justify-content: center; }
+.bus-on  { background: rgba(68,204,68,.25); border: 1px solid rgba(68,204,68,.4); }
+.bus-off { background: rgba(40,50,60,.4);   border: 1px solid #2a3a4a; }
+.bus-txt { font-size: 7px; font-weight: 700; }
+.bus-txt.on  { color: var(--green); }
+.bus-txt.off { color: var(--text3); }
+
+/* 通道卡 */
+.aq-channels { padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; }
+.aq-ch { background: var(--bg0); border: 1px solid var(--border2); border-radius: 3px; padding: 4px 6px; }
+.aq-ch-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+.aq-ch-name { font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--blue-l); }
+.aq-ch-mode { font-family: var(--font-mono); font-size: 9px; color: var(--text2); }
+.aq-ch-addr { font-family: var(--font-mono); font-size: 8px; color: var(--text3); }
+
+/* 迷你仪表盘 */
+.gauge-row { display: flex; align-items: center; gap: 6px; }
+.mini-gauge { flex-shrink: 0; }
+.gauge-bar-wrap { flex: 1; }
+.gauge-track { height: 8px; background: var(--bg2); border-radius: 4px; overflow: hidden;
+               border: 1px solid var(--border); }
+.gauge-fill { height: 100%; border-radius: 4px; transition: width .2s, background .2s; }
+.gauge-vals { display: flex; justify-content: space-between; margin-top: 2px; }
+.gauge-eng { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--teal); }
+.gauge-raw { font-family: var(--font-mono); font-size: 9px; color: var(--text3); }
+
+/* AQ04 端子排 */
+.aq-terminals { margin: 3px 6px 4px; background: #2a2a2a; border-radius: 2px; padding: 3px; }
+.aq-term-row { display: flex; gap: 8px; }
+.aq-term-grp { display: flex; gap: 1px; flex-direction: column; align-items: center; }
+.aq-term-grp-lbl { font-size: 6px; color: #4a6a8a; margin-bottom: 1px; }
+.aq-term-pins { display: flex; gap: 1px; }
+.aq-term-pin { width: 6px; height: 10px; background: #888; border-radius: 1px; border: 0.5px solid #666; }
+
+/* ─── 右侧：控制台 ─── */
+.console-panel { display: flex; flex-direction: column; overflow: hidden; }
+.tab-bar { display: flex; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.tab { padding: 7px 14px; font-size: 11px; font-weight: 600; cursor: pointer;
+       color: var(--text2); border-bottom: 2px solid transparent; transition: all .1s; }
+.tab.active { color: var(--text); border-bottom-color: var(--blue); }
+.tab-pane { flex: 1; overflow: hidden; display: none; flex-direction: column; }
+.tab-pane.active { display: flex; }
+
+/* ─── JSON 编辑器 ─── */
+.json-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.json-ed { flex: 1; background: var(--bg1); border: none; padding: 10px;
+           font-family: var(--font-mono); font-size: 11px; color: #8abcdc;
+           resize: none; outline: none; line-height: 1.5; }
+.json-bar { padding: 4px 10px; background: var(--bg2); border-top: 1px solid var(--border);
+            display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.json-err { color: var(--red); font-size: 10px; flex: 1; }
+.json-ok  { color: var(--green); font-size: 10px; }
+
+/* ─── 梯形图 ─── */
+.ladder-toolbar { background: var(--bg3); border-bottom: 1px solid var(--border);
+                  padding: 5px 10px; display: flex; gap: 5px; flex-wrap: wrap; flex-shrink: 0; }
+.tbtn { padding: 3px 8px; border-radius: 2px; border: 1px solid var(--border2);
+        background: var(--bg2); color: var(--text); font-size: 10px; font-family: var(--font-mono);
+        cursor: pointer; transition: background .1s; }
+.tbtn:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
+.tb-sep { width: 1px; background: var(--border); margin: 0 2px; }
+.ladder-canvas { flex: 1; overflow: auto; padding: 10px; background: #0a0d12; }
+
+/* 网络块 */
+.net-block { margin-bottom: 12px; border: 1px solid var(--border2); border-radius: 3px; overflow: hidden; }
+.net-hdr { background: var(--bg3); padding: 3px 9px; display: flex; align-items: center; gap: 7px;
+           border-bottom: 1px solid var(--border); }
+.net-num { color: var(--blue-l); font-weight: 700; font-size: 10px; }
+.net-cmt-in { flex: 1; background: transparent; border: none; outline: none; color: var(--text2);
+              font-size: 10px; font-family: var(--font-ui); }
+.net-body { background: #080c10; padding: 6px 8px; overflow-x: auto; }
+
+/* 梯级 */
+.rung { display: flex; align-items: center; margin-bottom: 5px; }
+.rail { width: 5px; height: 36px; background: linear-gradient(90deg,#2a4070,#1e2e50);
+        border-radius: 2px 0 0 2px; flex-shrink: 0; }
+.rail.r { border-radius: 0 2px 2px 0; }
+.conn { width: 8px; height: 2px; background: var(--border2); flex-shrink: 0; transition: background .1s; }
+.conn.on { background: var(--green); }
+.elem-w { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 56px; cursor: pointer; }
+.elem-addr { font-size: 8px; font-family: var(--font-mono); color: var(--yellow); margin-bottom: 1px;
+             text-align: center; white-space: nowrap; }
+.elem-body { position: relative; width: 38px; height: 26px; display: flex; align-items: center; justify-content: center; }
+.elem-lbl  { font-size: 8px; color: var(--text2); text-align: center; font-family: var(--font-mono); }
+/* contacts */
+.cno { width: 34px; height: 22px; border-left: 2px solid #4a6080; border-right: 2px solid #4a6080; position: relative; }
+.cno::before,.cno::after { content:''; position:absolute; top:50%; left:-7px; right:-7px; height:2px; background:#2e3e52; }
+.cno.on { border-color: var(--green); } .cno.on::before,.cno.on::after { background: var(--green); }
+.cnc { width: 34px; height: 22px; border-left: 2px solid #4a6080; border-right: 2px solid #4a6080; position: relative; }
+.cnc::before { content:''; position:absolute; top:50%; left:-7px; right:-7px; height:2px; background:#2e3e52; }
+.cnc::after  { content:''; position:absolute; top:3px; left:5px; right:5px; height:1px; background:#4a6080; }
+.cnc.on::before { background: var(--green); }
+/* coils */
+.coil { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #4a6080; position: relative; }
+.coil::before,.coil::after { content:''; position:absolute; top:50%; left:-9px; right:-9px; height:2px; background:#2e3e52; }
+.coil.on  { border-color: var(--orange); background: rgba(240,112,48,.12); box-shadow: 0 0 7px rgba(240,112,48,.4); }
+.coil.on::before,.coil.on::after { background: var(--orange); }
+.coil-s { border-color: var(--yellow); }
+.coil-r { border-color: var(--red); }
+/* timer/counter box */
+.tbox { width: 52px; border: 1.5px solid #3a5080; border-radius: 2px; padding: 2px 3px;
+        font-size: 7px; font-family: var(--font-mono); color: #6070a0; background: #080e18; }
+.tbox.on { border-color: var(--green); color: var(--green); }
+.tbox .tc { float: right; color: var(--yellow); }
+.add-btn { width: 20px; height: 20px; border-radius: 50%; border: 1px dashed #2a3a50;
+           background: transparent; color: #2a3a50; font-size: 13px; cursor: pointer;
+           display: flex; align-items: center; justify-content: center; transition: all .1s; margin: 0 3px; }
+.add-btn:hover { border-color: var(--blue); color: var(--blue-l); }
+
+/* ─── AQ 监控 ─── */
+.aq-monitor { flex: 1; overflow-y: auto; padding: 8px; }
+.mon-sec { margin-bottom: 12px; }
+.mon-title { font-size: 10px; font-weight: 700; color: var(--text2); margin-bottom: 5px;
+             padding-bottom: 3px; border-bottom: 1px solid var(--border); }
+.aq-ch-big { background: var(--bg2); border: 1px solid var(--border2); border-radius: 4px;
+             padding: 8px 10px; margin-bottom: 6px; }
+.aq-ch-big-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.aq-ch-big-name { font-size: 13px; font-weight: 700; font-family: var(--font-mono); color: var(--blue-l); }
+.aq-mode-sel { background: var(--bg1); border: 1px solid var(--border); border-radius: 2px;
+               color: var(--text2); font-size: 10px; padding: 2px 5px; outline: none; cursor: pointer; }
+.aq-ch-big-gauge { height: 10px; background: var(--bg1); border-radius: 5px; overflow: hidden;
+                   border: 1px solid var(--border); margin-bottom: 4px; }
+.aq-ch-big-fill { height: 100%; border-radius: 5px; transition: width .25s, background .25s; }
+.aq-ch-big-vals { display: flex; justify-content: space-between; align-items: baseline; }
+.aq-eng-big  { font-size: 20px; font-weight: 700; font-family: var(--font-mono); color: var(--teal); }
+.aq-unit-big { font-size: 12px; color: var(--text2); margin-left: 3px; }
+.aq-raw-big  { font-size: 10px; font-family: var(--font-mono); color: var(--text3); }
+.aq-slider   { width: 100%; margin-top: 5px; accent-color: var(--blue-l); cursor: pointer; }
+.aq-addr-note { font-size: 9px; color: var(--text3); font-family: var(--font-mono); margin-top: 2px; }
+
+/* ─── 状态栏 ─── */
+.statusbar { background: var(--bg0); border-top: 1px solid var(--border); padding: 2px 12px;
+             font-size: 9px; color: var(--text2); display: flex; gap: 16px; flex-shrink: 0; }
+.sitem { display: flex; gap: 3px; }
+.sval { color: var(--text); }
+.srun  { color: var(--green); font-weight: 700; }
+.sstop { color: var(--red);   font-weight: 700; }
+.serr  { color: var(--orange);font-weight: 700; }
+
+/* 弹窗 */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.72);
+            display: none; align-items: center; justify-content: center; z-index: 99; }
+.modal-bg.show { display: flex; }
+.modal { background: var(--bg3); border: 1px solid var(--border2); border-radius: 5px;
+         padding: 14px; width: 320px; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+.modal h3 { font-size: 12px; color: var(--text); margin-bottom: 10px; }
+.frow { margin-bottom: 7px; }
+.frow label { display: block; font-size: 10px; color: var(--text2); margin-bottom: 2px; }
+.frow input, .frow select {
+  width: 100%; padding: 4px 7px; background: var(--bg1); border: 1px solid var(--border2);
+  border-radius: 2px; color: var(--text); font-family: var(--font-mono); font-size: 11px; outline: none; }
+.frow input:focus, .frow select:focus { border-color: var(--blue); }
+.modal-btns { display: flex; gap: 7px; justify-content: flex-end; margin-top: 10px; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg0); }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- 顶栏 -->
+<div class="topbar">
+  <div><div class="brand">SIMATIC</div><div class="sub">ST20 + AQ04 联合仿真平台</div></div>
+  <div class="topbar-spacer"></div>
+  <span class="status-pill pill-stop" id="pillCPU">CPU: STOP</span>
+  <span class="status-pill pill-disc" id="pillBus">总线: 断开</span>
+  <button class="btn btn-run"  id="btnRun" >▶ RUN</button>
+  <button class="btn btn-stop" id="btnStop" disabled>■ STOP</button>
+  <button class="btn btn-rst"  id="btnRst" >↺ 复位</button>
+  <button class="btn btn-conn" id="btnConn">⇌ 连接总线</button>
+  <button class="btn btn-disc" id="btnDisc" disabled>✕ 断开</button>
+</div>
+
+<!-- 主区域 -->
+<div class="main">
+
+<!-- ─── 左列：ST20 ─── -->
+<div class="panel">
+  <div class="panel-title"><span class="dot dot-blue"></span>CPU ST20</div>
+  <div class="cpu-body">
+    <div class="cpu-topbar">
+      <span class="brand2">SIMATIC</span>
+      <span class="model">S7-200 SMART</span>
+    </div>
+    <div class="cpu-mid">
+      <div class="cpu-ports-col">
+        <div><span class="port-chip">ETH</span><span class="port-chip">485</span></div>
+        <div class="knob-wrap">
+          <div class="mode-knob run" id="modeKnob" title="点击切换RUN/STOP">
+            <div class="needle"></div>
+          </div>
+          <div>
+            <div class="mode-txt" id="modeTxt" style="color:var(--green);font-weight:700">RUN</div>
+            <div style="font-size:7px;color:#888">CPU ST20</div>
+          </div>
+        </div>
+      </div>
+      <div class="status-leds-col">
+        <div class="sled-row"><div class="sled on-g" id="sRun"></div><span class="sled-lbl">RUN</span></div>
+        <div class="sled-row"><div class="sled"     id="sStop"></div><span class="sled-lbl">STOP</span></div>
+        <div class="sled-row"><div class="sled"     id="sErr"></div> <span class="sled-lbl">ERR</span></div>
+      </div>
+    </div>
+    <!-- I LED 行 -->
+    <div class="io-sec"><div class="io-lbl i">I0</div><div class="io-row" id="iRow0"></div></div>
+    <div class="io-sec"><div class="io-lbl i">I1</div><div class="io-row" id="iRow1"></div></div>
+    <div class="io-sec"><div class="io-lbl q">Q0</div><div class="io-row" id="qRow"></div></div>
+    <div class="terminals">
+      <div class="term-grp i"><div class="term-lbl">INPUT</div>
+        <div class="term-pins" id="iTerm"></div></div>
+      <div class="term-grp q"><div class="term-lbl">OUTPUT</div>
+        <div class="term-pins" id="qTerm"></div></div>
+    </div>
+    <div class="din-rail"><div class="din-clip"></div>
+      <span style="font-size:7px;color:#666">6ES7 288-1ST20-0AA0</span>
+      <div class="din-clip"></div></div>
+  </div>
+  <div class="scan-bar">
+    <span>扫描次数</span><span class="sv" id="scanN">0</span>
+    <span>周期</span><span class="sv">10ms</span>
+    <span>AQW</span><span class="sv" id="aqwStat">---</span>
+  </div>
+  <!-- 存储区简表 -->
+  <div style="padding:6px 10px;overflow-y:auto;flex:1;">
+    <div style="font-size:9px;color:var(--text3);font-weight:700;margin-bottom:4px;">Q 输出状态</div>
+    <div id="qBits" style="font-family:var(--font-mono);font-size:10px;color:var(--orange);margin-bottom:8px;"></div>
+    <div style="font-size:9px;color:var(--text3);font-weight:700;margin-bottom:4px;">T0~T3</div>
+    <div id="tDisplay" style="font-family:var(--font-mono);font-size:10px;color:var(--text2);"></div>
+  </div>
+</div>
+
+<!-- ─── 中列：AQ04 ─── -->
+<div class="panel">
+  <div class="panel-title"><span class="dot dot-cyan"></span>EM AQ04</div>
+  <div class="aq-body">
+    <div class="aq-topbar">
+      <span class="brand2" style="font-size:9px">SIMATIC</span>
+      <span class="model">EM AQ04</span>
+      <span style="margin-left:auto;font-size:8px;color:#4a8ab0">AQ1</span>
+    </div>
+    <div class="bus-conn-strip bus-off" id="busStrip">
+      <span class="bus-txt off" id="busTxt">总线断开</span>
+    </div>
+    <div style="display:flex;gap:3px;padding:2px 6px;">
+      <div class="sled" id="aqDiag"></div><span class="sled-lbl">DIAG</span>
+      <div style="width:8px"></div>
+      <div class="sled" id="aqSF"></div><span class="sled-lbl">SF</span>
+    </div>
+    <div class="aq-channels" id="aqChannels"></div>
+    <div class="aq-terminals">
+      <div class="aq-term-row" id="aqTermRow"></div>
+    </div>
+    <div class="din-rail" style="border-radius:0 0 4px 4px"><div class="din-clip"></div>
+      <span style="font-size:6px;color:#666">6ES7 288-3AQ04-0AA0</span>
+      <div class="din-clip"></div></div>
+  </div>
+</div>
+
+<!-- ─── 右列：控制台 ─── -->
+<div class="console-panel">
+  <div class="tab-bar">
+    <div class="tab active" onclick="switchTab('ladder')">梯形图程序</div>
+    <div class="tab" onclick="switchTab('aq')">AQ04 监控</div>
+    <div class="tab" onclick="switchTab('json')">JSON 程序</div>
+  </div>
+
+  <!-- 梯形图 -->
+  <div class="tab-pane active" id="pLadder">
+    <div class="ladder-toolbar">
+      <button class="tbtn" onclick="ins('LD')">—| |—</button>
+      <button class="tbtn" onclick="ins('LDN')">—|/|—</button>
+      <button class="tbtn" onclick="ins('A')">A</button>
+      <button class="tbtn" onclick="ins('AN')">AN</button>
+      <button class="tbtn" onclick="ins('O')">O</button>
+      <div class="tb-sep"></div>
+      <button class="tbtn" onclick="ins('=')">—( )—</button>
+      <button class="tbtn" onclick="ins('S')">—(S)—</button>
+      <button class="tbtn" onclick="ins('R')">—(R)—</button>
+      <div class="tb-sep"></div>
+      <button class="tbtn" onclick="ins('TON')">TON</button>
+      <button class="tbtn" onclick="ins('CTU')">CTU</button>
+      <button class="tbtn" onclick="ins('MOV_W')">MOV_W</button>
+      <div class="tb-sep"></div>
+      <button class="tbtn" onclick="addNet()">+ 网络</button>
+    </div>
+    <div class="ladder-canvas" id="ladderCanvas"></div>
+  </div>
+
+  <!-- AQ04 监控 -->
+  <div class="tab-pane" id="pAQ">
+    <div class="aq-monitor" id="aqMonitor"></div>
+  </div>
+
+  <!-- JSON -->
+  <div class="tab-pane" id="pJson">
+    <div class="json-wrap">
+      <textarea class="json-ed" id="jsonEd" spellcheck="false"></textarea>
+      <div class="json-bar">
+        <span class="json-err" id="jsonErr"></span>
+        <button class="tbtn" onclick="loadJson()">⇩ 载入</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<!-- 状态栏 -->
+<div class="statusbar">
+  <div class="sitem">CPU：<span id="stCPU" class="srun">RUN</span></div>
+  <div class="sitem">总线：<span id="stBus" class="sval">断开</span></div>
+  <div class="sitem">I：<span class="sval" id="stI">00 00</span></div>
+  <div class="sitem">Q：<span class="sval" id="stQ">00</span></div>
+  <div class="sitem">AQW0：<span class="sval" id="stAQW0">0</span></div>
+  <div class="sitem">AQW2：<span class="sval" id="stAQW2">0</span></div>
+  <div class="sitem">AQW4：<span class="sval" id="stAQW4">0</span></div>
+  <div class="sitem">AQW6：<span class="sval" id="stAQW6">0</span></div>
+</div>
+
+<!-- 元件弹窗 -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3 id="modalTitle">插入指令</h3>
+    <div class="frow"><label>操作码</label><input id="mOp" readonly></div>
+    <div class="frow"><label>操作数 (addr)</label>
+      <input id="mAddr" placeholder="I0.0 / Q0.0 / M0.0 / T0 / C0 / AQW0"></div>
+    <div class="frow" id="mPvRow" style="display:none"><label>预设值 PV</label>
+      <input id="mPv" type="number" value="10"></div>
+    <div class="frow" id="mTbRow" style="display:none"><label>时基 (ms)</label>
+      <select id="mTb"><option value="10">10ms</option><option value="100" selected>100ms</option>
+      <option value="1000">1s</option></select></div>
+    <div class="frow" id="mAddr2Row" style="display:none"><label>addr2 (目标/复位)</label>
+      <input id="mAddr2" placeholder="AQW0 / I0.5"></div>
+    <div class="frow"><label>Network</label><select id="mNet"></select></div>
+    <div class="frow"><label>Rung (0=新建)</label><input id="mRung" type="number" value="0" min="0"></div>
+    <div class="modal-btns">
+      <button class="btn btn-rst" onclick="closeModal()">取消</button>
+      <button class="btn btn-conn" id="mConfirm" onclick="confirmIns()">插入</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  PLC 核心（ST20）
+// ════════════════════════════════════════════════════════════
+const CPU = {
+  running:false, errorState:false, errorMsg:'', scanCount:0,
+  firstScan:true, scanCycleMs:10, accumMs:0,
+  I:new Uint8Array(2), Q:new Uint8Array(1), M:new Uint8Array(32),
+  V:new Uint8Array(5000), SM:new Uint8Array(256),
+  AQW:new Uint8Array(64),
+  T:Array.from({length:256},()=>({cv:0,pv:0,bit:false,accMs:0,type:'TON',timeBase:100,enabled:false})),
+  C:Array.from({length:256},()=>({cv:0,pv:0,bit:false,lastCU:false,lastCD:false})),
+  smMs4:0, smMs5:0, smFlip4:false, smFlip5:false,
+  program:null,
+
+  reset(){
+    this.running=false; this.errorState=false; this.errorMsg='';
+    this.scanCount=0; this.firstScan=true; this.accumMs=0;
+    this.I=new Uint8Array(2); this.Q=new Uint8Array(1);
+    this.M=new Uint8Array(32); this.AQW=new Uint8Array(64);
+    this.SM=new Uint8Array(256); this.SM[0]=0xFF;
+    this.T=Array.from({length:256},()=>({cv:0,pv:0,bit:false,accMs:0,type:'TON',timeBase:100,enabled:false}));
+    this.C=Array.from({length:256},()=>({cv:0,pv:0,bit:false,lastCU:false}));
+    this.smMs4=this.smMs5=0; this.smFlip4=this.smFlip5=false;
+    // 同步 AQ04
+    AQ.rawValues.fill(0); AQ.engValues.fill(0);
+  },
+
+  readBit(addr){
+    if(addr==='SM0.0') return true;
+    if(addr==='SM0.1') return !!(this.SM[0]&0x02);
+    if(addr==='SM0.4') return !!(this.SM[0]&0x10);
+    if(addr==='SM0.5') return !!(this.SM[0]&0x20);
+    const m=addr.match(/^([A-Za-z]+)(\d+)\.(\d+)$/);
+    if(m){const z=m[1].toUpperCase(),b=+m[2],bit=+m[3],mask=1<<bit;
+      if(z==='I') return !!(this.I[b]&mask);
+      if(z==='Q') return !!(this.Q[b]&mask);
+      if(z==='M') return !!(this.M[b]&mask);
+      if(z==='SM') return !!(this.SM[b]&mask);}
+    const tc=addr.match(/^([TC])(\d+)$/);
+    if(tc){const n=+tc[2];return tc[1]==='T'?this.T[n].bit:this.C[n].bit;}
+    return false;
+  },
+
+  writeBit(addr,val){
+    const m=addr.match(/^([A-Za-z]+)(\d+)\.(\d+)$/);
+    if(!m) return;
+    const z=m[1].toUpperCase(),b=+m[2],bit=+m[3],mask=1<<bit;
+    if(z==='Q'){if(val)this.Q[b]|=mask;else this.Q[b]&=~mask;return;}
+    if(z==='M'){if(val)this.M[b]|=mask;else this.M[b]&=~mask;return;}
+  },
+
+  readWord(addr){
+    // AQW 支持
+    const aq=addr.match(/^AQW(\d+)$/i);
+    if(aq){const off=+aq[1];const raw=(this.AQW[off]<<8)|this.AQW[off+1];return raw>32767?raw-65536:raw;}
+    const m=addr.match(/^([A-Za-z]+)W?(\d+)$/i);
+    if(m){const z=m[1].toUpperCase(),b=+m[2];
+      const arr=z==='V'?this.V:z==='M'?this.M:null;
+      if(!arr) return isNaN(+addr)?0:+addr;
+      const raw=(arr[b]<<8)|arr[b+1]; return raw>32767?raw-65536:raw;}
+    const n=parseInt(addr); return isNaN(n)?0:n;
+  },
+
+  writeWord(addr,val){
+    // AQW 支持
+    const aq=addr.match(/^AQW(\d+)$/i);
+    if(aq){
+      const off=+aq[1];
+      val=Math.max(-32768,Math.min(32767,Math.round(val)));
+      const u=val<0?val+65536:val;
+      this.AQW[off]=(u>>8)&0xFF; this.AQW[off+1]=u&0xFF;
+      return;
+    }
+    const m=addr.match(/^([A-Za-z]+)W?(\d+)$/i);
+    if(!m) return;
+    const z=m[1].toUpperCase(),b=+m[2];
+    val=Math.max(-32768,Math.min(32767,Math.round(val)));
+    const u=val<0?val+65536:val;
+    const arr=z==='V'?this.V:z==='M'?this.M:null;
+    if(arr){arr[b]=(u>>8)&0xFF;arr[b+1]=u&0xFF;}
+  },
+
+  readByte(addr){
+    const m=addr.match(/^([A-Za-z]+)B?(\d+)$/i);
+    if(!m) return 0;
+    const z=m[1].toUpperCase(),b=+m[2];
+    if(z==='V') return this.V[b]||0;
+    if(z==='M') return this.M[b]||0;
+    return 0;
+  },
+
+  writeByte(addr,val){
+    const m=addr.match(/^([A-Za-z]+)B?(\d+)$/i);
+    if(!m) return;
+    const z=m[1].toUpperCase(),b=+m[2];
+    val=Math.max(0,Math.min(255,Math.round(val)));
+    if(z==='V'){this.V[b]=val;return;}
+    if(z==='M'){this.M[b]=val;return;}
+  },
+
+  execScan(){
+    if(!this.running) return;
+    if(this.firstScan) this.SM[0]|=0x02; else this.SM[0]&=~0x02;
+    const prog=this.program;
+    if(!prog?.networks) return;
+    try {
+      for(const net of prog.networks)
+        for(const rung of(net.rungs||[]))
+          this.execRung(rung);
+    } catch(e){this.errorState=true;this.errorMsg=e.message||'执行错误';this.running=false;}
+    this.firstScan=false; this.scanCount++;
+  },
+
+  execRung(insts){
+    const stack=[]; let flow=false;
+    for(const inst of insts){
+      const op=inst.op.toUpperCase();
+      const {addr,addr2,pv,timeBase}=inst;
+      switch(op){
+        case 'LD':  stack.push(flow); flow=this.readBit(addr); break;
+        case 'LDN': stack.push(flow); flow=!this.readBit(addr); break;
+        case 'A':   flow=flow&&this.readBit(addr); break;
+        case 'AN':  flow=flow&&!this.readBit(addr); break;
+        case 'O':   flow=flow||this.readBit(addr); break;
+        case 'ON':  flow=flow||!this.readBit(addr); break;
+        case 'NOT': flow=!flow; break;
+        case 'OLD': flow=flow||(stack.pop()||false); break;
+        case 'ALD': flow=flow&&(stack.pop()||false); break;
+        case 'LPS': stack.push(flow); break;
+        case 'LRD': flow=stack[stack.length-1]; break;
+        case 'LPP': flow=stack.pop()||false; break;
+        case '=':  this.writeBit(addr,flow); break;
+        case 'S':  if(flow) this.writeBit(addr,true); break;
+        case 'R':  if(flow) this.writeBit(addr,false); break;
+        case 'MOV_W': if(flow) this.writeWord(addr2,this.readWord(addr)); break;
+        case 'MOV_B': if(flow) this.writeByte(addr2,this.readByte(addr)); break;
+        case 'ADD_I': if(flow) this.writeWord(addr2,this.readWord(addr)+this.readWord(addr2)); break;
+        case 'SUB_I': if(flow) this.writeWord(addr2,this.readWord(addr)-this.readWord(addr2)); break;
+        case 'MUL_I': if(flow) this.writeWord(addr2,this.readWord(addr)*this.readWord(addr2)); break;
+        case 'DIV_I': if(flow){const d=this.readWord(addr2);if(d)this.writeWord(addr2,Math.trunc(this.readWord(addr)/d));} break;
+        case '==I': flow=flow&&(this.readWord(addr)===this.readWord(addr2)); break;
+        case '<>I': flow=flow&&(this.readWord(addr)!==this.readWord(addr2)); break;
+        case '>=I': flow=flow&&(this.readWord(addr)>=this.readWord(addr2)); break;
+        case '<=I': flow=flow&&(this.readWord(addr)<=this.readWord(addr2)); break;
+        case '>I':  flow=flow&&(this.readWord(addr)>this.readWord(addr2)); break;
+        case '<I':  flow=flow&&(this.readWord(addr)<this.readWord(addr2)); break;
+        case 'TON':{const t=this.T[pi(addr,'T')];t.type='TON';if(pv!==undefined)t.pv=pv;
+          t.timeBase=timeBase||100;t.enabled=flow;
+          if(!flow){t.cv=0;t.bit=false;t.accMs=0;} break;}
+        case 'TOF':{const t=this.T[pi(addr,'T')];t.type='TOF';if(pv!==undefined)t.pv=pv;
+          t.timeBase=timeBase||100;if(flow){t.bit=true;t.cv=0;t.accMs=0;}t.enabled=!flow; break;}
+        case 'TONR':{const t=this.T[pi(addr,'T')];t.type='TONR';if(pv!==undefined)t.pv=pv;
+          t.timeBase=timeBase||100;t.enabled=flow; break;}
+        case 'CTU':{const c=this.C[pi(addr,'C')];if(pv!==undefined)c.pv=pv;
+          const rNow=addr2?this.readBit(addr2):false;
+          if(rNow){c.cv=0;c.bit=false;}else if(flow&&!c.lastCU)c.cv++;
+          c.bit=c.cv>=c.pv;c.lastCU=flow; break;}
+        case 'NOP': break; default: break;
+      }
+    }
+  },
+
+  tickTimers(dtMs){
+    for(let i=0;i<256;i++){
+      const t=this.T[i]; if(!t.enabled) continue;
+      t.accMs+=dtMs; const ticks=Math.floor(t.accMs/t.timeBase);
+      if(ticks>0){t.accMs-=ticks*t.timeBase;
+        if(t.type==='TON'||t.type==='TONR'){t.cv=Math.min(t.cv+ticks,32767);if(t.cv>=t.pv)t.bit=true;}
+        else if(t.type==='TOF'){t.cv=Math.min(t.cv+ticks,32767);if(t.cv>=t.pv){t.bit=false;t.enabled=false;}}}
+    }
+  },
+
+  tickSM(dtMs){
+    this.smMs5+=dtMs; this.smMs4+=dtMs;
+    if(this.smMs5>=500){this.smMs5-=500;this.smFlip5=!this.smFlip5;
+      if(this.smFlip5)this.SM[0]|=0x20;else this.SM[0]&=~0x20;}
+    if(this.smMs4>=30000){this.smMs4-=30000;this.smFlip4=!this.smFlip4;
+      if(this.smFlip4)this.SM[0]|=0x10;else this.SM[0]&=~0x10;}
+  },
+
+  tick(dtMs){
+    this.tickSM(dtMs); this.tickTimers(dtMs);
+    if(this.running){
+      this.accumMs+=dtMs;
+      if(this.accumMs>=this.scanCycleMs){this.accumMs-=this.scanCycleMs;this.execScan();}
+    }
+  }
+};
+function pi(addr,prefix){const n=parseInt(addr.replace(new RegExp('^'+prefix,'i'),''));return isNaN(n)?0:Math.max(0,Math.min(255,n));}
+
+// ════════════════════════════════════════════════════════════
+//  AQ04 仿真
+// ════════════════════════════════════════════════════════════
+const AQ = {
+  connected: false,
+  chModes: ['V±10','V±10','V±10','V±10'],
+  rawValues: new Int16Array(4),
+  engValues: new Float64Array(4),
+  gaugeAngles: new Float64Array(4).fill(Math.PI),
+
+  rawToEng(raw,mode){
+    const c=Math.max(-27648,Math.min(27648,raw));
+    if(mode==='V±10') return (c/27648)*10;
+    if(mode==='I0-20') return Math.max(0,(c/27648)*20);
+    if(mode==='I4-20') return 4+Math.max(0,(c/27648)*16);
+    return 0;
+  },
+  engToPercent(eng,mode){
+    if(mode==='V±10') return (eng+10)/20;
+    if(mode==='I0-20') return eng/20;
+    if(mode==='I4-20') return (eng-4)/16;
+    return 0;
+  },
+  unit(mode){ return mode.startsWith('V')?'V':'mA'; },
+  gaugeColor(pct,mode){
+    if(mode==='V±10'){const d=Math.abs(pct-0.5)*2;
+      return d<0.6?'#44cc66':d<0.85?'#f5c842':'#f07040';}
+    return pct<0.75?'#44aacc':pct<0.92?'#f5c842':'#f07040';
+  },
+
+  pollCPU(){
+    if(!this.connected) return;
+    for(let i=0;i<4;i++){
+      const off=i*2;
+      const hi=CPU.AQW[off], lo=CPU.AQW[off+1];
+      const raw=(hi<<8)|lo;
+      this.rawValues[i]=raw>32767?raw-65536:raw;
+      this.engValues[i]=this.rawToEng(this.rawValues[i],this.chModes[i]);
+    }
+  },
+
+  tick(dt){
+    if(this.connected) this.pollCPU();
+    // 指针平滑
+    for(let i=0;i<4;i++){
+      const pct=this.engToPercent(this.engValues[i],this.chModes[i]);
+      const target=Math.PI+Math.max(0,Math.min(1,pct))*Math.PI;
+      const diff=target-this.gaugeAngles[i];
+      if(Math.abs(diff)>0.003) this.gaugeAngles[i]+=diff*Math.min(1,dt*8);
+    }
+  }
+};
+
+// ════════════════════════════════════════════════════════════
+//  默认程序（含 MOV_W 写 AQW）
+// ════════════════════════════════════════════════════════════
+const defaultProg = {
+  name:'ST20+AQ04 模拟量输出演示',
+  networks:[
+    { comment:'Network 1 · 启保停 (I0.0=启 I0.1=停 Q0.0=运行)',
+      rungs:[[
+        {op:'LD',addr:'I0.0'},{op:'O',addr:'Q0.0'},{op:'AN',addr:'I0.1'},{op:'=',addr:'Q0.0'}
+      ]]},
+    { comment:'Network 2 · Q0.0运行时斜坡计数 → AQW0 (电压输出)',
+      rungs:[
+        [{op:'LD',addr:'Q0.0'},{op:'TON',addr:'T0',pv:50,timeBase:100}],
+        [{op:'LD',addr:'T0'},{op:'R',addr:'T0',addr2:''}],
+        [{op:'LD',addr:'Q0.0'},{op:'A',addr:'T0'},{op:'CTU',addr:'C0',pv:1,addr2:'M0.7'}],
+        [{op:'LD',addr:'SM0.0'},{op:'MOV_W',addr:'VW0',addr2:'AQW0'}]
+      ]},
+    { comment:'Network 3 · SM0.5 振荡 → VW0 自增 (模拟斜坡)',
+      rungs:[[
+        {op:'LD',addr:'SM0.5'},{op:'A',addr:'Q0.0'},{op:'ADD_I',addr:'1000',addr2:'VW0'}
+      ]]},
+    { comment:'Network 4 · VW0 超过 27648 则清零',
+      rungs:[[
+        {op:'LD',addr:'SM0.0'},{op:'>=I',addr:'VW0',addr2:'27648'},{op:'MOV_W',addr:'0',addr2:'VW0'}
+      ]]},
+    { comment:'Network 5 · AQW2 固定输出 0x4000 (≈5V / ≈7.3mA)',
+      rungs:[[
+        {op:'LD',addr:'SM0.1'},{op:'MOV_W',addr:'16384',addr2:'AQW2'}
+      ]]},
+    { comment:'Network 6 · I0.2 按下 → AQW4 满量程 27648，松开清零',
+      rungs:[
+        [{op:'LD',addr:'I0.2'},{op:'MOV_W',addr:'27648',addr2:'AQW4'}],
+        [{op:'LDN',addr:'I0.2'},{op:'MOV_W',addr:'0',addr2:'AQW4'}]
+      ]}
+  ]
+};
+CPU.program = JSON.parse(JSON.stringify(defaultProg));
+CPU.SM[0] = 0xFF;
+
+// ════════════════════════════════════════════════════════════
+//  DOM 初始化
+// ════════════════════════════════════════════════════════════
+function buildIoLEDs(){
+  const r0=document.getElementById('iRow0'), r1=document.getElementById('iRow1'), rq=document.getElementById('qRow');
+  for(let i=0;i<8;i++){const d=document.createElement('div');d.className='io-led';d.id='i0_'+i;d.title='I0.'+i;d.textContent=i;d.onclick=()=>{CPU.I[0]^=(1<<i);};r0.appendChild(d);}
+  for(let i=0;i<4;i++){const d=document.createElement('div');d.className='io-led';d.id='i1_'+i;d.title='I1.'+i;d.textContent=i;d.onclick=()=>{CPU.I[1]^=(1<<i);};r1.appendChild(d);}
+  for(let i=0;i<8;i++){const d=document.createElement('div');d.className='io-led';d.id='q0_'+i;d.title='Q0.'+i;d.textContent=i;rq.appendChild(d);}
+  const it=document.getElementById('iTerm'),qt=document.getElementById('qTerm');
+  for(let i=0;i<12;i++){const d=document.createElement('div');d.className='term-pin';it.appendChild(d);}
+  for(let i=0;i<8;i++){const d=document.createElement('div');d.className='term-pin';qt.appendChild(d);}
+}
+
+function buildAQChannels(){
+  const c=document.getElementById('aqChannels');
+  for(let i=0;i<4;i++){
+    const div=document.createElement('div'); div.className='aq-ch';
+    div.innerHTML=`
+      <div class="aq-ch-header">
+        <span class="aq-ch-name">AQ${i}</span>
+        <span class="aq-ch-mode" id="aqMode${i}">${AQ.chModes[i]}</span>
+        <span class="aq-ch-addr">AQW${i*2}</span>
+      </div>
+      <div class="gauge-row">
+        <svg class="mini-gauge" id="miniGauge${i}" width="48" height="28" viewBox="0 0 48 28"></svg>
+        <div class="gauge-bar-wrap">
+          <div class="gauge-track"><div class="gauge-fill" id="gFill${i}" style="width:0%;background:var(--green)"></div></div>
+          <div class="gauge-vals">
+            <span class="gauge-eng" id="gEng${i}">0.000</span>
+            <span class="gauge-raw" id="gRaw${i}">AQW:0</span>
+          </div>
+        </div>
+      </div>`;
+    c.appendChild(div);
+  }
+  // 端子排
+  const tr=document.getElementById('aqTermRow');
+  for(let i=0;i<4;i++){
+    const g=document.createElement('div'); g.className='aq-term-grp';
+    g.innerHTML=`<div class="aq-term-grp-lbl">AQ${i}</div><div class="aq-term-pins">`
+      +`<div class="aq-term-pin" title="M"></div><div class="aq-term-pin" title="V"></div><div class="aq-term-pin" title="I"></div>`
+      +`</div>`;
+    tr.appendChild(g);
+  }
+}
+
+function buildAQMonitor(){
+  const mon=document.getElementById('aqMonitor');
+  mon.innerHTML='<div class="mon-sec"><div class="mon-title">AQ04 通道监控 · 可手动调节</div>'
+    +Array.from({length:4},(_,i)=>`
+    <div class="aq-ch-big" id="chBig${i}">
+      <div class="aq-ch-big-header">
+        <span class="aq-ch-big-name">AQ${i} (AQW${i*2})</span>
+        <select class="aq-mode-sel" id="modeSel${i}" onchange="setChMode(${i},this.value)">
+          <option value="V±10" ${AQ.chModes[i]==='V±10'?'selected':''}>±10V</option>
+          <option value="I0-20" ${AQ.chModes[i]==='I0-20'?'selected':''}>0~20mA</option>
+          <option value="I4-20" ${AQ.chModes[i]==='I4-20'?'selected':''}>4~20mA</option>
+        </select>
+      </div>
+      <div class="aq-ch-big-gauge"><div class="aq-ch-big-fill" id="bigFill${i}" style="width:0%"></div></div>
+      <div class="aq-ch-big-vals">
+        <div><span class="aq-eng-big" id="bigEng${i}">0.000</span><span class="aq-unit-big" id="bigUnit${i}">V</span></div>
+        <span class="aq-raw-big" id="bigRaw${i}">0 / 27648</span>
+      </div>
+      <input type="range" class="aq-slider" id="slider${i}" min="-27648" max="27648" value="0"
+             oninput="manualAQW(${i},+this.value)">
+      <div class="aq-addr-note" id="addrNote${i}">
+        梯形图写法：MOV_W &lt;源&gt;, AQW${i*2} &nbsp;|&nbsp; 当前 CPU.AQW[${i*2}]=${0}
+      </div>
+    </div>`).join('')+'</div>';
+}
+
+buildIoLEDs();
+buildAQChannels();
+buildAQMonitor();
+
+// ════════════════════════════════════════════════════════════
+//  UI 渲染
+// ════════════════════════════════════════════════════════════
+function renderUI(){
+  // CPU LED
+  for(let i=0;i<8;i++){const el=document.getElementById('i0_'+i);if(el)el.className='io-led'+(!!(CPU.I[0]&(1<<i))?' on-i':'');}
+  for(let i=0;i<4;i++){const el=document.getElementById('i1_'+i);if(el)el.className='io-led'+(!!(CPU.I[1]&(1<<i))?' on-i':'');}
+  for(let i=0;i<8;i++){const el=document.getElementById('q0_'+i);if(el)el.className='io-led'+(!!(CPU.Q[0]&(1<<i))?' on-q':'');}
+
+  const isRun=CPU.running&&!CPU.errorState, isStop=!CPU.running&&!CPU.errorState, isErr=CPU.errorState;
+  document.getElementById('sRun').className ='sled'+(isRun ?' on-g':'');
+  document.getElementById('sStop').className='sled'+(isStop?' on-r':'');
+  document.getElementById('sErr').className ='sled'+(isErr ?' on-r':'');
+  const knob=document.getElementById('modeKnob');
+  knob.className='mode-knob '+(CPU.running?'run':'stop');
+  document.getElementById('modeTxt').textContent=CPU.running?'RUN':'STOP';
+  document.getElementById('modeTxt').style.color=CPU.running?'var(--green)':'var(--red)';
+  document.getElementById('btnRun').disabled=CPU.running;
+  document.getElementById('btnStop').disabled=!CPU.running;
+
+  document.getElementById('scanN').textContent=CPU.scanCount;
+  const aqw0=(CPU.AQW[0]<<8)|CPU.AQW[1]; const aqw0s=aqw0>32767?aqw0-65536:aqw0;
+  document.getElementById('aqwStat').textContent=aqw0s;
+
+  // Q bits
+  const qv=CPU.Q[0]; let qStr='';
+  for(let i=7;i>=0;i--) qStr+=(qv&(1<<i))?'1':'0';
+  document.getElementById('qBits').textContent='QB0: '+qStr.match(/.{1,4}/g).join(' ');
+
+  // T0~T3
+  let tStr='';
+  for(let i=0;i<4;i++){const t=CPU.T[i];tStr+=`T${i}:${t.cv}/${t.pv}${t.bit?'✓':' '}  `;}
+  document.getElementById('tDisplay').textContent=tStr;
+
+  // 状态栏
+  const st=document.getElementById('stCPU');
+  if(isErr){st.className='serr';st.textContent='ERR';}
+  else if(isRun){st.className='srun';st.textContent='RUN';}
+  else{st.className='sstop';st.textContent='STOP';}
+  document.getElementById('stBus').textContent=AQ.connected?'已连接':'断开';
+  document.getElementById('stI').textContent=
+    CPU.I[0].toString(16).padStart(2,'0').toUpperCase()+' '+CPU.I[1].toString(16).padStart(2,'0').toUpperCase();
+  document.getElementById('stQ').textContent=CPU.Q[0].toString(16).padStart(2,'0').toUpperCase();
+  for(let i=0;i<4;i++){
+    const off=i*2, raw=(CPU.AQW[off]<<8)|CPU.AQW[off+1];
+    const rs=raw>32767?raw-65536:raw;
+    document.getElementById('stAQW'+off).textContent=rs;
+  }
+
+  // 顶栏状态胶囊
+  const pc=document.getElementById('pillCPU');
+  pc.textContent='CPU: '+(isErr?'ERR':isRun?'RUN':'STOP');
+  pc.className='status-pill '+(isErr?'pill-disc':isRun?'pill-run':'pill-stop');
+  const pb=document.getElementById('pillBus');
+  pb.textContent='总线: '+(AQ.connected?'已连接':'断开');
+  pb.className='status-pill '+(AQ.connected?'pill-conn':'pill-disc');
+
+  // AQ04 面板
+  const busS=document.getElementById('busStrip'), busT=document.getElementById('busTxt');
+  const aqD=document.getElementById('aqDiag'), aqSF=document.getElementById('aqSF');
+  if(AQ.connected){busS.className='bus-conn-strip bus-on';busT.textContent='总线已连接';busT.className='bus-txt on';
+    aqD.className='sled on-g'; aqSF.className='sled';}
+  else{busS.className='bus-conn-strip bus-off';busT.textContent='总线断开';busT.className='bus-txt off';
+    aqD.className='sled'; aqSF.className='sled on-r';}
+
+  // 通道小仪表
+  for(let i=0;i<4;i++){
+    const eng=AQ.engValues[i], raw=AQ.rawValues[i], mode=AQ.chModes[i];
+    const pct=Math.max(0,Math.min(1,AQ.engToPercent(eng,mode)));
+    const col=AQ.gaugeColor(pct,mode);
+    const fill=document.getElementById('gFill'+i);
+    if(fill){fill.style.width=(pct*100).toFixed(1)+'%';fill.style.background=col;}
+    const engEl=document.getElementById('gEng'+i);
+    if(engEl) engEl.textContent=(Math.abs(eng)<10?eng.toFixed(3):eng.toFixed(2))+(mode.startsWith('V')?'V':'mA');
+    const rawEl=document.getElementById('gRaw'+i);
+    if(rawEl) rawEl.textContent='AQW:'+raw;
+    const modeEl=document.getElementById('aqMode'+i);
+    if(modeEl) modeEl.textContent=mode;
+    // 迷你 SVG 半圆仪表
+    drawMiniGauge(i, pct, col);
+  }
+
+  // AQ 监控大面板
+  for(let i=0;i<4;i++){
+    const eng=AQ.engValues[i], raw=AQ.rawValues[i], mode=AQ.chModes[i];
+    const pct=Math.max(0,Math.min(1,AQ.engToPercent(eng,mode)));
+    const col=AQ.gaugeColor(pct,mode);
+    const bf=document.getElementById('bigFill'+i);
+    if(bf){bf.style.width=(pct*100).toFixed(1)+'%';bf.style.background=col;}
+    const be=document.getElementById('bigEng'+i);
+    if(be) be.textContent=Math.abs(eng)<10?eng.toFixed(3):eng.toFixed(2);
+    const bu=document.getElementById('bigUnit'+i);
+    if(bu) bu.textContent=AQ.unit(mode);
+    const br=document.getElementById('bigRaw'+i);
+    if(br) br.textContent=raw+' / 27648';
+    const sl=document.getElementById('slider'+i);
+    if(sl && !AQ.connected) sl.value=raw;
+    const an=document.getElementById('addrNote'+i);
+    if(an) an.textContent=`梯形图: MOV_W <源>, AQW${i*2} | AQW[${i*2}]=${raw}`;
+  }
+
+  // 梯形图
+  renderLadder();
+}
+
+function drawMiniGauge(idx, pct, col){
+  const svg=document.getElementById('miniGauge'+idx);
+  if(!svg) return;
+  const W=48,H=28, cx=24, cy=24, r=18, ri=11;
+  const ang=AQ.gaugeAngles[idx];
+  const fillAng=Math.max(0,Math.min(1,pct))*180;
+  // 辅助函数
+  function arc(x,y,R1,R2,startDeg,endDeg,fill){
+    const s=startDeg*Math.PI/180, e=endDeg*Math.PI/180;
+    const x1=x+Math.cos(s)*R2, y1=y+Math.sin(s)*R2;
+    const x2=x+Math.cos(e)*R2, y2=y+Math.sin(e)*R2;
+    const x3=x+Math.cos(e)*R1, y3=y+Math.sin(e)*R1;
+    const x4=x+Math.cos(s)*R1, y4=y+Math.sin(s)*R1;
+    const lg=(endDeg-startDeg)>180?1:0;
+    return `<path d="M${x1},${y1} A${R2},${R2} 0 ${lg},1 ${x2},${y2} L${x3},${y3} A${R1},${R1} 0 ${lg},0 ${x4},${y4} Z" fill="${fill}"/>`;
+  }
+  const bg=arc(cx,cy,ri,r,180,360,'#1a2030');
+  const fa=fillAng>0.5?arc(cx,cy,ri+1,r-1,180,180+fillAng,col):'';
+  const px=cx+Math.cos(ang)*((ri+r)/2), py=cy+Math.sin(ang)*((ri+r)/2);
+  const needle=`<line x1="${cx}" y1="${cy}" x2="${cx+Math.cos(ang)*(r-3)}" y2="${cy+Math.sin(ang)*(r-3)}" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>`;
+  const center=`<circle cx="${cx}" cy="${cy}" r="2.5" fill="#ccc"/>`;
+  svg.innerHTML=bg+fa+needle+center;
+}
+
+// ════════════════════════════════════════════════════════════
+//  梯形图渲染
+// ════════════════════════════════════════════════════════════
+function renderLadder(){
+  const c=document.getElementById('ladderCanvas'); c.innerHTML='';
+  const prog=CPU.program; if(!prog?.networks) return;
+  prog.networks.forEach((net,ni)=>{
+    const nb=document.createElement('div'); nb.className='net-block';
+    const nh=document.createElement('div'); nh.className='net-hdr';
+    nh.innerHTML=`<span class="net-num">N${ni+1}</span>`;
+    const ci=document.createElement('input'); ci.className='net-cmt-in';
+    ci.value=net.comment||''; ci.oninput=e=>{prog.networks[ni].comment=e.target.value;syncJson();};
+    nh.appendChild(ci);
+    const db=document.createElement('button'); db.className='tbtn'; db.textContent='×'; db.style.padding='1px 5px';
+    db.onclick=()=>{prog.networks.splice(ni,1);renderLadder();syncJson();};
+    nh.appendChild(db); nb.appendChild(nh);
+    const nbody=document.createElement('div'); nbody.className='net-body';
+    (net.rungs||[]).forEach((rung,ri)=>{nbody.appendChild(buildRung(rung,ni,ri));});
+    const ar=document.createElement('button'); ar.className='tbtn'; ar.textContent='+ 梯级'; ar.style.fontSize='9px';
+    ar.onclick=()=>{prog.networks[ni].rungs.push([{op:'LD',addr:'I0.0'},{op:'=',addr:'Q0.0'}]);renderLadder();syncJson();};
+    nbody.appendChild(ar); nb.appendChild(nbody); c.appendChild(nb);
+  });
+}
+
+function buildRung(rung,ni,ri){
+  const row=document.createElement('div'); row.className='rung';
+  const lR=document.createElement('div'); lR.className='rail'; row.appendChild(lR);
+  let flow=true;
+  rung.forEach((inst,ii)=>{
+    const cn=document.createElement('div'); cn.className='conn'+(flow?' on':''); row.appendChild(cn);
+    const ew=document.createElement('div'); ew.className='elem-w'; ew.title=`${inst.op} ${inst.addr||''} (点击编辑)`; ew.onclick=()=>openEdit(ni,ri,ii);
+    const op=inst.op.toUpperCase();
+    const addr=inst.addr||'';
+    const al=document.createElement('div'); al.className='elem-addr'; al.textContent=addr; ew.appendChild(al);
+    const eb=document.createElement('div'); eb.className='elem-body';
+    if(op==='LD'||op==='A'||op==='O'){
+      const v=CPU.readBit(addr); flow=flow&&v;
+      const c=document.createElement('div'); c.className='cno'+(v?' on':''); eb.appendChild(c);
+      const l=document.createElement('div'); l.className='elem-lbl'; l.textContent=op; ew.appendChild(l);
+    } else if(op==='LDN'||op==='AN'||op==='ON'){
+      const v=!CPU.readBit(addr); flow=flow&&v;
+      const c=document.createElement('div'); c.className='cnc'+(v?' on':''); eb.appendChild(c);
+      const l=document.createElement('div'); l.className='elem-lbl'; l.textContent=op; ew.appendChild(l);
+    } else if(op==='='){
+      const v=CPU.readBit(addr);
+      const c=document.createElement('div'); c.className='coil'+(v?' on':''); eb.appendChild(c);
+      const l=document.createElement('div'); l.className='elem-lbl'; l.textContent='='; ew.appendChild(l);
+      flow=false;
+    } else if(op==='S'){
+      const v=CPU.readBit(addr);
+      const c=document.createElement('div'); c.className='coil coil-s'+(v?' on':''); c.style.cssText='font-size:8px;color:var(--yellow);display:flex;align-items:center;justify-content:center;';c.textContent='S';eb.appendChild(c);
+    } else if(op==='R'){
+      const c=document.createElement('div'); c.className='coil coil-r'; c.style.cssText='font-size:8px;color:var(--red);display:flex;align-items:center;justify-content:center;';c.textContent='R';eb.appendChild(c);
+    } else if(['TON','TOF','TONR'].includes(op)){
+      const t=CPU.T[pi(addr,'T')]; eb.style.width='58px';
+      const b=document.createElement('div'); b.className='tbox'+(t.bit?' on':'');
+      b.innerHTML=`<div>${op} <span class="tc">${t.cv}</span></div><div>${addr} PV:${t.pv}</div>`;eb.appendChild(b);al.textContent='';
+    } else if(op==='CTU'||op==='CTD'){
+      const cc=CPU.C[pi(addr,'C')]; eb.style.width='58px';
+      const b=document.createElement('div'); b.className='tbox'+(cc.bit?' on':'');
+      b.innerHTML=`<div>${op} <span class="tc">${cc.cv}</span></div><div>${addr} PV:${cc.pv}</div>`;eb.appendChild(b);al.textContent='';
+    } else if(op==='MOV_W'||op==='MOV_B'){
+      eb.style.width='68px'; al.textContent='';
+      const b=document.createElement('div');
+      const isAQW=(inst.addr2||'').toUpperCase().startsWith('AQW');
+      b.style.cssText=`background:${isAQW?'#0a1a28':'#0a1420'};border:1.5px solid ${isAQW?'var(--cyan)':'#2a4060'};border-radius:2px;padding:2px 4px;font-size:7px;font-family:var(--font-mono);color:${isAQW?'var(--cyan)':'#5070a0'};`;
+      b.innerHTML=`<div style="font-weight:700">${op}</div><div>${inst.addr||'?'}→${inst.addr2||'?'}</div>`;
+      eb.appendChild(b);
+    } else if(['ADD_I','SUB_I','>=I','<=I','==I'].includes(op)){
+      eb.style.width='68px'; al.textContent='';
+      const b=document.createElement('div');
+      b.style.cssText='background:#0a1a10;border:1.5px solid #2a5030;border-radius:2px;padding:2px 4px;font-size:7px;font-family:var(--font-mono);color:#5a9060;';
+      b.innerHTML=`<div style="font-weight:700">${op}</div><div>${inst.addr||'?'} ${inst.addr2||'?'}</div>`;
+      eb.appendChild(b);
+    } else {
+      const b=document.createElement('div');
+      b.style.cssText='background:#0e1420;border:1px solid #2a3a50;border-radius:2px;padding:2px 4px;font-size:7px;color:#5060a0;';
+      b.textContent=`${op} ${addr}`;eb.appendChild(b);
+    }
+    ew.appendChild(eb); row.appendChild(ew);
+  });
+  const cn2=document.createElement('div'); cn2.className='conn'+(flow?' on':''); row.appendChild(cn2);
+  const rR=document.createElement('div'); rR.className='rail r'; row.appendChild(rR);
+  const delB=document.createElement('button'); delB.className='add-btn'; delB.textContent='×';
+  delB.onclick=e=>{e.stopPropagation();CPU.program.networks[ni].rungs.splice(ri,1);renderLadder();syncJson();};
+  row.appendChild(delB);
+  return row;
+}
+
+// ════════════════════════════════════════════════════════════
+//  JSON 同步
+// ════════════════════════════════════════════════════════════
+function syncJson(){
+  document.getElementById('jsonEd').value=JSON.stringify(CPU.program,null,2);
+  document.getElementById('jsonErr').textContent='';
+}
+function loadJson(){
+  try{CPU.program=JSON.parse(document.getElementById('jsonEd').value);
+    CPU.scanCount=0;CPU.firstScan=true;CPU.errorState=false;CPU.errorMsg='';
+    document.getElementById('jsonErr').textContent='✓ 已载入';
+    setTimeout(()=>document.getElementById('jsonErr').textContent='',2000);
+    renderLadder();}
+  catch(e){document.getElementById('jsonErr').textContent='⚠ '+e.message;}
+}
+document.getElementById('jsonEd').addEventListener('input',function(){
+  try{CPU.program=JSON.parse(this.value);document.getElementById('jsonErr').textContent='';renderLadder();}
+  catch(e){document.getElementById('jsonErr').textContent='⚠ JSON错误：'+e.message;}
+});
+
+// ════════════════════════════════════════════════════════════
+//  按钮
+// ════════════════════════════════════════════════════════════
+document.getElementById('btnRun').onclick=()=>{CPU.running=true;CPU.firstScan=true;CPU.accumMs=0;CPU.errorState=false;CPU.errorMsg='';};
+document.getElementById('btnStop').onclick=()=>{CPU.running=false;};
+document.getElementById('btnRst').onclick=()=>{CPU.reset();syncJson();};
+document.getElementById('btnConn').onclick=()=>{
+  AQ.connected=true; AQ.pollCPU();
+  document.getElementById('btnConn').disabled=true;
+  document.getElementById('btnDisc').disabled=false;
+  // 禁用手动滑块
+  for(let i=0;i<4;i++){const sl=document.getElementById('slider'+i);if(sl)sl.disabled=true;}
+};
+document.getElementById('btnDisc').onclick=()=>{
+  AQ.connected=false;
+  document.getElementById('btnConn').disabled=false;
+  document.getElementById('btnDisc').disabled=true;
+  for(let i=0;i<4;i++){const sl=document.getElementById('slider'+i);if(sl)sl.disabled=false;}
+};
+document.getElementById('modeKnob').onclick=()=>{
+  if(CPU.running){CPU.running=false;}else{CPU.running=true;CPU.firstScan=true;CPU.accumMs=0;CPU.errorState=false;}
+};
+
+function setChMode(idx,mode){
+  AQ.chModes[idx]=mode;
+  AQ.engValues[idx]=AQ.rawToEng(AQ.rawValues[idx],mode);
+}
+function manualAQW(ch, val){
+  if(AQ.connected) return;
+  const off=ch*2;
+  const u=val<0?val+65536:val;
+  CPU.AQW[off]=(u>>8)&0xFF; CPU.AQW[off+1]=u&0xFF;
+  AQ.rawValues[ch]=val; AQ.engValues[ch]=AQ.rawToEng(val,AQ.chModes[ch]);
+}
+
+// 标签切换
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',['ladder','aq','json'][i]===t));
+  document.querySelectorAll('.tab-pane').forEach((el,i)=>el.classList.toggle('active',['pLadder','pAQ','pJson'][i]==='p'+t.charAt(0).toUpperCase()+t.slice(1)));
+}
+
+// ════════════════════════════════════════════════════════════
+//  元件插入弹窗
+// ════════════════════════════════════════════════════════════
+let pendingOp=null;
+function ins(op){
+  pendingOp=op;
+  document.getElementById('mOp').value=op;
+  document.getElementById('mAddr').value='';
+  document.getElementById('mPv').value='10';
+  const needPV=['TON','TOF','TONR','CTU','CTD'].includes(op);
+  const needTB=['TON','TOF','TONR'].includes(op);
+  const needA2=['MOV_W','MOV_B','ADD_I','SUB_I','MUL_I','DIV_I','>=I','<=I','==I','<>I','CTU'].includes(op);
+  document.getElementById('mPvRow').style.display=needPV?'':'none';
+  document.getElementById('mTbRow').style.display=needTB?'':'none';
+  document.getElementById('mAddr2Row').style.display=needA2?'':'none';
+  if(op==='MOV_W') document.getElementById('mAddr2').placeholder='目标: AQW0 / VW0';
+  const ns=document.getElementById('mNet'); ns.innerHTML=(CPU.program.networks||[]).map((n,i)=>`<option value="${i}">N${i+1}: ${(n.comment||'').slice(0,20)}</option>`).join('');
+  document.getElementById('mRung').value=0;
+  document.getElementById('mConfirm').onclick=confirmIns;
+  document.getElementById('modalBg').classList.add('show');
+  setTimeout(()=>document.getElementById('mAddr').focus(),40);
+}
+function closeModal(){document.getElementById('modalBg').classList.remove('show');}
+function confirmIns(){
+  const op=pendingOp, addr=document.getElementById('mAddr').value.trim();
+  const pv=parseInt(document.getElementById('mPv').value)||10;
+  const tb=parseInt(document.getElementById('mTb').value)||100;
+  const addr2=document.getElementById('mAddr2').value.trim();
+  const ni=parseInt(document.getElementById('mNet').value)||0;
+  let ri=parseInt(document.getElementById('mRung').value)||0;
+  const inst={op};
+  if(addr) inst.addr=addr;
+  if(['TON','TOF','TONR','CTU','CTD'].includes(op)) inst.pv=pv;
+  if(['TON','TOF','TONR'].includes(op)) inst.timeBase=tb;
+  if(addr2) inst.addr2=addr2;
+  const nets=CPU.program.networks;
+  if(!nets[ni]){closeModal();return;}
+  if(ri===0||ri>nets[ni].rungs.length) nets[ni].rungs.push([inst]);
+  else nets[ni].rungs[ri-1].push(inst);
+  closeModal(); renderLadder(); syncJson();
+}
+function addNet(){
+  CPU.program.networks.push({comment:`Network ${CPU.program.networks.length+1}`,rungs:[[{op:'LD',addr:'I0.0'},{op:'=',addr:'Q0.0'}]]});
+  renderLadder(); syncJson();
+}
+function openEdit(ni,ri,ii){
+  const inst=CPU.program.networks[ni]?.rungs[ri]?.[ii]; if(!inst) return;
+  pendingOp=inst.op;
+  document.getElementById('mOp').value=inst.op;
+  document.getElementById('mAddr').value=inst.addr||'';
+  document.getElementById('mPv').value=inst.pv||10;
+  if(inst.timeBase) document.getElementById('mTb').value=inst.timeBase;
+  document.getElementById('mAddr2').value=inst.addr2||'';
+  const op=inst.op.toUpperCase();
+  document.getElementById('mPvRow').style.display=['TON','TOF','TONR','CTU','CTD'].includes(op)?'':'none';
+  document.getElementById('mTbRow').style.display=['TON','TOF','TONR'].includes(op)?'':'none';
+  document.getElementById('mAddr2Row').style.display=['MOV_W','MOV_B','ADD_I','SUB_I','CTU','>=I','<=I','==I'].includes(op)?'':'none';
+  const ns=document.getElementById('mNet');
+  ns.innerHTML=(CPU.program.networks||[]).map((n,i)=>`<option value="${i}"${i===ni?' selected':''}>N${i+1}</option>`).join('');
+  document.getElementById('mRung').value=ri+1;
+  document.getElementById('mConfirm').onclick=()=>{
+    inst.addr=document.getElementById('mAddr').value.trim();
+    const pvN=parseInt(document.getElementById('mPv').value)||10;
+    const tbN=parseInt(document.getElementById('mTb').value)||100;
+    const a2=document.getElementById('mAddr2').value.trim();
+    if(['TON','TOF','TONR','CTU','CTD'].includes(op)) inst.pv=pvN;
+    if(['TON','TOF','TONR'].includes(op)) inst.timeBase=tbN;
+    if(a2) inst.addr2=a2;
+    closeModal(); renderLadder(); syncJson();
+    document.getElementById('mConfirm').onclick=confirmIns;
+  };
+  document.getElementById('modalBg').classList.add('show');
+}
+
+// ════════════════════════════════════════════════════════════
+//  主循环
+// ════════════════════════════════════════════════════════════
+let lastT=performance.now(), frame=0;
+function loop(now){
+  const dt=Math.min(now-lastT,50); lastT=now;
+  CPU.tick(dt); AQ.tick(dt/1000);
+  frame++;
+  if(frame%3===0) renderUI();
+  requestAnimationFrame(loop);
+}
+
+// 初始化
+syncJson(); renderLadder(); renderUI();
+CPU.running=true; CPU.firstScan=true;
+AQ.connected=true;
+document.getElementById('btnRun').disabled=true;
+document.getElementById('btnStop').disabled=false;
+document.getElementById('btnConn').disabled=true;
+document.getElementById('btnDisc').disabled=false;
+for(let i=0;i<4;i++){const sl=document.getElementById('slider'+i);if(sl)sl.disabled=true;}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

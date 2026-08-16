@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S7-200 SMART ST20 梯形图仿真器</title>
+<style>
+  :root {
+    --siemens-blue: #1a6fa8;
+    --siemens-blue-light: #2a9fd8;
+    --bg-dark: #1a1d22;
+    --bg-panel: #22262e;
+    --bg-card: #2a2f3a;
+    --bg-input: #1e2228;
+    --border: #3a4050;
+    --text: #d8dce8;
+    --text-muted: #7080a0;
+    --green:  #44cc66;
+    --red:    #ee4444;
+    --orange: #f07030;
+    --yellow: #f5c842;
+    --font-mono: 'Consolas', 'Courier New', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg-dark);
+    color: var(--text);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── 顶栏 ── */
+  .topbar {
+    background: var(--siemens-blue);
+    padding: 6px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  }
+  .topbar .logo { font-weight: 900; font-size: 15px; letter-spacing: 1px; color: #fff; }
+  .topbar .sub  { font-size: 11px; color: #a8d0e8; margin-top: 1px; }
+  .topbar-spacer { flex: 1; }
+  .btn {
+    padding: 5px 14px; border-radius: 3px; border: none;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: background .15s, transform .1s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-run   { background: var(--green);  color: #0a2010; }
+  .btn-stop  { background: var(--red);    color: #fff; }
+  .btn-reset { background: #4a5060;       color: #ccc; }
+  .btn-load  { background: var(--siemens-blue-light); color: #fff; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* ── 主区域 ── */
+  .main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 300px 1fr 240px;
+    grid-template-rows: 1fr;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  /* ── 左侧：CPU 面板 ── */
+  .cpu-panel {
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel-title {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+  }
+
+  /* CPU 仿真体 */
+  .cpu-body {
+    background: #c8c8c8;
+    margin: 12px;
+    border-radius: 5px;
+    box-shadow: 3px 4px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3);
+    flex-shrink: 0;
+    position: relative;
+    overflow: visible;
+  }
+  .cpu-topbar {
+    background: var(--siemens-blue);
+    border-radius: 5px 5px 0 0;
+    padding: 4px 8px 3px;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .cpu-topbar .brand { color: #fff; font-weight: 900; font-size: 11px; letter-spacing: 1px; }
+  .cpu-topbar .model { color: #a8d0e8; font-size: 9px; }
+
+  .cpu-middle {
+    padding: 6px 8px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .cpu-ports-area { flex: 1; }
+  .cpu-status-area { width: 70px; }
+
+  /* 接口 */
+  .port-eth, .port-rs {
+    display: inline-block;
+    background: #222;
+    border: 1px solid #555;
+    border-radius: 2px;
+    padding: 3px 6px;
+    font-size: 8px;
+    color: #aaa;
+    margin-right: 4px;
+    margin-bottom: 3px;
+  }
+
+  /* 模式旋钮 */
+  .mode-knob {
+    width: 36px; height: 36px;
+    background: radial-gradient(circle at 40% 35%, #555, #1a1a1a);
+    border-radius: 50%;
+    border: 2px solid #111;
+    cursor: pointer;
+    position: relative;
+    margin: 4px auto;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+    transition: transform .2s;
+  }
+  .mode-knob:hover { transform: scale(1.05); }
+  .mode-knob .needle {
+    position: absolute;
+    width: 2px; height: 13px;
+    background: var(--green);
+    border-radius: 1px;
+    left: 50%; top: 4px;
+    transform-origin: 50% 100%;
+    transition: transform .3s, background .3s;
+  }
+  .mode-knob.stop .needle { transform: translateX(-50%) rotate(30deg); background: var(--red); }
+  .mode-knob.run  .needle { transform: translateX(-50%) rotate(-30deg); background: var(--green); }
+  .knob-label { font-size: 8px; color: #666; text-align: center; margin-top: 1px; }
+
+  /* 状态LED */
+  .status-leds { display: flex; flex-direction: column; gap: 4px; }
+  .led-row { display: flex; align-items: center; gap: 5px; }
+  .led {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #222; border: 1px solid #444;
+    transition: background .15s, box-shadow .15s;
+    flex-shrink: 0;
+  }
+  .led.on-green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+  .led.on-red    { background: var(--red);    box-shadow: 0 0 6px var(--red); }
+  .led.on-orange { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+  .led-label { font-size: 9px; color: #888; font-weight: 600; }
+
+  /* IO LED 行 */
+  .io-section { padding: 4px 8px; }
+  .io-label { font-size: 9px; font-weight: 700; margin-bottom: 3px; letter-spacing: 0.5px; }
+  .io-label.input  { color: #2a9fd8; }
+  .io-label.output { color: var(--orange); }
+  .io-leds { display: flex; flex-wrap: wrap; gap: 3px; }
+  .io-led {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #222; border: 1px solid #444;
+    cursor: pointer;
+    position: relative;
+    transition: background .1s, box-shadow .1s;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 6px; color: transparent;
+  }
+  .io-led:hover { border-color: #888; }
+  .io-led.on-i  { background: var(--yellow); box-shadow: 0 0 5px var(--yellow); color: #333; }
+  .io-led.on-q  { background: var(--orange); box-shadow: 0 0 5px var(--orange); color: #fff; }
+  .io-led[title]:hover::after {
+    content: attr(title);
+    position: absolute; bottom: 22px; left: 50%;
+    transform: translateX(-50%);
+    background: #111; color: #ddd;
+    font-size: 9px; padding: 2px 5px;
+    border-radius: 2px; white-space: nowrap;
+    pointer-events: none; z-index: 100;
+  }
+
+  /* 端子排 */
+  .terminal-block {
+    margin: 4px 8px 6px;
+    background: #333;
+    border-radius: 3px;
+    padding: 4px 6px;
+    display: flex;
+    gap: 8px;
+  }
+  .terminal-group { flex: 1; }
+  .terminal-title { font-size: 8px; font-weight: 700; margin-bottom: 3px; }
+  .terminal-title.i { color: #2a9fd8; }
+  .terminal-title.q { color: var(--orange); }
+  .terminals { display: flex; flex-wrap: wrap; gap: 2px; }
+  .terminal-pin {
+    width: 8px; height: 14px;
+    background: #888; border-radius: 1px;
+    border: 0.5px solid #666;
+  }
+
+  /* DIN导轨 */
+  .din-rail {
+    background: #aaa; height: 12px;
+    border-radius: 0 0 5px 5px;
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+  }
+  .din-clip { width: 14px; height: 10px; background: #777; border-radius: 0 0 2px 2px; }
+
+  /* 扫描信息 */
+  .scan-info {
+    margin: 4px 12px;
+    padding: 5px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .scan-info .val { color: var(--green); }
+
+  /* 存储区 */
+  .memory-view {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px;
+  }
+  .mem-section { margin-bottom: 10px; }
+  .mem-title { font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
+  .mem-grid { display: flex; flex-wrap: wrap; gap: 2px; }
+  .mem-cell {
+    width: 40px; height: 20px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mem-cell.active { color: var(--green); border-color: #2a5a2a; background: #0d1f0d; }
+
+  /* ── 中间：梯形图编辑器 ── */
+  .ladder-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-dark);
+  }
+  .ladder-toolbar {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    padding: 5px 10px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .toolbar-group { display: flex; gap: 3px; align-items: center; }
+  .toolbar-label { font-size: 10px; color: var(--text-muted); margin-right: 2px; }
+  .tbtn {
+    padding: 3px 8px;
+    border-radius: 2px; border: 1px solid var(--border);
+    background: var(--bg-input); color: var(--text);
+    font-size: 11px; font-family: var(--font-mono);
+    cursor: pointer; transition: background .1s;
+  }
+  .tbtn:hover { background: var(--siemens-blue); border-color: var(--siemens-blue); color: #fff; }
+
+  /* 梯形图画布 */
+  .ladder-canvas-wrap {
+    flex: 1;
+    overflow: auto;
+    padding: 12px;
+    background: #12151a;
+  }
+  .ladder-canvas { min-width: 100%; }
+
+  /* 网络块 */
+  .network-block {
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .network-header {
+    background: var(--bg-card);
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .network-num { color: var(--siemens-blue-light); font-weight: 700; }
+  .network-comment-input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: var(--text-muted); font-size: 11px; font-family: inherit;
+  }
+  .network-body { background: #0e1218; padding: 8px 10px; overflow-x: auto; }
+
+  /* 梯级（Rung） */
+  .rung-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+    gap: 0;
+    position: relative;
+  }
+  .power-rail {
+    width: 6px; height: 40px;
+    background: linear-gradient(to right, #3a5080, #2a4070);
+    border-radius: 2px 0 0 2px;
+    flex-shrink: 0;
+  }
+  .power-rail.right { border-radius: 0 2px 2px 0; }
+  .rung-wire {
+    flex: 1;
+    height: 2px;
+    background: var(--border);
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .rung-wire.energized { background: var(--green); box-shadow: 0 0 4px var(--green); }
+
+  /* 元件 */
+  .element-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    flex-shrink: 0;
+    width: 60px;
+  }
+  .element-addr {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    color: var(--yellow);
+    margin-bottom: 2px;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .element-body {
+    position: relative;
+    width: 40px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .element-label {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    text-align: center;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+  }
+  /* NO 常开触点 */
+  .contact-no {
+    width: 36px; height: 24px;
+    border-left: 2px solid #6080a0;
+    border-right: 2px solid #6080a0;
+    background: transparent;
+    position: relative;
+  }
+  .contact-no.on {
+    border-color: var(--green);
+    box-shadow: 0 0 5px rgba(68,204,102,0.4);
+  }
+  .contact-no::before, .contact-no::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: -8px; right: -8px;
+    height: 2px;
+    background: #4a5a70;
+  }
+  .contact-no.on::before, .contact-no.on::after { background: var(--green); }
+  /* NC 常闭触点 */
+  .contact-nc {
+    width: 36px; height: 24px;
+    border-left: 2px solid #6080a0;
+    border-right: 2px solid #6080a0;
+  }
+  .contact-nc::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: -8px; right: -8px;
+    height: 2px;
+    background: #4a5a70;
+  }
+  .contact-nc::after {
+    content: '';
+    position: absolute;
+    top: 4px; left: 6px; right: 6px;
+    height: 1px;
+    background: #6080a0;
+  }
+  .contact-nc.on::before { background: var(--green); }
+
+  /* 线圈输出 */
+  .coil-out {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 2px solid #6080a0;
+    position: relative;
+  }
+  .coil-out.on {
+    border-color: var(--orange);
+    background: rgba(240,112,48,0.15);
+    box-shadow: 0 0 8px rgba(240,112,48,0.5);
+  }
+  .coil-out::before, .coil-out::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: -10px; right: -10px;
+    height: 2px;
+    background: #4a5a70;
+  }
+  .coil-out.on::before, .coil-out.on::after { background: var(--orange); }
+
+  /* 线圈置位/复位 */
+  .coil-s { border-color: var(--yellow); }
+  .coil-s.on { background: rgba(245,200,66,0.15); box-shadow: 0 0 8px rgba(245,200,66,0.4); }
+  .coil-r { border-color: var(--red); }
+
+  /* 定时器框 */
+  .timer-box {
+    width: 56px;
+    border: 1.5px solid #4a6090;
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: #8090b0;
+    background: #0e1520;
+    position: relative;
+  }
+  .timer-box.on {
+    border-color: var(--green);
+    color: var(--green);
+    box-shadow: 0 0 5px rgba(68,204,102,0.3);
+  }
+  .timer-box .t-type { font-weight: 700; font-size: 9px; }
+  .timer-box .t-cv   { float: right; color: var(--yellow); }
+
+  /* 计数器框 */
+  .counter-box {
+    width: 56px;
+    border: 1.5px solid #4a6090;
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: #8090b0;
+    background: #0e1520;
+  }
+  .counter-box.on { border-color: var(--yellow); color: var(--yellow); }
+
+  /* 元件连接线 */
+  .elem-connector {
+    height: 2px;
+    width: 10px;
+    background: #4a5a70;
+    flex-shrink: 0;
+  }
+  .elem-connector.on { background: var(--green); }
+
+  /* 添加按钮 */
+  .add-elem-btn {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 1px dashed #3a4a60;
+    background: transparent;
+    color: #3a4a60;
+    font-size: 14px; line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .1s, color .1s;
+    flex-shrink: 0;
+    margin: 0 4px;
+  }
+  .add-elem-btn:hover { border-color: var(--siemens-blue); color: var(--siemens-blue-light); }
+
+  /* ── 右侧：JSON / 监控 ── */
+  .right-panel {
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .tab-bar {
+    display: flex;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tab {
+    padding: 7px 14px;
+    font-size: 11px; font-weight: 600;
+    cursor: pointer;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    transition: color .1s, border-color .1s;
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--siemens-blue); }
+
+  .tab-content { flex: 1; overflow: hidden; display: none; flex-direction: column; }
+  .tab-content.active { display: flex; }
+
+  /* JSON 编辑器 */
+  .json-editor {
+    flex: 1;
+    background: var(--bg-input);
+    border: none;
+    padding: 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #a8c8e8;
+    resize: none;
+    outline: none;
+    overflow-y: auto;
+    line-height: 1.5;
+  }
+  .json-error {
+    padding: 5px 10px;
+    background: rgba(238,68,68,0.15);
+    border-top: 1px solid rgba(238,68,68,0.3);
+    font-size: 11px;
+    color: var(--red);
+    min-height: 24px;
+    flex-shrink: 0;
+  }
+
+  /* 监控表 */
+  .monitor-table {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th {
+    background: var(--bg-card);
+    padding: 4px 6px;
+    text-align: left;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 600;
+    position: sticky; top: 0;
+  }
+  td { padding: 3px 6px; border-bottom: 1px solid #1e2228; font-family: var(--font-mono); }
+  tr:hover td { background: var(--bg-card); }
+  .val-true  { color: var(--green); }
+  .val-false { color: #3a5a3a; }
+  .val-num   { color: var(--yellow); }
+
+  /* 状态栏 */
+  .statusbar {
+    background: #0d1018;
+    border-top: 1px solid var(--border);
+    padding: 3px 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  .statusbar .status-item { display: flex; gap: 4px; }
+  .statusbar .status-val  { color: var(--text); }
+  .status-run  { color: var(--green); font-weight: 700; }
+  .status-stop { color: var(--red);   font-weight: 700; }
+  .status-err  { color: var(--orange);font-weight: 700; }
+
+  /* 滚动条样式 */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg-dark); }
+  ::-webkit-scrollbar-thumb { background: #3a4050; border-radius: 3px; }
+
+  /* 模态弹窗 */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none; align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    width: 340px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .modal h3 { font-size: 13px; color: var(--text); margin-bottom: 10px; }
+  .form-row { margin-bottom: 8px; }
+  .form-row label { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 3px; }
+  .form-row input, .form-row select {
+    width: 100%; padding: 5px 8px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 3px; color: var(--text);
+    font-family: var(--font-mono); font-size: 12px;
+    outline: none;
+  }
+  .form-row input:focus, .form-row select:focus { border-color: var(--siemens-blue); }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<!-- 顶栏 -->
+<div class="topbar">
+  <div>
+    <div class="logo">SIMATIC</div>
+    <div class="sub">S7-200 SMART CPU ST20 · 梯形图仿真器</div>
+  </div>
+  <div class="topbar-spacer"></div>
+  <button class="btn btn-run"   id="btnRun"  >▶ 运行</button>
+  <button class="btn btn-stop"  id="btnStop" disabled>■ 停止</button>
+  <button class="btn btn-reset" id="btnReset">↺ 复位</button>
+  <button class="btn btn-load"  id="btnLoad" >⇩ 载入程序</button>
+</div>
+
+<!-- 主区域 -->
+<div class="main">
+
+  <!-- ── 左侧：CPU 面板 ── -->
+  <div class="cpu-panel">
+    <div class="panel-title">CPU 模块 · ST20</div>
+
+    <!-- CPU 仿真体 -->
+    <div class="cpu-body" id="cpuBody">
+      <div class="cpu-topbar">
+        <span class="brand">SIMATIC</span>
+        <span class="model">S7-200 SMART</span>
+      </div>
+      <div class="cpu-middle">
+        <div class="cpu-ports-area">
+          <div>
+            <span class="port-eth">ETH</span>
+            <span class="port-rs">485</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+            <div class="mode-knob run" id="modeKnob" title="点击切换RUN/STOP">
+              <div class="needle"></div>
+            </div>
+            <div>
+              <div class="knob-label" id="modeLabel">RUN</div>
+              <div style="font-size:8px;color:#888;margin-top:2px">CPU ST20</div>
+            </div>
+          </div>
+        </div>
+        <div class="cpu-status-area">
+          <div class="status-leds">
+            <div class="led-row">
+              <div class="led on-green" id="ledRun"></div>
+              <span class="led-label">RUN</span>
+            </div>
+            <div class="led-row">
+              <div class="led" id="ledStop"></div>
+              <span class="led-label">STOP</span>
+            </div>
+            <div class="led-row">
+              <div class="led" id="ledErr"></div>
+              <span class="led-label">ERR</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- I LED 行 -->
+      <div class="io-section">
+        <div class="io-label input">输入 I0</div>
+        <div class="io-leds" id="iLeds0"></div>
+      </div>
+      <div class="io-section">
+        <div class="io-label input">输入 I1</div>
+        <div class="io-leds" id="iLeds1"></div>
+      </div>
+      <div class="io-section">
+        <div class="io-label output">输出 Q0</div>
+        <div class="io-leds" id="qLeds"></div>
+      </div>
+
+      <!-- 端子排 -->
+      <div class="terminal-block">
+        <div class="terminal-group">
+          <div class="terminal-title i">INPUT</div>
+          <div class="terminals" id="inputTerminals"></div>
+        </div>
+        <div class="terminal-group">
+          <div class="terminal-title q">OUTPUT</div>
+          <div class="terminals" id="outputTerminals"></div>
+        </div>
+      </div>
+      <div class="din-rail">
+        <div class="din-clip"></div>
+        <div style="font-size:8px;color:#666">6ES7 288-1ST20-0AA0</div>
+        <div class="din-clip"></div>
+      </div>
+    </div>
+
+    <!-- 扫描信息 -->
+    <div class="scan-info">
+      <span>扫描次数</span>
+      <span class="val" id="scanCount">0</span>
+      <span>周期</span>
+      <span class="val" id="cycleTime">10ms</span>
+    </div>
+
+    <!-- 存储区 -->
+    <div class="memory-view">
+      <div class="mem-section">
+        <div class="mem-title">定时器 (T0~T7)</div>
+        <div class="mem-grid" id="memTimers"></div>
+      </div>
+      <div class="mem-section">
+        <div class="mem-title">计数器 (C0~C7)</div>
+        <div class="mem-grid" id="memCounters"></div>
+      </div>
+      <div class="mem-section">
+        <div class="mem-title">M 标志位 (MB0)</div>
+        <div class="mem-grid" id="memM"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 中间：梯形图 ── -->
+  <div class="ladder-panel">
+    <div class="ladder-toolbar">
+      <span class="toolbar-label">触点：</span>
+      <div class="toolbar-group">
+        <button class="tbtn" onclick="insertElem('LD')">—| |—</button>
+        <button class="tbtn" onclick="insertElem('LDN')">—|/|—</button>
+        <button class="tbtn" onclick="insertElem('O')">—(O)—</button>
+      </div>
+      <span class="toolbar-label">线圈：</span>
+      <div class="toolbar-group">
+        <button class="tbtn" onclick="insertElem('=')">—( )—</button>
+        <button class="tbtn" onclick="insertElem('S')">—(S)—</button>
+        <button class="tbtn" onclick="insertElem('R')">—(R)—</button>
+      </div>
+      <span class="toolbar-label">定时：</span>
+      <div class="toolbar-group">
+        <button class="tbtn" onclick="insertElem('TON')">TON</button>
+        <button class="tbtn" onclick="insertElem('TOF')">TOF</button>
+      </div>
+      <span class="toolbar-label">计数：</span>
+      <div class="toolbar-group">
+        <button class="tbtn" onclick="insertElem('CTU')">CTU</button>
+      </div>
+      <div style="flex:1"></div>
+      <button class="tbtn" onclick="addNetwork()">+ 网络</button>
+    </div>
+    <div class="ladder-canvas-wrap">
+      <div class="ladder-canvas" id="ladderCanvas"></div>
+    </div>
+  </div>
+
+  <!-- ── 右侧：JSON / 监控 ── -->
+  <div class="right-panel">
+    <div class="tab-bar">
+      <div class="tab active" onclick="switchTab('json')">JSON 程序</div>
+      <div class="tab" onclick="switchTab('monitor')">监控表</div>
+    </div>
+    <div class="tab-content active" id="tabJson">
+      <textarea class="json-editor" id="jsonEditor" spellcheck="false"></textarea>
+      <div class="json-error" id="jsonError"></div>
+    </div>
+    <div class="tab-content" id="tabMonitor">
+      <div class="monitor-table">
+        <table>
+          <thead>
+            <tr><th>地址</th><th>类型</th><th>当前值</th></tr>
+          </thead>
+          <tbody id="monitorBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 状态栏 -->
+<div class="statusbar">
+  <div class="status-item">状态：<span id="statusText" class="status-run">RUN</span></div>
+  <div class="status-item">错误：<span class="status-val" id="statusErr">无</span></div>
+  <div class="status-item">I: <span class="status-val" id="statusI">00 00</span></div>
+  <div class="status-item">Q: <span class="status-val" id="statusQ">00</span></div>
+  <div class="status-item">SM0.5: <span class="status-val" id="statusSM5">0</span></div>
+</div>
+
+<!-- 元件插入弹窗 -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">插入元件</h3>
+    <div class="form-row">
+      <label>操作码</label>
+      <input id="modalOp" readonly>
+    </div>
+    <div class="form-row">
+      <label>操作数 (地址)</label>
+      <input id="modalAddr" placeholder="如 I0.0 / Q0.0 / M0.0 / T0 / C0">
+    </div>
+    <div id="modalPvRow" class="form-row" style="display:none">
+      <label>预设值 PV</label>
+      <input id="modalPv" type="number" value="10">
+    </div>
+    <div id="modalTbRow" class="form-row" style="display:none">
+      <label>时基 (ms)</label>
+      <select id="modalTb">
+        <option value="10">10ms (×10ms)</option>
+        <option value="100" selected>100ms (×100ms)</option>
+        <option value="1000">1000ms (×1s)</option>
+      </select>
+    </div>
+    <div id="modalAddr2Row" class="form-row" style="display:none">
+      <label>复位地址 (R端)</label>
+      <input id="modalAddr2" placeholder="如 I0.5">
+    </div>
+    <div id="modalNetRow" class="form-row">
+      <label>插入到 Network</label>
+      <select id="modalNet"></select>
+    </div>
+    <div id="modalRungRow" class="form-row">
+      <label>插入到 Rung（0=新建）</label>
+      <input id="modalRung" type="number" value="0" min="0">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-reset" onclick="closeModal()">取消</button>
+      <button class="btn btn-load" onclick="confirmInsert()">插入</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// PLC 仿真核心（直接内嵌，与 S7200SmartST20.js 逻辑一致）
+// ════════════════════════════════════════════════════════
+
+const PLC = {
+  running:    false,
+  errorState: false,
+  errorMsg:   '',
+  scanCount:  0,
+  firstScan:  true,
+  scanCycleMs: 10,
+  accumMs:    0,
+
+  I:  new Uint8Array(2),
+  Q:  new Uint8Array(1),
+  M:  new Uint8Array(32),
+  V:  new Uint8Array(5000),
+  SM: new Uint8Array(256),
+
+  T: Array.from({length:256}, () => ({cv:0,pv:0,bit:false,accMs:0,type:'TON',timeBase:100,enabled:false})),
+  C: Array.from({length:256}, () => ({cv:0,pv:0,bit:false,type:'CTU',lastCU:false,lastCD:false,lastR:false})),
+
+  smOscMs4:0, smOscMs5:0, smFlip4:false, smFlip5:false,
+
+  program: null,
+
+  reset() {
+    this.running    = false;
+    this.errorState = false;
+    this.errorMsg   = '';
+    this.scanCount  = 0;
+    this.firstScan  = true;
+    this.accumMs    = 0;
+    this.I  = new Uint8Array(2);
+    this.Q  = new Uint8Array(1);
+    this.M  = new Uint8Array(32);
+    this.SM = new Uint8Array(256);
+    this.SM[0] = 0xFF;
+    this.T  = Array.from({length:256}, () => ({cv:0,pv:0,bit:false,accMs:0,type:'TON',timeBase:100,enabled:false}));
+    this.C  = Array.from({length:256}, () => ({cv:0,pv:0,bit:false,type:'CTU',lastCU:false,lastCD:false,lastR:false}));
+    this.smOscMs4 = this.smOscMs5 = 0;
+    this.smFlip4 = this.smFlip5 = false;
+  },
+
+  readBit(addr) {
+    if (addr === 'SM0.0') return true;
+    if (addr === 'SM0.1') return !!(this.SM[0] & 0x02);
+    if (addr === 'SM0.4') return !!(this.SM[0] & 0x10);
+    if (addr === 'SM0.5') return !!(this.SM[0] & 0x20);
+    const m = addr.match(/^([A-Za-z]+)(\d+)\.(\d+)$/);
+    if (m) {
+      const z=m[1].toUpperCase(), b=+m[2], bit=+m[3], mask=1<<bit;
+      if (z==='I')  return !!(this.I[b]  & mask);
+      if (z==='Q')  return !!(this.Q[b]  & mask);
+      if (z==='M')  return !!(this.M[b]  & mask);
+      if (z==='V')  return !!(this.V[b]  & mask);
+      if (z==='SM') return !!(this.SM[b] & mask);
+    }
+    const tc = addr.match(/^([TC])(\d+)$/);
+    if (tc) { const n=+tc[2]; return tc[1]==='T' ? this.T[n].bit : this.C[n].bit; }
+    return false;
+  },
+
+  writeBit(addr, val) {
+    const m = addr.match(/^([A-Za-z]+)(\d+)\.(\d+)$/);
+    if (!m) return;
+    const z=m[1].toUpperCase(), b=+m[2], bit=+m[3], mask=1<<bit;
+    const set = arr => { if(val) arr[b]|=mask; else arr[b]&=~mask; };
+    if (z==='Q') { set(this.Q); return; }
+    if (z==='M') { set(this.M); return; }
+    if (z==='V') { set(this.V); return; }
+  },
+
+  readWord(addr) {
+    const m = addr.match(/^([A-Za-z]+)W(\d+)$/i);
+    if (!m) { const n=parseInt(addr); return isNaN(n)?0:n; }
+    const z=m[1].toUpperCase(), b=+m[2];
+    const arr = z==='V'?this.V : z==='M'?this.M : null;
+    if (!arr) return 0;
+    const raw = (arr[b]<<8)|arr[b+1];
+    return raw>32767 ? raw-65536 : raw;
+  },
+
+  writeWord(addr, val) {
+    const m = addr.match(/^([A-Za-z]+)W(\d+)$/i);
+    if (!m) return;
+    const z=m[1].toUpperCase(), b=+m[2];
+    val = Math.max(-32768, Math.min(32767, Math.round(val)));
+    const u = val<0?val+65536:val;
+    const arr = z==='V'?this.V : z==='M'?this.M : null;
+    if (arr) { arr[b]=(u>>8)&0xFF; arr[b+1]=u&0xFF; }
+  },
+
+  execScan() {
+    if (!this.running) return;
+    if (this.firstScan) this.SM[0] |= 0x02;
+    else                this.SM[0] &= ~0x02;
+    const prog = this.program;
+    if (!prog?.networks) return;
+    try {
+      for (const net of prog.networks)
+        for (const rung of (net.rungs||[]))
+          this.execRung(rung);
+    } catch(e) {
+      this.errorState = true;
+      this.errorMsg   = e.message||'执行错误';
+      this.running    = false;
+    }
+    this.firstScan = false;
+    this.scanCount++;
+  },
+
+  execRung(insts) {
+    const stack = [];
+    let flow = false;
+    for (const inst of insts) {
+      const op = inst.op.toUpperCase();
+      const { addr, addr2, pv, timeBase } = inst;
+      switch(op) {
+        case 'LD':  stack.push(flow); flow = this.readBit(addr); break;
+        case 'LDN': stack.push(flow); flow = !this.readBit(addr); break;
+        case 'A':   flow = flow && this.readBit(addr); break;
+        case 'AN':  flow = flow && !this.readBit(addr); break;
+        case 'O':   flow = flow || this.readBit(addr); break;
+        case 'ON':  flow = flow || !this.readBit(addr); break;
+        case 'NOT': flow = !flow; break;
+        case 'OLD': flow = flow || (stack.pop()||false); break;
+        case 'ALD': flow = flow && (stack.pop()||false); break;
+        case 'LPS': stack.push(flow); break;
+        case 'LRD': flow = stack[stack.length-1]; break;
+        case 'LPP': flow = stack.pop()||false; break;
+        case '=':  this.writeBit(addr, flow); break;
+        case 'S':  if(flow) this.writeBit(addr, true);  break;
+        case 'R':  if(flow) this.writeBit(addr, false); break;
+        case 'TON': {
+          const t = this.T[parseIdx(addr,'T')];
+          t.type='TON'; if(pv!==undefined)t.pv=pv;
+          t.timeBase=timeBase||100; t.enabled=flow;
+          if (!flow) { t.cv=0; t.bit=false; t.accMs=0; }
+          break;
+        }
+        case 'TOF': {
+          const t = this.T[parseIdx(addr,'T')];
+          t.type='TOF'; if(pv!==undefined)t.pv=pv;
+          t.timeBase=timeBase||100;
+          if (flow) { t.bit=true; t.cv=0; t.accMs=0; }
+          t.enabled = !flow;
+          break;
+        }
+        case 'TONR': {
+          const t = this.T[parseIdx(addr,'T')];
+          t.type='TONR'; if(pv!==undefined)t.pv=pv;
+          t.timeBase=timeBase||100; t.enabled=flow;
+          break;
+        }
+        case 'CTU': {
+          const c = this.C[parseIdx(addr,'C')];
+          if(pv!==undefined)c.pv=pv;
+          const rNow = addr2?this.readBit(addr2):false;
+          if (rNow) { c.cv=0; c.bit=false; }
+          else if (flow && !c.lastCU) c.cv++;
+          c.bit = c.cv>=c.pv; c.lastCU=flow; c.lastR=rNow;
+          break;
+        }
+        case 'NOP': break;
+        default: break;
+      }
+    }
+  },
+
+  tickTimers(dtMs) {
+    for (let i=0;i<256;i++) {
+      const t=this.T[i];
+      if (!t.enabled) continue;
+      t.accMs += dtMs;
+      const ticks = Math.floor(t.accMs/t.timeBase);
+      if (ticks>0) {
+        t.accMs -= ticks*t.timeBase;
+        if (t.type==='TON'||t.type==='TONR') {
+          t.cv = Math.min(t.cv+ticks,32767);
+          if (t.cv>=t.pv) t.bit=true;
+        } else if (t.type==='TOF') {
+          t.cv = Math.min(t.cv+ticks,32767);
+          if (t.cv>=t.pv) { t.bit=false; t.enabled=false; }
+        }
+      }
+    }
+  },
+
+  tickSM(dtMs) {
+    this.smOscMs5 += dtMs;
+    this.smOscMs4 += dtMs;
+    if (this.smOscMs5>=500) {
+      this.smOscMs5-=500; this.smFlip5=!this.smFlip5;
+      if(this.smFlip5) this.SM[0]|=0x20; else this.SM[0]&=~0x20;
+    }
+    if (this.smOscMs4>=30000) {
+      this.smOscMs4-=30000; this.smFlip4=!this.smFlip4;
+      if(this.smFlip4) this.SM[0]|=0x10; else this.SM[0]&=~0x10;
+    }
+  },
+
+  tick(dtMs) {
+    this.tickSM(dtMs);
+    this.tickTimers(dtMs);
+    if (this.running) {
+      this.accumMs += dtMs;
+      if (this.accumMs >= this.scanCycleMs) {
+        this.accumMs -= this.scanCycleMs;
+        this.execScan();
+      }
+    }
+  }
+};
+
+function parseIdx(addr, prefix) {
+  const n = parseInt(addr.replace(new RegExp(`^${prefix}`,'i'),''));
+  return isNaN(n)?0:Math.max(0,Math.min(255,n));
+}
+
+// ════════════════════════════════════════════════════════
+// 默认程序
+// ════════════════════════════════════════════════════════
+
+const defaultProgram = {
+  name: "电机启保停控制",
+  networks: [
+    {
+      comment: "Network 1 · 启保停（I0.0=启动 I0.1=停止 Q0.0=电机）",
+      rungs: [
+        [
+          { op:"LD", addr:"I0.0" },
+          { op:"O",  addr:"Q0.0" },
+          { op:"AN", addr:"I0.1" },
+          { op:"=",  addr:"Q0.0" }
+        ]
+      ]
+    },
+    {
+      comment: "Network 2 · SM0.5 闪烁指示灯（Q0.7）",
+      rungs: [
+        [
+          { op:"LD", addr:"SM0.5" },
+          { op:"A",  addr:"Q0.0"  },
+          { op:"=",  addr:"Q0.7"  }
+        ]
+      ]
+    },
+    {
+      comment: "Network 3 · 延时 3s（I0.2→TON T0 3s→Q0.1）",
+      rungs: [
+        [
+          { op:"LD",  addr:"I0.2" },
+          { op:"TON", addr:"T0", pv:30, timeBase:100 }
+        ],
+        [
+          { op:"LD", addr:"T0"  },
+          { op:"=",  addr:"Q0.1"}
+        ]
+      ]
+    },
+    {
+      comment: "Network 4 · 计数器示例（I0.3 计数10次→Q0.2，I0.4复位）",
+      rungs: [
+        [
+          { op:"LD",  addr:"I0.3" },
+          { op:"CTU", addr:"C0", pv:10, addr2:"I0.4" }
+        ],
+        [
+          { op:"LD", addr:"C0"  },
+          { op:"=",  addr:"Q0.2"}
+        ]
+      ]
+    }
+  ]
+};
+
+PLC.program = JSON.parse(JSON.stringify(defaultProgram));
+PLC.SM[0] = 0xFF;
+
+// ════════════════════════════════════════════════════════
+// UI 构建
+// ════════════════════════════════════════════════════════
+
+// 生成输入LED
+function buildInputLEDs() {
+  const c0 = document.getElementById('iLeds0');
+  const c1 = document.getElementById('iLeds1');
+  c0.innerHTML = '';
+  c1.innerHTML = '';
+  for (let i=0;i<8;i++) {
+    const d = document.createElement('div');
+    d.className='io-led'; d.id=`i0_${i}`;
+    d.title=`I0.${i}`; d.textContent=i;
+    d.onclick = () => { PLC.I[0]^=(1<<i); renderUI(); };
+    c0.appendChild(d);
+  }
+  for (let i=0;i<4;i++) {
+    const d = document.createElement('div');
+    d.className='io-led'; d.id=`i1_${i}`;
+    d.title=`I1.${i}`; d.textContent=i;
+    d.onclick = () => { PLC.I[1]^=(1<<i); renderUI(); };
+    c1.appendChild(d);
+  }
+}
+
+function buildOutputLEDs() {
+  const c = document.getElementById('qLeds');
+  c.innerHTML = '';
+  for (let i=0;i<8;i++) {
+    const d = document.createElement('div');
+    d.className='io-led'; d.id=`q0_${i}`;
+    d.title=`Q0.${i}`; d.textContent=i;
+    c.appendChild(d);
+  }
+}
+
+function buildTerminals() {
+  const it = document.getElementById('inputTerminals');
+  const ot = document.getElementById('outputTerminals');
+  it.innerHTML = '';
+  ot.innerHTML = '';
+  for (let i=0;i<12;i++) {
+    const d=document.createElement('div');d.className='terminal-pin';it.appendChild(d);
+  }
+  for (let i=0;i<8;i++) {
+    const d=document.createElement('div');d.className='terminal-pin';ot.appendChild(d);
+  }
+}
+
+buildInputLEDs();
+buildOutputLEDs();
+buildTerminals();
+
+// ════════════════════════════════════════════════════════
+// 梯形图渲染
+// ════════════════════════════════════════════════════════
+
+function renderLadder() {
+  const canvas = document.getElementById('ladderCanvas');
+  canvas.innerHTML = '';
+  const prog = PLC.program;
+  if (!prog?.networks) return;
+
+  prog.networks.forEach((net, ni) => {
+    const nb = document.createElement('div');
+    nb.className = 'network-block';
+
+    // 网络头
+    const nh = document.createElement('div');
+    nh.className = 'network-header';
+    nh.innerHTML = `<span class="network-num">Network ${ni+1}</span>`;
+    const ci = document.createElement('input');
+    ci.className='network-comment-input';
+    ci.value = net.comment||'';
+    ci.oninput = e => { prog.networks[ni].comment = e.target.value; syncJson(); };
+    nh.appendChild(ci);
+
+    // 删除网络按钮
+    const delBtn = document.createElement('button');
+    delBtn.className='tbtn'; delBtn.textContent='×'; delBtn.style.padding='1px 6px';
+    delBtn.title='删除此网络';
+    delBtn.onclick = () => { prog.networks.splice(ni,1); renderLadder(); syncJson(); };
+    nh.appendChild(delBtn);
+
+    nb.appendChild(nh);
+
+    // 网络体
+    const nbody = document.createElement('div');
+    nbody.className = 'network-body';
+
+    (net.rungs||[]).forEach((rung, ri) => {
+      const rungRow = buildRungRow(rung, ni, ri);
+      nbody.appendChild(rungRow);
+    });
+
+    // 添加梯级按钮
+    const addRungBtn = document.createElement('button');
+    addRungBtn.className='tbtn'; addRungBtn.textContent='+ 添加梯级';
+    addRungBtn.style.marginTop='4px'; addRungBtn.style.fontSize='10px';
+    addRungBtn.onclick = () => {
+      prog.networks[ni].rungs.push([{op:'LD',addr:'I0.0'},{op:'=',addr:'Q0.0'}]);
+      renderLadder(); syncJson();
+    };
+    nbody.appendChild(addRungBtn);
+    nb.appendChild(nbody);
+    canvas.appendChild(nb);
+  });
+}
+
+function buildRungRow(rung, ni, ri) {
+  const row = document.createElement('div');
+  row.className = 'rung-row';
+
+  // 左母线
+  const lRail = document.createElement('div');
+  lRail.className = 'power-rail';
+  row.appendChild(lRail);
+
+  // 元件
+  let prevEnergized = true;
+  let flowSim = true; // 模拟能流
+
+  rung.forEach((inst, ii) => {
+    const {op, addr, addr2, pv, timeBase} = inst;
+    const opU = op.toUpperCase();
+
+    // 连接线
+    const conn = document.createElement('div');
+    conn.className = 'elem-connector' + (prevEnergized?' on':'');
+    row.appendChild(conn);
+
+    // 元件包裹
+    const wrap = document.createElement('div');
+    wrap.className = 'element-wrap';
+
+    const addrLabel = document.createElement('div');
+    addrLabel.className = 'element-addr';
+    addrLabel.textContent = addr || '';
+    wrap.appendChild(addrLabel);
+
+    const body = document.createElement('div');
+    body.className = 'element-body';
+
+    // 根据指令类型渲染
+    if (opU === 'LD' || opU === 'A' || opU === 'O') {
+      const val = PLC.readBit(addr);
+      flowSim = flowSim && val;
+      const c = document.createElement('div');
+      c.className = 'contact-no' + (val?' on':'');
+      body.appendChild(c);
+      const lbl = document.createElement('div');
+      lbl.className='element-label'; lbl.textContent=opU;
+      wrap.appendChild(lbl);
+    } else if (opU === 'LDN' || opU === 'AN' || opU === 'ON') {
+      const val = !PLC.readBit(addr);
+      flowSim = flowSim && val;
+      const c = document.createElement('div');
+      c.className = 'contact-nc' + (val?' on':'');
+      body.appendChild(c);
+      const lbl = document.createElement('div');
+      lbl.className='element-label'; lbl.textContent=opU;
+      wrap.appendChild(lbl);
+    } else if (opU === '=') {
+      const val = PLC.readBit(addr);
+      const c = document.createElement('div');
+      c.className = 'coil-out' + (val?' on':'');
+      body.appendChild(c);
+      const lbl = document.createElement('div');
+      lbl.className='element-label'; lbl.textContent='=';
+      wrap.appendChild(lbl);
+      flowSim = false; // 输出后不继续
+    } else if (opU === 'S') {
+      const val = PLC.readBit(addr);
+      const c = document.createElement('div');
+      c.className = 'coil-out coil-s' + (val?' on':'');
+      c.textContent='S';
+      c.style.cssText='font-size:9px;color:#f5c842;display:flex;align-items:center;justify-content:center;';
+      body.appendChild(c);
+    } else if (opU === 'R') {
+      const val = PLC.readBit(addr);
+      const c = document.createElement('div');
+      c.className = 'coil-out coil-r' + (val?' on':'');
+      c.textContent='R';
+      c.style.cssText='font-size:9px;color:#ee4444;display:flex;align-items:center;justify-content:center;';
+      body.appendChild(c);
+    } else if (['TON','TOF','TONR'].includes(opU)) {
+      const idx = parseIdx(addr,'T');
+      const t = PLC.T[idx];
+      const tb = document.createElement('div');
+      tb.className = 'timer-box' + (t.bit?' on':'');
+      tb.innerHTML = `<div class="t-type">${opU}<span class="t-cv">${t.cv}</span></div>`
+                   + `<div>${addr} PV:${t.pv}</div>`
+                   + `<div>TB:${t.timeBase}ms</div>`;
+      body.style.width='64px';
+      body.appendChild(tb);
+      addrLabel.textContent='';
+    } else if (['CTU','CTD','CTUD'].includes(opU)) {
+      const idx = parseIdx(addr,'C');
+      const c = PLC.C[idx];
+      const cb = document.createElement('div');
+      cb.className = 'counter-box' + (c.bit?' on':'');
+      cb.innerHTML = `<div class="t-type">${opU}<span class="t-cv">${c.cv}</span></div>`
+                   + `<div>${addr} PV:${c.pv}</div>`;
+      body.style.width='64px';
+      body.appendChild(cb);
+      addrLabel.textContent='';
+    } else {
+      // 通用显示
+      const g = document.createElement('div');
+      g.style.cssText='background:#1e2830;border:1px solid #4a6080;border-radius:3px;padding:3px 5px;font-size:9px;color:#8090b0;white-space:nowrap;';
+      g.textContent = `${opU} ${addr||''}`;
+      body.appendChild(g);
+    }
+
+    prevEnergized = flowSim;
+    wrap.appendChild(body);
+
+    // 元件点击编辑
+    wrap.title = `${opU} ${addr||''} (点击编辑)`;
+    wrap.style.cursor='pointer';
+    wrap.onclick = () => openEditModal(ni, ri, ii);
+
+    row.appendChild(wrap);
+  });
+
+  // 右侧连接线
+  const connR = document.createElement('div');
+  connR.className='elem-connector'+(prevEnergized?' on':'');
+  row.appendChild(connR);
+
+  // 右母线
+  const rRail = document.createElement('div');
+  rRail.className = 'power-rail right';
+  row.appendChild(rRail);
+
+  // 删除梯级按钮
+  const delBtn = document.createElement('button');
+  delBtn.className='add-elem-btn'; delBtn.textContent='×'; delBtn.title='删除此梯级';
+  delBtn.style.marginLeft='4px';
+  delBtn.onclick = (e) => {
+    e.stopPropagation();
+    PLC.program.networks[ni].rungs.splice(ri,1);
+    renderLadder(); syncJson();
+  };
+  row.appendChild(delBtn);
+
+  return row;
+}
+
+// ════════════════════════════════════════════════════════
+// UI 更新
+// ════════════════════════════════════════════════════════
+
+function renderUI() {
+  // LED
+  for (let i=0;i<8;i++) {
+    const el = document.getElementById(`i0_${i}`);
+    if (el) { const on=!!(PLC.I[0]&(1<<i)); el.className='io-led'+(on?' on-i':''); }
+  }
+  for (let i=0;i<4;i++) {
+    const el = document.getElementById(`i1_${i}`);
+    if (el) { const on=!!(PLC.I[1]&(1<<i)); el.className='io-led'+(on?' on-i':''); }
+  }
+  for (let i=0;i<8;i++) {
+    const el = document.getElementById(`q0_${i}`);
+    if (el) { const on=!!(PLC.Q[0]&(1<<i)); el.className='io-led'+(on?' on-q':''); }
+  }
+
+  // 状态LED
+  const isRun  = PLC.running && !PLC.errorState;
+  const isStop = !PLC.running && !PLC.errorState;
+  const isErr  = PLC.errorState;
+
+  document.getElementById('ledRun') .className = 'led'+(isRun  ? ' on-green':'');
+  document.getElementById('ledStop').className = 'led'+(isStop ? ' on-red'  :'');
+  document.getElementById('ledErr') .className = 'led'+(isErr  ? ' on-orange':'');
+
+  // 旋钮
+  const knob = document.getElementById('modeKnob');
+  const modeLabel = document.getElementById('modeLabel');
+  knob.className = 'mode-knob ' + (PLC.running ? 'run' : 'stop');
+  modeLabel.textContent = PLC.running ? 'RUN' : 'STOP';
+  modeLabel.style.color = PLC.running ? '#44cc66' : '#ee4444';
+
+  // 按钮
+  document.getElementById('btnRun') .disabled = PLC.running;
+  document.getElementById('btnStop').disabled = !PLC.running;
+
+  // 扫描信息
+  document.getElementById('scanCount').textContent = PLC.scanCount;
+
+  // 状态栏
+  const st = document.getElementById('statusText');
+  if (PLC.errorState) { st.className='status-err'; st.textContent='ERROR'; }
+  else if (PLC.running) { st.className='status-run'; st.textContent='RUN'; }
+  else { st.className='status-stop'; st.textContent='STOP'; }
+
+  document.getElementById('statusErr').textContent = PLC.errorMsg || '无';
+  document.getElementById('statusI').textContent   = PLC.I[0].toString(16).padStart(2,'0').toUpperCase()
+                                                    + ' ' + PLC.I[1].toString(16).padStart(2,'0').toUpperCase();
+  document.getElementById('statusQ').textContent   = PLC.Q[0].toString(16).padStart(2,'0').toUpperCase();
+  document.getElementById('statusSM5').textContent = !!(PLC.SM[0]&0x20) ? '1':'0';
+
+  // 定时器存储区
+  const mt = document.getElementById('memTimers');
+  mt.innerHTML = '';
+  for (let i=0;i<8;i++) {
+    const t=PLC.T[i];
+    const d=document.createElement('div');
+    d.className='mem-cell'+(t.bit?' active':'');
+    d.title=`T${i}: CV=${t.cv} PV=${t.pv}`;
+    d.textContent=`T${i}:${t.cv}`;
+    mt.appendChild(d);
+  }
+  // 计数器存储区
+  const mc = document.getElementById('memCounters');
+  mc.innerHTML = '';
+  for (let i=0;i<8;i++) {
+    const c=PLC.C[i];
+    const d=document.createElement('div');
+    d.className='mem-cell'+(c.bit?' active':'');
+    d.title=`C${i}: CV=${c.cv} PV=${c.pv}`;
+    d.textContent=`C${i}:${c.cv}`;
+    mc.appendChild(d);
+  }
+  // M存储区
+  const mm = document.getElementById('memM');
+  mm.innerHTML = '';
+  for (let i=0;i<8;i++) {
+    const val=PLC.M[0];
+    const bit=!!(val&(1<<i));
+    const d=document.createElement('div');
+    d.className='mem-cell'+(bit?' active':'');
+    d.textContent=`M0.${i}:${bit?1:0}`;
+    mm.appendChild(d);
+  }
+
+  // 监控表
+  renderMonitor();
+
+  // 梯形图
+  renderLadder();
+}
+
+function renderMonitor() {
+  const tbody = document.getElementById('monitorBody');
+  const addrs = [
+    {a:'I0.0',t:'BOOL'},{a:'I0.1',t:'BOOL'},{a:'I0.2',t:'BOOL'},{a:'I0.3',t:'BOOL'},
+    {a:'Q0.0',t:'BOOL'},{a:'Q0.1',t:'BOOL'},{a:'Q0.2',t:'BOOL'},{a:'Q0.7',t:'BOOL'},
+    {a:'M0.0',t:'BOOL'},{a:'M0.1',t:'BOOL'},
+    {a:'T0',t:'TIMER'},{a:'T1',t:'TIMER'},
+    {a:'C0',t:'CTR'},{a:'C1',t:'CTR'},
+    {a:'SM0.0',t:'BOOL'},{a:'SM0.1',t:'BOOL'},{a:'SM0.5',t:'BOOL'},
+  ];
+  tbody.innerHTML = addrs.map(({a,t}) => {
+    let val='', cls='';
+    if (t==='BOOL') {
+      const b=PLC.readBit(a);
+      val=b?'TRUE':'FALSE'; cls=b?'val-true':'val-false';
+    } else if (t==='TIMER') {
+      const idx=parseIdx(a,'T');
+      const ti=PLC.T[idx];
+      val=`${ti.cv}/${ti.pv} ${ti.bit?'ON':'OFF'}`;
+      cls=ti.bit?'val-true':'val-num';
+    } else if (t==='CTR') {
+      const idx=parseIdx(a,'C');
+      const ci=PLC.C[idx];
+      val=`${ci.cv}/${ci.pv} ${ci.bit?'ON':'OFF'}`;
+      cls=ci.bit?'val-true':'val-num';
+    }
+    return `<tr><td>${a}</td><td style="color:var(--text-muted)">${t}</td><td class="${cls}">${val}</td></tr>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════════
+// JSON 同步
+// ════════════════════════════════════════════════════════
+
+function syncJson() {
+  const ed = document.getElementById('jsonEditor');
+  ed.value = JSON.stringify(PLC.program, null, 2);
+  document.getElementById('jsonError').textContent = '';
+}
+
+document.getElementById('jsonEditor').addEventListener('input', function() {
+  try {
+    const p = JSON.parse(this.value);
+    PLC.program = p;
+    document.getElementById('jsonError').textContent = '';
+    renderLadder();
+  } catch(e) {
+    document.getElementById('jsonError').textContent = '⚠ JSON 格式错误：' + e.message;
+  }
+});
+
+// ════════════════════════════════════════════════════════
+// 按钮控制
+// ════════════════════════════════════════════════════════
+
+document.getElementById('btnRun').onclick = () => {
+  PLC.running    = true;
+  PLC.firstScan  = true;
+  PLC.accumMs    = 0;
+  PLC.errorState = false;
+  PLC.errorMsg   = '';
+  renderUI();
+};
+document.getElementById('btnStop').onclick = () => {
+  PLC.running = false;
+  renderUI();
+};
+document.getElementById('btnReset').onclick = () => {
+  PLC.reset();
+  PLC.SM[0] = 0xFF;
+  renderUI();
+  syncJson();
+};
+document.getElementById('btnLoad').onclick = () => {
+  const ed = document.getElementById('jsonEditor');
+  try {
+    PLC.program = JSON.parse(ed.value);
+    PLC.scanCount = 0;
+    PLC.firstScan = true;
+    PLC.errorState = false;
+    PLC.errorMsg   = '';
+    document.getElementById('jsonError').textContent = '✓ 程序已载入';
+    renderLadder();
+  } catch(e) {
+    document.getElementById('jsonError').textContent = '⚠ JSON 格式错误：' + e.message;
+  }
+};
+
+document.getElementById('modeKnob').onclick = () => {
+  if (PLC.running) { PLC.running=false; }
+  else { PLC.running=true; PLC.firstScan=true; PLC.accumMs=0; PLC.errorState=false; }
+  renderUI();
+};
+
+// 标签切换
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['json','monitor'][i]===tab);
+  });
+  document.querySelectorAll('.tab-content').forEach((c,i) => {
+    c.classList.toggle('active', ['tabJson','tabMonitor'][i]==='tab'+tab.charAt(0).toUpperCase()+tab.slice(1));
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// 元件插入弹窗
+// ════════════════════════════════════════════════════════
+
+let pendingOp = null;
+
+function insertElem(op) {
+  pendingOp = op;
+  document.getElementById('modalOp').value = op;
+  document.getElementById('modalAddr').value = '';
+  document.getElementById('modalPv').value = '10';
+
+  const needPV  = ['TON','TOF','TONR','CTU','CTD'].includes(op);
+  const needTB  = ['TON','TOF','TONR'].includes(op);
+  const needAddr2 = ['CTU','CTD'].includes(op);
+
+  document.getElementById('modalPvRow').style.display   = needPV    ? '' : 'none';
+  document.getElementById('modalTbRow').style.display   = needTB    ? '' : 'none';
+  document.getElementById('modalAddr2Row').style.display= needAddr2 ? '' : 'none';
+
+  // 填充网络选择
+  const netSel = document.getElementById('modalNet');
+  netSel.innerHTML = (PLC.program.networks||[]).map((n,i)=>`<option value="${i}">Network ${i+1}</option>`).join('');
+
+  document.getElementById('modalOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('modalAddr').focus(),50);
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+
+function confirmInsert() {
+  const op    = pendingOp;
+  const addr  = document.getElementById('modalAddr').value.trim();
+  const pv    = parseInt(document.getElementById('modalPv').value)||10;
+  const tb    = parseInt(document.getElementById('modalTb').value)||100;
+  const addr2 = document.getElementById('modalAddr2').value.trim();
+  const ni    = parseInt(document.getElementById('modalNet').value)||0;
+  let   ri    = parseInt(document.getElementById('modalRung').value)||0;
+
+  if (!addr && !['NOP'].includes(op)) {
+    document.getElementById('modalAddr').focus();
+    return;
+  }
+
+  const inst = { op };
+  if (addr) inst.addr = addr;
+  if (['TON','TOF','TONR','CTU','CTD'].includes(op)) inst.pv = pv;
+  if (['TON','TOF','TONR'].includes(op)) inst.timeBase = tb;
+  if (['CTU','CTD'].includes(op) && addr2) inst.addr2 = addr2;
+
+  const nets = PLC.program.networks;
+  if (!nets[ni]) { closeModal(); return; }
+
+  if (ri === 0 || ri > nets[ni].rungs.length) {
+    // 新建梯级
+    nets[ni].rungs.push([inst]);
+  } else {
+    nets[ni].rungs[ri-1].push(inst);
+  }
+
+  closeModal();
+  renderLadder();
+  syncJson();
+}
+
+function addNetwork() {
+  PLC.program.networks.push({
+    comment: `Network ${PLC.program.networks.length+1}`,
+    rungs: [[{op:'LD',addr:'I0.0'},{op:'=',addr:'Q0.0'}]]
+  });
+  renderLadder();
+  syncJson();
+}
+
+// 编辑元件弹窗
+function openEditModal(ni, ri, ii) {
+  const inst = PLC.program.networks[ni]?.rungs[ri]?.[ii];
+  if (!inst) return;
+  pendingOp = inst.op;
+  document.getElementById('modalOp').value  = inst.op;
+  document.getElementById('modalAddr').value= inst.addr||'';
+  document.getElementById('modalPv').value  = inst.pv||10;
+  if (inst.timeBase) document.getElementById('modalTb').value = inst.timeBase;
+  document.getElementById('modalAddr2').value= inst.addr2||'';
+
+  const op = inst.op.toUpperCase();
+  const needPV  = ['TON','TOF','TONR','CTU','CTD'].includes(op);
+  const needTB  = ['TON','TOF','TONR'].includes(op);
+  const needAddr2 = ['CTU','CTD'].includes(op);
+  document.getElementById('modalPvRow').style.display    = needPV    ? '' : 'none';
+  document.getElementById('modalTbRow').style.display    = needTB    ? '' : 'none';
+  document.getElementById('modalAddr2Row').style.display = needAddr2 ? '' : 'none';
+
+  const netSel = document.getElementById('modalNet');
+  netSel.innerHTML = (PLC.program.networks||[]).map((n,i)=>`<option value="${i}"${i===ni?' selected':''}>Network ${i+1}</option>`).join('');
+  document.getElementById('modalRung').value = ri+1;
+
+  // 改写确认逻辑：直接修改
+  document.querySelector('.modal-actions .btn-load').onclick = () => {
+    const addr  = document.getElementById('modalAddr').value.trim();
+    const pv    = parseInt(document.getElementById('modalPv').value)||10;
+    const tb    = parseInt(document.getElementById('modalTb').value)||100;
+    const addr2 = document.getElementById('modalAddr2').value.trim();
+    inst.addr = addr;
+    if (needPV) inst.pv = pv;
+    if (needTB) inst.timeBase = tb;
+    if (needAddr2 && addr2) inst.addr2 = addr2;
+    closeModal();
+    renderLadder();
+    syncJson();
+    // 恢复原确认逻辑
+    document.querySelector('.modal-actions .btn-load').onclick = confirmInsert;
+  };
+
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+// ════════════════════════════════════════════════════════
+// 主循环
+// ════════════════════════════════════════════════════════
+
+let lastTime = performance.now();
+let frameCount = 0;
+
+function loop(now) {
+  const dt = Math.min(now - lastTime, 50); // 最大50ms，防止页签切换跳跃
+  lastTime = now;
+
+  PLC.tick(dt);
+
+  frameCount++;
+  if (frameCount % 3 === 0) {  // 每3帧更新一次UI（约20fps）
+    renderUI();
+  }
+
+  requestAnimationFrame(loop);
+}
+
+// ════════════════════════════════════════════════════════
+// 初始化
+// ════════════════════════════════════════════════════════
+
+syncJson();
+renderLadder();
+renderUI();
+requestAnimationFrame(loop);
+
+// 默认启动运行
+PLC.running = true;
+PLC.firstScan = true;
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<h2>第四层：实施路线图</h2>
+<p class="subtitle">分阶段推进，每阶段产出可运行的子系统</p>
+
+<div class="section">
+  <h3>阶段一：基础设施 (MVP)</h3>
+  <div style="background:#e8f5e9;padding:16px;border-radius:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span><b>目标:</b> 3D 引擎室骨架 + 核心孪生结构跑通</span>
+      <span style="background:#4caf50;color:white;padding:2px 10px;border-radius:12px;font-size:12px">4-6 周</span>
+    </div>
+    <table style="width:100%;font-size:13px;margin-top:12px;border-collapse:collapse">
+      <tr style="border-bottom:1px solid #ddd">
+        <th style="text-align:left;padding:4px">模块</th>
+        <th style="text-align:left;padding:4px">交付物</th>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:4px">事件总线</td>
+        <td style="padding:4px">EventBus 单例，标准频道注册，2D↔3D 双向通信验证</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:4px">设备对象池</td>
+        <td style="padding:4px">EquipmentPool + EngineRoomEquipment 模型，基础状态管理</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:4px">3D 基础框架</td>
+        <td style="padding:4px">Three.js 场景/相机/渲染器、鸟瞰控制、glTF 加载管线</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:4px">机舱布局</td>
+        <td style="padding:4px">单层甲板布局引擎，基础几何体设备模型（方块+圆柱占位）</td>
+      </tr>
+      <tr>
+        <td style="padding:4px">演示子系统</td>
+        <td style="padding:4px"><b>冷却水系统</b>（海水泵+淡水泵+换热器+管路）完整 2D+3D 联动</td>
+      </tr>
+    </table>
+    <p style="font-size:12px;color:#666;margin-top:8px">🎯 <b>里程碑:</b> 浏览器中看到 3D 机舱 + 冷却水系统 2D/3D 联动演示</p>
+  </div>
+</div>
+
+<div class="section">
+  <h3>阶段二：核心系统补全</h3>
+  <div style="background:#e3f2fd;padding:16px;border-radius:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span><b>目标:</b> 覆盖三大核心机舱系统 + 热力求解器</span>
+      <span style="background:#2196f3;color:white;padding:2px 10px;border-radius:12px;font-size:12px">6-8 周</span>
+    </div>
+    <table style="width:100%;font-size:13px;margin-top:12px;border-collapse:collapse">
+      <tr style="border-bottom:1px solid #ddd">
+        <th style="text-align:left;padding:4px">系统</th>
+        <th style="text-align:left;padding:4px">内容</th>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:4px">🔥 主动力系统</td>
+        <td style="padding:4px">柴油机 3D 模型 + 热力模型 (ThermalSolver) + 调速器 + 轴系</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:4px">⚡ 电站系统</td>
+        <td style="padding:4px">发电机组 3D 模型 + 配电板原理图 (CircuitSolver 复用)</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:4px">🔁 燃油/滑油系统</td>
+        <td style="padding:4px">多介质管路 + 净化单元 + 日用柜 + 泵阀控制</td>
+      </tr>
+      <tr>
+        <td style="padding:4px">💨 压缩空气系统</td>
+        <td style="padding:4px">空压机 + 气瓶 + 起动/控制空气管路 (PneumaticSolver 复用)</td>
+      </tr>
+    </table>
+    <p style="font-size:12px;color:#666;margin-top:8px">🎯 <b>里程碑:</b> 完整机舱数字孪生，支持正常航行工况的 2D/3D 全系统联动</p>
+  </div>
+</div>
+
+<div class="section">
+  <h3>阶段三：教学与交互</h3>
+  <div style="background:#fff8f0;padding:16px;border-radius:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span><b>目标:</b> 教学流程 + 故障场景 + 评估系统</span>
+      <span style="background:#ff9800;color:white;padding:2px 10px;border-radius:12px;font-size:12px">6-8 周</span>
+    </div>
+    <table style="width:100%;font-size:13px;margin-top:12px;border-collapse:collapse">
+      <tr style="border-bottom:1px solid #ddd">
+        <th style="text-align:left;padding:4px">功能</th>
+        <th style="text-align:left;padding:4px">内容</th>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:4px">教学流程</td>
+        <td style="padding:4px">Workflow 适配：主机备车/起动/并车/调速/停车等标准操作流程</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:4px">故障场景</td>
+        <td style="padding:4px">冷却水高温/滑油低压/燃油泄漏/电网失电等 10+ 故障模式</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:4px">漫游模式</td>
+        <td style="padding:4px">第一人称 WASD 巡检，设备交互点击查看参数</td>
+      </tr>
+      <tr>
+        <td style="padding:4px">评估系统</td>
+        <td style="padding:4px">find/quiz/check 步骤适配船舶场景，自动评分</td>
+      </tr>
+    </table>
+    <p style="font-size:12px;color:#666;margin-top:8px">🎯 <b>里程碑:</b> 完整教学闭环：演示→演练→评估</p>
+  </div>
+</div>
+
+<div class="section">
+  <h3>阶段四：进阶扩展</h3>
+  <div style="background:#f3e5f5;padding:16px;border-radius:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span><b>目标:</b> 精细化 + 扩展集成</span>
+      <span style="background:#9c27b0;color:white;padding:2px 10px;border-radius:12px;font-size:12px">持续</span>
+    </div>
+    <ul style="font-size:13px;margin:8px 0">
+      <li>主机 3D 模型精细化（带运动部件活塞/曲轴动画）</li>
+      <li>管路流体粒子动画 (FlowParticles)</li>
+      <li>报警记录 / 历史数据回放</li>
+      <li>CAN/Modbus 网关对接真实设备数据</li>
+      <li>多工况场景库（正常航行/机动/应急/恶劣海况）</li>
+      <li>学员操作记录和分析报告</li>
+    </ul>
+  </div>
+</div>
+
+<div class="section" style="background:#f5f5f5;padding:16px;border-radius:8px;margin-top:16px">
+  <h3>首个演示系统的选择: 冷却水系统</h3>
+  <p style="font-size:13px">选择冷却系统作为 MVP 演示的理由：</p>
+  <ul style="font-size:13px">
+    <li><b>系统闭环</b> — 有泵、阀、换热器、管路，构成完整循环</li>
+    <li><b>包含热力过程</b> — 可展示新增 ThermalSolver 的价值</li>
+    <li><b>现有平台匹配度高</b> — 泵阀组件已有复用基础</li>
+    <li><b>教学价值明显</b> — 冷却水系统工作原理直观，故障后果清晰</li>
+    <li><b>规模适中</b> — ~10 个设备，可在 4-6 周内完整交付</li>
+  </ul>
+</div>

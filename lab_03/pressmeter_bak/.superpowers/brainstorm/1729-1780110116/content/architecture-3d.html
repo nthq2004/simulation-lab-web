@@ -1,0 +1,95 @@
+<h2>第二层：3D 模块设计 (Three.js)</h2>
+<p class="subtitle">机舱空间布局 + 设备模型 + 交互控制</p>
+
+<div class="section">
+  <h3>模块结构</h3>
+  <div style="background:#f5f5f5;padding:16px;border-radius:8px;font-family:monospace;font-size:13px;line-height:1.6">
+<pre style="margin:0">
+engineroom3d/
+├── EngineRoom3D.js          # 主控: 场景/相机/渲染器/动画循环
+├── models/                  # 3D 设备模型
+│   ├── ModelLoader.js       # glTF/GLB 加载器 (DRACO压缩)
+│   ├── ModelRegistry.js     # 模型注册表 (type → mesh factory)
+│   └── primitives/          # 基础几何体工厂 (无外部模型时使用)
+│       ├── DieselEngine.js
+│       ├── Generator.js
+│       ├── Pump.js
+│       ├── Compressor.js
+│       ├── HeatExchanger.js
+│       ├── Pipe3D.js
+│       └── Tank.js
+├── controls/
+│   ├── OrbitControl.js      # 俯视旋转 (鸟瞰)
+│   ├── WalkControl.js       # 第一人称漫游
+│   └── CameraManager.js     # 视角切换 / 自动聚焦
+├── visualization/
+│   ├── StateColors.js       # 设备状态→颜色映射 (正常绿/告警黄/故障红)
+│   ├── FlowParticles.js     # 管路流体粒子动画
+│   ├── LabelSystem.js       # 设备标签 + 实时数值显示 (CSS2DRenderer)
+│   └── HeatMap.js           # 温度/压力热力图叠加
+├── layout/
+│   ├── DeckManager.js       # 多层甲板管理
+│   ├── RoomPartition.js     # 舱室分隔 / 防火墙
+│   └── LayoutData.js        # 机舱布局配置数据
+└── integration/
+    ├── EventBridge.js       # ↔ 事件总线连接
+    └── StateSync.js         # ↔ 数字孪生层状态同步
+</pre>
+  </div>
+</div>
+
+<div class="section">
+  <h3>三种观察模式</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+    <div style="background:#f0f4ff;padding:12px;border-radius:8px">
+      <div style="font-size:24px;text-align:center">🌐</div>
+      <h4 style="text-align:center;margin:4px 0">鸟瞰模式</h4>
+      <p style="font-size:12px">轨道控制，360° 旋转俯视全机舱，适合总体观察和教学讲解</p>
+    </div>
+    <div style="background:#f0fff0;padding:12px;border-radius:8px">
+      <div style="font-size:24px;text-align:center">🚶</div>
+      <h4 style="text-align:center;margin:4px 0">漫游模式</h4>
+      <p style="font-size:12px">第一人称 WASD 行走，模拟巡检路线，贴近观察设备细节</p>
+    </div>
+    <div style="background:#fff8f0;padding:12px;border-radius:8px">
+      <div style="font-size:24px;text-align:center">🎯</div>
+      <h4 style="text-align:center;margin:4px 0">聚焦模式</h4>
+      <p style="font-size:12px">点击设备自动拉近，显示详细参数面板，2D 原理图同步高亮</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>设备状态可视化</h3>
+  <p>3D 模型中每个设备根据实时状态改变外观：</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+    <div style="background:#f5f5f5;padding:12px;border-radius:8px">
+      <b>颜色映射</b>
+      <table style="width:100%;font-size:13px;margin-top:4px">
+        <tr><td>正常运行</td><td style="color:#4caf50">■</td><td>绿色</td></tr>
+        <tr><td>预警</td><td style="color:#ff9800">■</td><td>橙色</td></tr>
+        <tr><td>故障/报警</td><td style="color:#f44336">■</td><td>红色 (闪烁)</td></tr>
+        <tr><td>停机/待机</td><td style="color:#9e9e9e">■</td><td>灰色</td></tr>
+        <tr><td>运行中</td><td style="color:#2196f3">■</td><td>蓝色脉冲</td></tr>
+      </table>
+    </div>
+    <div style="background:#f5f5f5;padding:12px;border-radius:8px">
+      <b>附加效果</b>
+      <ul style="font-size:13px;margin:4px 0 0;padding-left:16px">
+        <li>管路: 流体粒子流动动画 (颜色=介质类型)</li>
+        <li>设备标签: CSS2DRenderer 悬浮显示温度/压力/转速</li>
+        <li>报警: 设备外发光 + 顶部感叹号标记</li>
+        <li>选中: 外轮廓高亮 (OutlinePass)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>与 2D 层的协同</h3>
+  <div style="background:#f3e5f5;padding:12px;border-radius:8px;font-size:13px">
+    <p>用户在 3D 场景点击某个泵 → 事件总线发出 <code>equipment:select {id: "pump-01"}</code> → 2D 原理图中该泵的 Konva 组件高亮闪烁 → 右侧属性面板显示实时参数。</p>
+    <p style="margin-top:8px">反之，在 2D 原理图点击设备符号 → 3D 相机自动聚焦到对应设备。</p>
+    <p style="margin-top:8px;color:#666">两者显示的是<strong>同一个数字孪生对象</strong>的同一组状态数据，只是视图不同。</p>
+  </div>
+</div>

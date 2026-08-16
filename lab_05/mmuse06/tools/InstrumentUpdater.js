@@ -1,0 +1,530 @@
+/**
+ * InstrumentUpdater.js
+ * 仪表更新：电流表、万用表、变送器显示、PID 显示、示波器、监控器等
+ */
+
+export class InstrumentUpdater {
+    /**
+     * @param {object} solver  CircuitSolver 实例（用于访问 portToCluster / nodeVoltages / clusters 等）
+     */
+    constructor(solver) {
+        this.solver = solver;
+    }
+
+    update() {
+        const s = this.solver;
+        s.rawDevices.forEach(dev => {
+            this._updateAmpmeter(dev);
+            this._updateMultimeter(dev);
+            this._updateTransmitterDisplay(dev);
+            this._updatePIDDisplay(dev);
+            this._updateMonitor(dev);
+            this._updateOscilloscope(dev);
+            this._updateOscilloscopeTri(dev);
+            this._updateCalibrator(dev);
+            this._updateHartCommunicator(dev);
+            this._updateTimer555(dev);
+        });
+    }
+
+    ensureHzState(dev) {
+        if (!dev._hzState) {
+            dev._hzState = {
+                lastLevel: false,   // 上次电平
+                lastRiseAt: -1,      // 上次上升沿时间（ms），-1 表示尚未检测到
+                frequency: 0,       // 当前频率（Hz）
+            };
+        }
+    }
+    resetHzState(dev) {
+        dev._hzState = null;
+    }
+
+    /**
+     * 频率检测核心函数。
+     * 在 _updateCalibrator 的 MEAS_HZ 分支中调用，返回当前频率（Hz）。
+     *
+     * @param {object} dev       - 校验仪设备实例
+     * @param {number} voltage   - 本次采样的 src_v 节点电压（V）
+     * @param {number} nowMs     - 当前仿真时间（ms），由调用方传入
+     * @returns {number}         - 当前估算频率（Hz），0 表示静态或尚未测出
+     */
+    detectFrequency(dev, voltage, nowMs) {
+        this.ensureHzState(dev);
+        const st = dev._hzState;
+
+        // ── 电平判断（带回滞的过零检测）───────────────────────────
+        //   高电平门限：> 0.2V → 确认为高
+        //   低电平门限：< 0.0V → 确认为低
+        //   中间区域：保持上次电平（Schmitt Trigger 效果）
+        const HIGH_TH = 0.2;
+        const LOW_TH = 0.0;
+
+        let currentLevel = st.lastLevel; // 默认保持不变（迟滞区）
+        if (voltage >= HIGH_TH) currentLevel = true;
+        else if (voltage <= LOW_TH) currentLevel = false;
+
+        // ── 上升沿检测（低 → 高）──────────────────────────────────────
+        const isRisingEdge = (!st.lastLevel) && currentLevel;
+
+        if (isRisingEdge) {
+            if (st.lastRiseAt >= 0) {
+                // ── 计算周期和频率 ────────────────────────────────────
+                const periodMs = nowMs - st.lastRiseAt;
+
+                if (periodMs > 0) {
+                    // 低通滤波（指数平均），抑制单次抖动
+                    // α=1 时不滤波（完全采用本次），α=0.3 时较平滑
+                    const alpha = 0.9;
+                    const newFreq = 1 / periodMs; // ms → Hz
+                    st.frequency = st.frequency > 0
+                        ? alpha * newFreq + (1 - alpha) * st.frequency
+                        : newFreq; // 首次直接赋值
+                }
+            }
+            // 无论是否为第二个沿，都更新上次上升沿时间
+            st.lastRiseAt = nowMs;
+        }
+
+        // ── 超时检测（nowMs 单位为秒）：超过 2 秒无上升沿 → 频率归零 ──
+        if (st.lastRiseAt >= 0 && (nowMs - st.lastRiseAt) > 2) {
+            st.frequency = 0;
+            st.lastRiseAt = -1; // 重置，等待下一个有效沿
+        }
+
+        // 更新电平状态
+        st.lastLevel = currentLevel;
+
+        return st.frequency;
+    }
+    // ─── 电流表 ──────────────────────────────────────────────────────────
+    _updateAmpmeter(dev) {
+        const s = this.solver;
+        if (dev.type !== 'ampmeter' && !(dev.type === 'multimeter' && dev.mode === 'MA')) return;
+
+        const pId = dev.type === 'ampmeter' ? `${dev.id}_wire_p` : `${dev.id}_wire_ma`;
+        const nId = dev.type === 'ampmeter' ? `${dev.id}_wire_n` : `${dev.id}_wire_com`;
+        const pIndex = s.portToCluster.get(pId);
+        const nIndex = s.portToCluster.get(nId);
+
+        if (pIndex === undefined || nIndex === undefined) { dev.update(0); return; }
+
+        const current = s._calculateBranchCurrent(dev);
+        dev.update(current * 1000);
+    }
+
+    // ─── 万用表 ───────────────────────────────────────────────────────────
+    _updateMultimeter(dev) {
+        if (dev.type !== 'multimeter') return;
+        const s = this.solver;
+        const mode = dev.mode || 'OFF';
+
+        // 电压档
+        if (mode.startsWith('DCV')) {
+            let diff = 0;
+            const vIdx = s.portToCluster.get(`${dev.id}_wire_v`);
+            const comIdx = s.portToCluster.get(`${dev.id}_wire_com`);
+            if (vIdx !== undefined && comIdx !== undefined)
+                diff = s.getPD(`${dev.id}_wire_v`, `${dev.id}_wire_com`);
+            dev.update(diff);
+        }
+        // 电阻档
+        else if (mode.startsWith('RES')) {
+            dev.update(this._measureResistance(dev));
+        }
+        // 二极管档
+        else if (mode === 'DIODE') {
+            dev.update(this._measureDiode(dev));
+        }
+        // 电容档
+        else if (mode === 'C') {
+            dev.update(this._measureCapacitance(dev));
+        }
+        // 交流电压档
+        else if (mode.startsWith('ACV')) {
+            this._updateACV(dev);
+        }
+    }
+
+    _measureResistance(dev) {
+        const s = this.solver;
+        const comNode = `${dev.id}_wire_com`;
+        const vNode = `${dev.id}_wire_v`;
+        const comIdx = s.portToCluster.get(comNode);
+        const vIdx = s.portToCluster.get(vNode);
+
+        let R = Infinity;
+        if (comIdx !== undefined && vIdx !== undefined) {
+            const vDiff = Math.abs(s.getPD(vNode, comNode));
+            const scrDevs = (s._cachedDevs && s._cachedDevs.scrDevs) || s.rawDevices.filter(d => d.type === 'scr');
+            const isScrAK = scrDevs.some(d => {
+                const dA = s.portToCluster.get(`${d.id}_wire_a`);
+                const dK = s.portToCluster.get(`${d.id}_wire_k`);
+                return (vIdx === dA && comIdx === dK);
+            });
+
+            if (vDiff < 0.1 || isScrAK) {
+                R = s._getEquivalentResistance(s.clusters[comIdx], s.clusters[vIdx], s.clusters);
+
+                const bjtDevs = s.rawDevices.filter(d => d.type === 'bjt');
+                bjtDevs.forEach(t => {
+                    const bIdx = s.portToCluster.get(`${t.id}_wire_b`);
+                    const cIdx = s.portToCluster.get(`${t.id}_wire_c`);
+                    const eIdx = s.portToCluster.get(`${t.id}_wire_e`);
+                    const isNPN = (t.subType === 'NPN');
+                    let isTargetPair = false, controlRes = Infinity;
+
+                    if (isNPN) {
+                        if (vIdx === cIdx && comIdx === eIdx) {
+                            isTargetPair = true;
+                            controlRes = s._getEquivalentResistance(s.clusters[bIdx], s.clusters[cIdx], s.clusters);
+                        }
+                    } else {
+                        if (vIdx === eIdx && comIdx === cIdx) {
+                            isTargetPair = true;
+                            controlRes = s._getEquivalentResistance(s.clusters[bIdx], s.clusters[cIdx], s.clusters);
+                        }
+                    }
+                    if (isTargetPair && controlRes !== Infinity) {
+                        const seed = Math.floor(controlRes);
+                        const pseudoRandom = Math.abs(Math.sin(seed));
+                        const factor = 6 + (pseudoRandom * 3);
+                        R = Math.min(R, Math.max(5000, controlRes * factor));
+                    }
+                });
+            }
+        }
+        return R === Infinity ? 1e9 : R;
+    }
+
+    _measureDiode(dev) {
+        const s = this.solver;
+        const vNode = `${dev.id}_wire_v`;
+        const comNode = `${dev.id}_wire_com`;
+        const vIdx = s.portToCluster.get(vNode);
+        const comIdx = s.portToCluster.get(comNode);
+        if (vIdx === undefined || comIdx === undefined) return 10000000;
+
+        let R = Infinity;
+        const vCluster = s.clusters[vIdx];
+        const comCluster = s.clusters[comIdx];
+
+        // 查找普通二极管
+        const diodeDevs = (s._cachedDevs && s._cachedDevs.diodeDevs) || s.rawDevices.filter(d => d.type === 'diode');
+        const isDiode = diodeDevs.find(d => {
+            const dA = s.portToCluster.get(`${d.id}_wire_l`);
+            const dC = s.portToCluster.get(`${d.id}_wire_r`);
+            return (vIdx === dA && comIdx === dC);
+        });
+
+        if (isDiode) return 0.6868;
+
+        // 查找三极管 PN 结
+        const transistorDevs = s.rawDevices.filter(d => d.type === 'bjt');
+        const triodeMatch = transistorDevs.find(t => {
+            const b = s.portToCluster.get(`${t.id}_wire_b`);
+            const c = s.portToCluster.get(`${t.id}_wire_c`);
+            const e = s.portToCluster.get(`${t.id}_wire_e`);
+            const isNPN = (t.subType === 'NPN');
+            const isBasePositive = isNPN ? (vIdx === b) : (comIdx === b);
+
+            if (isBasePositive) {
+                if (isNPN ? (comIdx === e) : (vIdx === e)) { R = 0.6868; return true; }
+                if (isNPN ? (comIdx === c) : (vIdx === c)) { R = 0.6767; return true; }
+            }
+            return false;
+        });
+
+        if (!triodeMatch) {
+            const scrDevs = (s._cachedDevs && s._cachedDevs.scrDevs) || s.rawDevices.filter(d => d.type === 'scr');
+            const scrGKMatch = scrDevs.find(d => {
+                const dG = s.portToCluster.get(`${d.id}_wire_g`);
+                const dK = s.portToCluster.get(`${d.id}_wire_k`);
+                return (vIdx === dG && comIdx === dK);
+            });
+            if (scrGKMatch) return 0.6868;
+        }
+
+        if (!triodeMatch && Math.abs(s.getPD(vNode, comNode)) < 0.1) {
+            R = s._getEquivalentResistance(vCluster, comCluster, s.clusters);
+        }
+        return R === Infinity ? 1e9 : R;
+    }
+
+    _measureCapacitance(dev) {
+        const s = this.solver;
+        const vIdx = s.portToCluster.get(`${dev.id}_wire_v`);
+        const comIdx = s.portToCluster.get(`${dev.id}_wire_com`);
+        if (vIdx === undefined || comIdx === undefined) return 0;
+
+        const caps = (s._cachedDevs && s._cachedDevs.capacitorDevs) || s.rawDevices.filter(d => d.type === 'capacitor');
+        const targetCap = caps.find(d => {
+            const dL = s.portToCluster.get(`${d.id}_wire_l`);
+            const dR = s.portToCluster.get(`${d.id}_wire_r`);
+            return (vIdx === dL && comIdx === dR) || (vIdx === dR && comIdx === dL);
+        });
+        return targetCap ? targetCap.capacitance * 1000000 : 0;
+    }
+
+    _updateACV(dev) {
+        const s = this.solver;
+        const vNode = `${dev.id}_wire_v`;
+        const comNode = `${dev.id}_wire_com`;
+        const vDiff = s.getPD(vNode, comNode);
+
+        // ── True RMS 算法：滑动窗口平方和 ──
+        // 窗口大小 = 200 样点 × 0.1ms = 20ms（完整工频周期）
+        if (!dev._acvBuf) {
+            dev._acvBuf = new Float64Array(200);
+            dev._acvSumSq = 0;
+            dev._acvIdx = 0;
+            dev._acvCount = 0;
+        }
+
+        const buf = dev._acvBuf;
+        const idx = dev._acvIdx;
+
+        dev._acvSumSq -= buf[idx];
+        const sq = vDiff * vDiff;
+        buf[idx] = sq;
+        dev._acvSumSq += sq;
+
+        dev._acvIdx = (idx + 1) % buf.length;
+        if (dev._acvCount < buf.length) dev._acvCount++;
+
+        const rms = dev._acvCount > 0 ? Math.sqrt(dev._acvSumSq / dev._acvCount) : 0;
+        dev._displayRMS = rms < 0.01 ? 0 : rms;
+        dev.update(dev._displayRMS);
+    }
+
+    // ─── 变送器显示 ───────────────────────────────────────────────────────
+    _updateTransmitterDisplay(dev) {
+        if (dev.type !== 'transmitter_2wire') return;
+        const s = this.solver;
+        const cP = s.portToCluster.get(`${dev.id}_wire_p`);
+        const cN = s.portToCluster.get(`${dev.id}_wire_n`);
+        // dev.update({
+        //     powered: dev._lastVDiff > 10 && cP !== undefined && cN !== undefined,
+        //     transCurrent: s._calcTransmitterCurrent(dev) * 1000
+        // });
+        dev.update({
+            powered: dev._lastVDiff > 10 && cP !== undefined && cN !== undefined,
+            transCurrent: dev.physCurrent*1000
+        });        
+    }
+
+    // ─── PID 输入电流显示 ─────────────────────────────────────────────────
+    _updatePIDDisplay(dev) {
+        if (dev.type !== 'PID') return;
+        const s = this.solver;
+        const inI = Math.abs(s.getVoltageAtPort(`${dev.id}_wire_ni1`) / 250);
+        dev.update(inI * 1000);
+    }
+
+    // ─── 监控器（Monitor）────────────────────────────────────────────────
+    _updateMonitor(dev) {
+        if (dev.type !== 'monitor') return;
+        const s = this.solver;
+        const pid = s.sys.comps.pid;
+
+        const monA = s.portToCluster.get(`${dev.id}_wire_a1`);
+        const monB = s.portToCluster.get(`${dev.id}_wire_b1`);
+        const pidA = s.portToCluster.get(`${pid.id}_wire_a1`);
+        const pidB = s.portToCluster.get(`${pid.id}_wire_b1`);
+
+        const isCommunicating = monA !== undefined && monB !== undefined &&
+            monA === pidA && monB === pidB && pid.powerOn;
+
+        if (!isCommunicating) {
+            dev.update({
+                pv: 0, sv: 0, out1: 0, out2: 0,
+                fault: { transmitter: null, ovenTemp: false, pidOutput1: false, pidOutput2: false, communication: true }
+            });
+            return;
+        }
+
+        const inputCurrentMA = Math.abs(s.getVoltageAtPort(`${pid.id}_wire_ni1`) / 250) * 1000;
+        let vOut1 = s.getPD(`${pid.id}_wire_po1`, `${pid.id}_wire_no1`);
+        let vOut2 = s.getPD(`${pid.id}_wire_po2`, `${pid.id}_wire_no2`);
+
+        let transFault = null;
+        if (inputCurrentMA >= 21.0) transFault = 'OPEN';
+        else if (inputCurrentMA <= 3.8 && inputCurrentMA > 0.5) transFault = 'SHORT';
+        else if (inputCurrentMA <= 0.5) transFault = 'LOOP_BREAK';
+
+        const mode1 = pid.outModes.CH1;
+        const mode2 = pid.outModes.CH2;
+        const p1Idx = s.portToCluster.get(`${pid.id}_wire_po1`);
+        const n1Idx = s.portToCluster.get(`${pid.id}_wire_no1`);
+        const p2Idx = s.portToCluster.get(`${pid.id}_wire_po2`);
+        const n2Idx = s.portToCluster.get(`${pid.id}_wire_no2`);
+
+        let out1Fault = false, out2Fault = false;
+        if (mode1 === '4-20mA') {
+            out1Fault = Math.abs(vOut1) < 0.1 || Math.abs(vOut1) > 23;
+            vOut1 = pid.OUT;
+        } else {
+            out1Fault = (p1Idx !== undefined && n1Idx !== undefined)
+                ? s._getEquivalentResistance(s.clusters[p1Idx], s.clusters[n1Idx], s.clusters) > 10000
+                : true;
+            vOut1 = vOut1 * 8.33;
+        }
+        if (mode2 === '4-20mA') {
+            out2Fault = Math.abs(vOut2) < 0.1 || Math.abs(vOut2) > 23;
+            vOut2 = pid.OUT;
+        } else {
+            out2Fault = (p2Idx !== undefined && n2Idx !== undefined)
+                ? s._getEquivalentResistance(s.clusters[p2Idx], s.clusters[n2Idx], s.clusters) > 10000
+                : true;
+            vOut2 = vOut2 * 8.33;
+        }
+
+        dev.update({
+            pv: pid.PV > 0 ? pid.PV : 0,
+            sv: pid.SV,
+            out1: pid.outSelection === 'CH1' || pid.outSelection === 'BOTH' ? vOut1 : 0,
+            out2: pid.outSelection === 'CH2' || pid.outSelection === 'BOTH' ? vOut2 : 0,
+            fault: {
+                transmitter: transFault,
+                ovenTemp: pid.PV >= pid.alarm.HH,
+                pidOutput1: (out1Fault || pid.out1Fault) && (pid.outSelection === 'CH1' || pid.outSelection === 'BOTH'),
+                pidOutput2: (out2Fault || pid.out2Fault) && (pid.outSelection === 'CH2' || pid.outSelection === 'BOTH'),
+                communication: false
+            }
+        });
+    }
+
+    // ─── 单通道示波器 ─────────────────────────────────────────────────────
+    _updateOscilloscope(dev) {
+        if (dev.type !== 'oscilloscope') return;
+        const s = this.solver;
+        const cVH = s.portToCluster.get(`${dev.id}_wire_p`);
+        const cVL = s.portToCluster.get(`${dev.id}_wire_n`);
+        const vDiff = (s.nodeVoltages.get(cVH) || 0) - (s.nodeVoltages.get(cVL) || 0);
+        const iVal = dev.physCurrent || 0;
+        dev.updateTrace(vDiff, iVal, s.globalIterCount);
+    }
+
+    // ─── 三通道示波器 ─────────────────────────────────────────────────────
+    _updateOscilloscopeTri(dev) {
+        if (dev.type !== 'oscilloscope_tri') return;
+        const s = this.solver;
+        const channels = [
+            { p: 'ch1p', n: 'ch1n' },
+            { p: 'ch2p', n: 'ch2n' },
+            { p: 'ch3p', n: 'ch3n' }
+        ];
+        const vDiffs = channels.map(ch => {
+            const clusP = s.portToCluster.get(`${dev.id}_wire_${ch.p}`);
+            const clusN = s.portToCluster.get(`${dev.id}_wire_${ch.n}`);
+            return (s.nodeVoltages.get(clusP) || 0) - (s.nodeVoltages.get(clusN) || 0);
+        });
+        dev.updateTrace(vDiffs, s.globalIterCount);
+    }
+    _updateCalibrator(dev) {
+        if (dev.type !== 'calibrator') return;
+        let upValue = 0, downValue = 0;
+        const s = this.solver;
+        const p = `${dev.id}_wire_`;
+        const cMa = s.portToCluster.get(`${p}meas_ma`);
+        const cCom = s.portToCluster.get(`${p}meas_com`);
+        if (cCom !== undefined) {
+            if (dev.upMode === 'MEAS_MA' && cMa !== undefined) {
+                const diffV = (s.nodeVoltages.get(cMa) || 0) - (s.nodeVoltages.get(cCom) || 0);
+                upValue = diffV * 4;
+            } else if (dev.upMode === 'MEAS_LOOP' && cMa !== undefined) {
+                const vCom = s.nodeVoltages.get(cCom) || 0;
+                upValue = vCom * 4;
+            } else if (dev.upMode === 'MEAS_V' && cMa !== undefined) {
+                upValue = (s.nodeVoltages.get(cMa) || 0) - (s.nodeVoltages.get(cCom) || 0);
+            }
+        }
+        const cSMa = s.portToCluster.get(`${p}src_ma`);
+        const cSCom = s.portToCluster.get(`${p}src_com`);
+        const cSV = s.portToCluster.get(`${p}src_v`);
+        const cSTc = s.portToCluster.get(`${p}src_tc`);
+        if (dev.activePanel === 'MEASURE') {
+            if (dev.measureMode === 'MEAS_MA' && cSCom !== undefined && cSMa !== undefined) {
+                const diffV = (s.nodeVoltages.get(cSMa) || 0) - (s.nodeVoltages.get(cSCom) || 0);
+                downValue = diffV * 4;
+
+            } else if (dev.measureMode === 'MEAS_LOOP' && cSCom !== undefined && cSMa !== undefined) {
+                const vSCom = s.nodeVoltages.get(cSCom) || 0;
+                downValue = vSCom * 4;
+            } else if (dev.measureMode === 'MEAS_V' && cSV !== undefined && cSCom !== undefined) {
+                downValue = (s.nodeVoltages.get(cSV) || 0) - (s.nodeVoltages.get(cSCom) || 0);
+            } else if (dev.measureMode === 'MEAS_RES' && cSV !== undefined && cSCom !== undefined) {
+                downValue = s._getEquivalentResistance(
+                    s.clusters[cSV], s.clusters[cSCom], s.clusters
+                );
+            } else if (dev.measureMode === 'MEAS_TC' && cSTc !== undefined && cSCom !== undefined) {
+                const tcValue = (s.nodeVoltages.get(cSTc) || 0) - (s.nodeVoltages.get(cSCom) || 0);
+                downValue = tcValue / 0.000041;
+            } else if (dev.measureMode === 'MEAS_RTD' && cSV !== undefined && cSCom !== undefined) {
+                const ptValue = s._getEquivalentResistance(
+                    s.clusters[cSV], s.clusters[cSCom], s.clusters
+                );
+                downValue = (ptValue - 100) / 0.3851;
+            } else if (dev.measureMode === 'MEAS_HZ' && cSV !== undefined && cSCom !== undefined) {
+                // ── 频率测量 ─────────────────────────────────────────
+                // 1. 读取 src_v 节点当前电压
+                const voltage = (s.nodeVoltages.get(cSV) || 0)
+                    - (s.nodeVoltages.get(cSCom) || 0);
+
+                // 2. 获取当前仿真时间（ms）
+                //    优先使用 solver 提供的 simTimeMs，
+                //    备用 performance.now()（实时模式）
+                const nowMs = s.currentTime;
+
+                // 3. 上升沿检测 + 频率估算
+                downValue = this.detectFrequency(dev, voltage, nowMs);
+            } else if (dev.measureMode === 'MEAS_RTD' || dev.measureMode === 'MEAS_RES') {
+                downValue = Infinity;
+            }
+            else {
+                downValue = 0;
+            }
+        }
+        if (dev.measureMode !== 'MEAS_HZ') {
+            this.resetHzState(dev);
+        }
+        if (dev.upMode === 'MEAS_PRESSURE') {
+            upValue = dev.upPressureValue||0;
+        }
+        if (dev.activePanel === 'MEASURE' && dev.measureMode === 'MEAS_PRESSURE') {
+            downValue = dev.downPressureValue||0;
+        }
+        dev.update(upValue, downValue);
+    }
+
+    // ─── HART 手操器 ──────────────────────────────────────────────────────
+    _updateHartCommunicator(dev) {
+        if (dev.type !== 'hart_communicator') return;
+        // 调用设备自身的 update（内部完成设备扫描 + 屏幕刷新）
+        if (typeof dev.update === 'function') dev.update();
+    }
+
+    // ─── NE555 定时器 ─────────────────────────────────────────────────────
+    _updateTimer555(dev) {
+        if (dev.type !== 'd_555') return;
+        const s = this.solver;
+
+        // 读取 OUT 端口的对地电压（用于示波器显示）
+        const cOUT = s.portToCluster.get(`${dev.id}_wire_out`);
+        if (cOUT !== undefined) {
+            dev._outVoltage = s.nodeVoltages.get(cOUT) || 0;
+        }
+
+        // 读取 TH 和 TR 端口的电压（用于监控）
+        const port = (name) => {
+            const c = s.portToCluster.get(`${dev.id}_wire_${name}`);
+            return c !== undefined ? (s.nodeVoltages.get(c) || 0) : 0;
+        };
+        dev._thVoltage = port('th');
+        dev._trVoltage = port('tr');
+        dev._vccVoltage = port('vcc');
+
+        // 触发设备自身的 update（如果存在，用于组件内部显示刷新）
+        if (typeof dev.update === 'function') dev.update();
+    }
+}

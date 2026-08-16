@@ -1,0 +1,19 @@
+- generic [ref=e2]:
+  - button "撤销" [disabled] [ref=e3]
+  - button "恢复" [disabled] [ref=e4]
+  - button "自动接线" [ref=e5] [cursor=pointer]
+  - button "起动系统" [ref=e6] [cursor=pointer]
+  - button "5点步进" [ref=e7] [cursor=pointer]
+  - button "故障设置" [ref=e8] [cursor=pointer]
+  - button "重置系统" [ref=e9] [cursor=pointer]
+  - combobox [ref=e10]:
+    - option "请选择操作项目..." [selected]
+  - button "自动演示" [disabled] [ref=e11]
+  - button "单步演示" [disabled] [ref=e12]
+  - button "演练" [disabled] [ref=e13]
+  - button "评估" [disabled] [ref=e14]
+  - button "选择仪表" [ref=e15] [cursor=pointer]
+  - generic [ref=e16]:
+    - generic [ref=e17]: "测试电阻:"
+    - slider [ref=e18]: "1000"
+    - generic [ref=e19]: 1.00 kΩ

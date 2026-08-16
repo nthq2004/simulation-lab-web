@@ -1,0 +1,9 @@
+ignore:
+  - "components/**"
+  - "can/**"
+  - "modbus/**"
+  - "digital/**"
+  - "node_modules/**"
+  - "dist/**"
+  - "dist-one/**"
+  - "**.min.js"

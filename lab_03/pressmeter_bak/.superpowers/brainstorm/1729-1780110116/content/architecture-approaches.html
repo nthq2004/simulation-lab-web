@@ -1,0 +1,127 @@
+<h2>架构方案对比</h2>
+<p class="subtitle">基于现有平台 + Three.js 混合渲染的数字孪生架构</p>
+
+<div class="section">
+  <h3>方案 A: 分层架构 (推荐)</h3>
+  <div style="background:#e8f5e9;padding:16px;border-radius:8px">
+    <p><b>核心理念</b>：渲染与数据分离，三层独立演化</p>
+    <pre style="font-size:12px;background:#f5f5f5;padding:12px;border-radius:4px;overflow-x:auto">
+┌─────────────────────────────────────────┐
+│  🖥️ 表示层 (Presentation)               │
+│  ┌──────────────┐  ┌──────────────────┐ │
+│  │ 2D Konva     │  │ 3D Three.js      │ │
+│  │ 系统原理图    │  │ 机舱空间布局     │ │
+│  │ P&amp;ID风格     │  │ 设备3D模型       │ │
+│  └──────┬───────┘  └────────┬─────────┘ │
+└─────────┼────────────────────┼───────────┘
+          │  事件总线 (Event Bus) │
+┌─────────▼────────────────────▼───────────┐
+│  🧠 数字孪生层 (Digital Twin)             │
+│  ├── 设备对象池 (Equipment Objects)       │
+│  ├── 状态管理 (State Manager)             │
+│  ├── 物理仿真 (Physics Engine) ← 复用现有 │
+│  └── 通信接口 (Comm Interfaces) ← 复用    │
+└───────────────────────────────────────────┘
+          │
+┌─────────▼─────────────────────────────────┐
+│  📊 数据层 (Data)                         │
+│   设备参数 / 传感器数据 / 历史记录        │
+│   (保持现有数据模型)                      │
+└───────────────────────────────────────────┘
+    </pre>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>优势</h4>
+        <ul>
+          <li>现有 Konva 组件完全复用，零改动</li>
+          <li>3D 独立模块，不影响现有功能</li>
+          <li>事件总线解耦，2D↔3D 独立更新</li>
+          <li>可增量开发（先做 3D 外壳再填内容）</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>劣势</h4>
+        <ul>
+          <li>需要设计事件总线接口</li>
+          <li>2D/3D 状态同步需要额外维护</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>方案 B: 统一设备对象模型</h3>
+  <div style="background:#e3f2fd;padding:16px;border-radius:8px">
+    <p><b>核心理念</b>：每个设备 = 一个数字孪生对象，内置 2D 视图 + 3D 视图 + 物理模型</p>
+    <pre style="font-size:12px;background:#f5f5f5;padding:12px;border-radius:4px;overflow-x:auto">
+class EngineRoomEquipment {
+  id, type, position
+  // 双重渲染
+  konvaView: Konva.Group   // 2D 原理图符号
+  threeView: THREE.Mesh     // 3D 模型
+  // 物理仿真（复用现有求解器）
+  physicsModel: CircuitSolver | PneumaticSolver
+  // 状态
+  sensors: Map&lt;string, number&gt;
+  state: { running, temp, pressure, ... }
+}
+    </pre>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>优势</h4>
+        <ul>
+          <li>设备概念直观，封装完整</li>
+          <li>2D/3D 天然同步（同一对象）</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>劣势</h4>
+        <ul>
+          <li>需改造现有 BaseComponent，影响面大</li>
+          <li>Three.js 集成耦合度高</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>方案 C: 插件式扩展</h3>
+  <div style="background:#fff3e0;padding:16px;border-radius:8px">
+    <p><b>核心理念</b>：核心平台不变，3D 作为独立插件运行，通过共享数据总线通信</p>
+    <pre style="font-size:12px;background:#f5f5f5;padding:12px;border-radius:4px;overflow-x:auto">
+┌─────────────────┐     ┌─────────────────┐
+│  Konva 2D 平台   │     │  Three.js 3D     │
+│  (现有系统)      │     │  (新增插件)      │
+│  - 组件系统      │     │  - 机舱场景      │
+│  - 求解器        │◄───►│  - 3D模型        │
+│  - 流程引擎      │ 总线 │  - 漫游控制      │
+└─────────────────┘     └─────────────────┘
+         │                      │
+         └────── SignalBridge ───┘
+           (扩展自现有信号桥接)
+    </pre>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>优势</h4>
+        <ul>
+          <li>对现有系统侵入最小</li>
+          <li>可独立启动 2D 或 3D</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>劣势</h4>
+        <ul>
+          <li>2D/3D 功能割裂，联动较弱</li>
+          <li>共享数据总线的扩展性有限</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="background:#f3e5f5;padding:16px;border-radius:8px;margin-top:16px">
+  <h3>我的推荐: 方案 A — 分层架构</h3>
+  <p>理由: 完美复用现有 Konva 组件（200+ 已实现），3D 独立开发不阻塞现有功能，事件总线设计为后续扩展（AR/VR、数据回放等）预留空间。</p>
+</div>

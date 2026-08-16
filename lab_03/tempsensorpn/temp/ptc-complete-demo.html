@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTC自恢复保险丝 - 完整仿真演示</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 36px;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            font-size: 14px;
+            opacity: 0.95;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 30px;
+        }
+        
+        .panel {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .panel h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 18px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .parameter-group {
+            margin-bottom: 20px;
+        }
+        
+        .param-item {
+            margin-bottom: 15px;
+        }
+        
+        .param-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .param-value {
+            background: #e7f1ff;
+            color: #667eea;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #e0e0e0;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s ease;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.6);
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #da190b;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(244, 67, 54, 0.4);
+        }
+        
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #388e3c;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(76, 175, 80, 0.4);
+        }
+        
+        .status-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        
+        .status-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .status-label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 5px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .status-unit {
+            font-size: 12px;
+            color: #999;
+            margin-left: 5px;
+        }
+        
+        .state-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+            box-shadow: 0 0 8px currentColor;
+        }
+        
+        .state-normal { color: #4caf50; }
+        .state-transitioning { color: #ff9800; }
+        .state-limiting { color: #ff5722; }
+        .state-protected { color: #f44336; }
+        
+        .chart-container {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .chart-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        canvas {
+            width: 100% !important;
+            height: auto !important;
+            border-radius: 4px;
+        }
+        
+        .fullwidth {
+            grid-column: 1 / -1;
+        }
+        
+        .scenario-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 12px;
+        }
+        
+        .comparison-table th {
+            background: #667eea;
+            color: white;
+            padding: 10px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .comparison-table td {
+            padding: 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .comparison-table tr:hover {
+            background: #f0f4ff;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #1565c0;
+            margin-top: 15px;
+            line-height: 1.6;
+        }
+        
+        @media (max-width: 1200px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔌 PTC 自恢复保险丝仿真演示</h1>
+            <p>当电路短路时，PTC电阻值急剧增大，自动切断电路；故障消除后自动恢复</p>
+        </div>
+        
+        <div class="main-content">
+            <!-- 控制面板 -->
+            <div class="panel">
+                <h2>⚙️ 参数设置</h2>
+                
+                <div class="parameter-group">
+                    <div class="param-item">
+                        <div class="param-label">
+                            <span>供电电压 (Vsupply)</span>
+                            <span class="param-value" id="vsupplyVal">12V</span>
+                        </div>
+                        <input type="range" id="vsupplySlider" min="5" max="48" value="12" step="1">
+                    </div>
+                    
+                    <div class="param-item">
+                        <div class="param-label">
+                            <span>负载电阻 (Rload)</span>
+                            <span class="param-value" id="rloadVal">5Ω</span>
+                        </div>
+                        <input type="range" id="rloadSlider" min="0.1" max="50" value="5" step="0.5">
+                    </div>
+                    
+                    <div class="param-item">
+                        <div class="param-label">
+                            <span>PTC最小电阻 (Rmin)</span>
+                            <span class="param-value" id="rminVal">10Ω</span>
+                        </div>
+                        <input type="range" id="rminSlider" min="1" max="100" value="10" step="1">
+                    </div>
+                    
+                    <div class="param-item">
+                        <div class="param-label">
+                            <span>切换温度 (Tswitch)</span>
+                            <span class="param-value" id="tswitchVal">80°C</span>
+                        </div>
+                        <input type="range" id="tswitchSlider" min="40" max="140" value="80" step="5">
+                    </div>
+                    
+                    <div class="param-item">
+                        <div class="param-label">
+                            <span>居里温度 (Tcurie)</span>
+                            <span class="param-value" id="tcurieVal">110°C</span>
+                        </div>
+                        <input type="range" id="tcurieSlider" min="60" max="170" value="110" step="5">
+                    </div>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="startSimulation()">▶️ 开始仿真</button>
+                    <button class="btn btn-success" onclick="pauseSimulation()">⏸️ 暂停</button>
+                </div>
+                
+                <div class="scenario-buttons">
+                    <button class="btn btn-danger" onclick="triggerFault()">⚡ 触发短路</button>
+                    <button class="btn btn-primary" onclick="resetSimulation()">🔄 重置</button>
+                </div>
+                
+                <div class="info-box">
+                    <strong>💡 操作说明：</strong><br>
+                    1. 调整参数设置电路工作条件<br>
+                    2. 点击"触发短路"模拟故障<br>
+                    3. 观察PTC电阻如何实现保护<br>
+                    4. 故障消除后自动恢复工作
+                </div>
+            </div>
+            
+            <!-- 状态监测 -->
+            <div class="panel">
+                <h2>📊 实时监测</h2>
+                
+                <div style="padding: 15px; background: white; border-radius: 8px; margin-bottom: 20px;">
+                    <div style="margin-bottom: 15px;">
+                        <div style="font-size: 12px; color: #999; margin-bottom: 5px;">工作状态</div>
+                        <div style="font-size: 18px; font-weight: bold;">
+                            <span class="state-indicator" id="stateIndicator"></span>
+                            <span id="stateText">正常工作</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="status-display">
+                    <div class="status-card">
+                        <div class="status-label">电流 (I)</div>
+                        <div class="status-value">
+                            <span id="currentVal">1.09</span>
+                            <span class="status-unit">A</span>
+                        </div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <div class="status-label">电阻 (R)</div>
+                        <div class="status-value">
+                            <span id="resistanceVal">10.0</span>
+                            <span class="status-unit">Ω</span>
+                        </div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <div class="status-label">温度 (T)</div>
+                        <div class="status-value">
+                            <span id="temperatureVal">25.0</span>
+                            <span class="status-unit">°C</span>
+                        </div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <div class="status-label">功率 (P)</div>
+                        <div class="status-value">
+                            <span id="powerVal">11.9</span>
+                            <span class="status-unit">W</span>
+                        </div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <div class="status-label">电压降 (Vptc)</div>
+                        <div class="status-value">
+                            <span id="voltageVal">10.9</span>
+                            <span class="status-unit">V</span>
+                        </div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <div class="status-label">保护次数</div>
+                        <div class="status-value">
+                            <span id="protectionCount">0</span>
+                            <span class="status-unit">次</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="info-box">
+                    <strong>📈 关键过程：</strong><br>
+                    短路→电流↑→焦耳热↑→温度↑→
+                    T&gt;Tswitch→PTC电阻↑→电流↓→功率↓→
+                    温度↓→恢复
+                </div>
+            </div>
+            
+            <!-- 温度-电阻特性曲线 -->
+            <div class="panel fullwidth">
+                <h2>📈 R-T 特性曲线</h2>
+                <div class="chart-container">
+                    <div class="chart-title">PTC电阻随温度的变化 (对数纵坐标)</div>
+                    <canvas id="rtCurveChart" width="800" height="300"></canvas>
+                </div>
+            </div>
+            
+            <!-- 波形显示 -->
+            <div class="panel fullwidth">
+                <h2>🌊 实时波形</h2>
+                
+                <div class="chart-container">
+                    <div class="chart-title">温度变化</div>
+                    <canvas id="tempChart" width="800" height="150"></canvas>
+                </div>
+                
+                <div class="chart-container">
+                    <div class="chart-title">电流变化</div>
+                    <canvas id="currentChart" width="800" height="150"></canvas>
+                </div>
+                
+                <div class="chart-container">
+                    <div class="chart-title">电阻变化 (对数刻度)</div>
+                    <canvas id="resistanceChart" width="800" height="150"></canvas>
+                </div>
+                
+                <div class="chart-container">
+                    <div class="chart-title">功率变化</div>
+                    <canvas id="powerChart" width="800" height="150"></canvas>
+                </div>
+            </div>
+            
+            <!-- 应用对比 -->
+            <div class="panel fullwidth">
+                <h2>🔄 PTC vs 传统保护方案</h2>
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>特性</th>
+                            <th>PTC自恢复</th>
+                            <th>传统熔断丝</th>
+                            <th>电磁继电器</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>自动恢复</td>
+                            <td>✓ 自动</td>
+                            <td>✗ 需要更换</td>
+                            <td>✓ 自动</td>
+                        </tr>
+                        <tr>
+                            <td>可靠性</td>
+                            <td>△ 中等</td>
+                            <td>✓ 很好</td>
+                            <td>△ 一般</td>
+                        </tr>
+                        <tr>
+                            <td>响应速度</td>
+                            <td>⚡ 毫秒级</td>
+                            <td>△ 较慢</td>
+                            <td>△ 10~50ms</td>
+                        </tr>
+                        <tr>
+                            <td>成本</td>
+                            <td>△ 中等</td>
+                            <td>✓ 很低</td>
+                            <td>△ 中等</td>
+                        </tr>
+                        <tr>
+                            <td>集成难度</td>
+                            <td>✓ 容易</td>
+                            <td>✓ 容易</td>
+                            <td>△ 复杂</td>
+                        </tr>
+                        <tr>
+                            <td>无需电源</td>
+                            <td>✓ 被动器件</td>
+                            <td>✓ 被动器件</td>
+                            <td>✗ 需要电源</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { PTCResettableFuseSimulator, FaultScenarios } from './ptc-fuse-simulator.js';
+        
+        let ptc = new PTCResettableFuseSimulator();
+        let simRunning = false;
+        let simTime = 0;
+        
+        // 历史数据
+        let historyData = {
+            time: [],
+            temp: [],
+            current: [],
+            resistance: [],
+            power: []
+        };
+        
+        // 初始化
+        window.addEventListener('load', () => {
+            setupControls();
+            drawRTCurve();
+            updateDisplay();
+        });
+        
+        // 控制面板
+        function setupControls() {
+            const sliders = [
+                { id: 'vsupply', key: 'Vsupply', val: 'vsupplyVal', format: v => v.toFixed(0) + 'V' },
+                { id: 'rload', key: 'Rload', val: 'rloadVal', format: v => v.toFixed(1) + 'Ω' },
+                { id: 'rmin', key: 'Rmin', val: 'rminVal', format: v => v.toFixed(0) + 'Ω' },
+                { id: 'tswitch', key: 'Tswitch', val: 'tswitchVal', format: v => v.toFixed(0) + '°C' },
+                { id: 'tcurie', key: 'Tcurie', val: 'tcurieVal', format: v => v.toFixed(0) + '°C' }
+            ];
+            
+            sliders.forEach(s => {
+                document.getElementById(s.id + 'Slider').addEventListener('input', (e) => {
+                    const val = parseFloat(e.target.value);
+                    ptc[s.key] = val;
+                    document.getElementById(s.val).textContent = s.format(val);
+                });
+            });
+        }
+        
+        // 开始仿真
+        window.startSimulation = () => {
+            simRunning = true;
+            simTime = 0;
+            historyData = { time: [], temp: [], current: [], resistance: [], power: [] };
+            animate();
+        };
+        
+        // 暂停仿真
+        window.pauseSimulation = () => {
+            simRunning = false;
+        };
+        
+        // 重置
+        window.resetSimulation = () => {
+            simRunning = false;
+            ptc.reset();
+            simTime = 0;
+            historyData = { time: [], temp: [], current: [], resistance: [], power: [] };
+            updateDisplay();
+            drawCharts();
+        };
+        
+        // 触发故障
+        window.triggerFault = () => {
+            ptc.Rload = 0.1;
+            setTimeout(() => {
+                ptc.Rload = 5;
+            }, 2000);
+        };
+        
+        // 动画循环
+        function animate() {
+            if (!simRunning) return;
+            
+            ptc.update(0.02);
+            simTime += 0.02;
+            
+            const state = ptc.getState();
+            historyData.time.push(simTime);
+            historyData.temp.push(state.temperature);
+            historyData.current.push(state.current);
+            historyData.resistance.push(Math.min(state.resistance, 1e5));
+            historyData.power.push(state.power);
+            
+            if (historyData.time.length > 500) {
+                historyData.time.shift();
+                historyData.temp.shift();
+                historyData.current.shift();
+                historyData.resistance.shift();
+                historyData.power.shift();
+            }
+            
+            updateDisplay();
+            drawCharts();
+            
+            if (simTime < 30) {
+                requestAnimationFrame(animate);
+            } else {
+                simRunning = false;
+            }
+        }
+        
+        // 更新显示
+        function updateDisplay() {
+            const state = ptc.getState();
+            
+            // 状态指示
+            const stateMap = {
+                'normal': { color: '#4caf50', text: '✓ 正常工作' },
+                'transitioning': { color: '#ff9800', text: '⚠️ 过渡中' },
+                'limiting': { color: '#ff5722', text: '🛡️ 限流中' },
+                'protected': { color: '#f44336', text: '⛔ 保护激活' }
+            };
+            
+            const sInfo = stateMap[state.state] || stateMap['normal'];
+            document.getElementById('stateIndicator').style.color = sInfo.color;
+            document.getElementById('stateIndicator').className = 'state-indicator state-' + state.state;
+            document.getElementById('stateText').textContent = sInfo.text;
+            
+            // 数值
+            document.getElementById('currentVal').textContent = state.current.toFixed(3);
+            document.getElementById('resistanceVal').textContent = 
+                state.resistance > 1e4 ? (state.resistance / 1e6).toFixed(3) + 'M' : state.resistance.toFixed(2);
+            document.getElementById('temperatureVal').textContent = state.temperature.toFixed(1);
+            document.getElementById('powerVal').textContent = state.power.toFixed(2);
+            document.getElementById('voltageVal').textContent = state.voltage.toFixed(2);
+            document.getElementById('protectionCount').textContent = state.protectionCount;
+        }
+        
+        // 绘制R-T曲线
+        function drawRTCurve() {
+            const canvas = document.getElementById('rtCurveChart');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width, h = canvas.height;
+            const margin = 50;
+            
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, w, h);
+            
+            // 轴
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(margin, h - margin);
+            ctx.lineTo(w - margin, h - margin);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(margin, h - margin);
+            ctx.lineTo(margin, margin);
+            ctx.stroke();
+            
+            // 标签
+            ctx.fillStyle = '#333';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('温度 T (°C)', w/2, h - 10);
+            ctx.save();
+            ctx.translate(15, h/2);
+            ctx.rotate(-Math.PI/2);
+            ctx.textAlign = 'center';
+            ctx.fillText('电阻 R (Ω) - 对数刻度', 0, 0);
+            ctx.restore();
+            
+            // 绘制曲线
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            
+            const Tmin = 0, Tmax = 150;
+            const Rmin = Math.log10(ptc.Rmin);
+            const Rmax = Math.log10(ptc.Rmax);
+            
+            for (let t = Tmin; t <= Tmax; t += 2) {
+                const R = ptc.calculateResistance(t);
+                const logR = Math.log10(Math.max(R, 0.1));
+                
+                const x = margin + ((t - Tmin) / (Tmax - Tmin)) * (w - 2*margin);
+                const y = h - margin - ((logR - Rmin) / (Rmax - Rmin)) * (h - 2*margin);
+                
+                if (t === Tmin) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            
+            // 标记关键点
+            ctx.fillStyle = '#ff9800';
+            ctx.beginPath();
+            const xTs = margin + ((ptc.Tswitch - Tmin) / (Tmax - Tmin)) * (w - 2*margin);
+            const yTs = h - margin - ((Math.log10(ptc.Rmin) - Rmin) / (Rmax - Rmin)) * (h - 2*margin);
+            ctx.arc(xTs, yTs, 4, 0, Math.PI*2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#f44336';
+            ctx.beginPath();
+            const xTc = margin + ((ptc.Tcurie - Tmin) / (Tmax - Tmin)) * (w - 2*margin);
+            const yTc = h - margin - ((Math.log10(ptc.Rmax) - Rmin) / (Rmax - Rmin)) * (h - 2*margin);
+            ctx.arc(xTc, yTc, 4, 0, Math.PI*2);
+            ctx.fill();
+            
+            ctx.font = 'bold 11px Arial';
+            ctx.fillText('Tswitch', xTs, yTs - 15);
+            ctx.fillText('Tcurie', xTc, yTc + 20);
+        }
+        
+        // 绘制波形
+        function drawCharts() {
+            drawWaveform('tempChart', historyData.temp, 0, 150, '#e53935', '°C');
+            drawWaveform('currentChart', historyData.current, 0, 3, '#1976d2', 'A');
+            drawWaveformLog('resistanceChart', historyData.resistance, 0.1, 1e5, '#ff6f00', 'Ω');
+            drawWaveform('powerChart', historyData.power, 0, 50, '#388e3c', 'W');
+        }
+        
+        function drawWaveform(canvasId, data, min, max, color, unit) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width, h = canvas.height;
+            const margin = 30;
+            
+            ctx.fillStyle = '#f8f9fa';
+            ctx.fillRect(0, 0, w, h);
+            
+            // 网格
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const y = (i / 4) * (h - 2*margin) + margin;
+                ctx.beginPath();
+                ctx.moveTo(margin, y);
+                ctx.lineTo(w - margin, y);
+                ctx.stroke();
+            }
+            
+            // 波形
+            if (data.length > 1) {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                
+                for (let i = 0; i < data.length; i++) {
+                    const x = margin + (i / data.length) * (w - 2*margin);
+                    const value = Math.max(min, Math.min(max, data[i]));
+                    const y = h - margin - ((value - min) / (max - min)) * (h - 2*margin);
+                    
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+            
+            // 坐标
+            ctx.fillStyle = '#666';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText(max.toFixed(0) + unit, w - margin - 5, margin + 3);
+            ctx.fillText(min.toFixed(0) + unit, w - margin - 5, h - margin);
+        }
+        
+        function drawWaveformLog(canvasId, data, min, max, color, unit) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width, h = canvas.height;
+            const margin = 30;
+            
+            ctx.fillStyle = '#f8f9fa';
+            ctx.fillRect(0, 0, w, h);
+            
+            // 网格（对数）
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const y = (i / 4) * (h - 2*margin) + margin;
+                ctx.beginPath();
+                ctx.moveTo(margin, y);
+                ctx.lineTo(w - margin, y);
+                ctx.stroke();
+            }
+            
+            // 波形
+            if (data.length > 1) {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                
+                const logMin = Math.log10(min);
+                const logMax = Math.log10(max);
+                
+                for (let i = 0; i < data.length; i++) {
+                    const value = Math.max(min, Math.min(max, data[i]));
+                    const logValue = Math.log10(value);
+                    
+                    const x = margin + (i / data.length) * (w - 2*margin);
+                    const y = h - margin - ((logValue - logMin) / (logMax - logMin)) * (h - 2*margin);
+                    
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+            
+            // 坐标
+            ctx.fillStyle = '#666';
+            ctx.font = '9px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText(max.toExponential(0) + unit, w - margin - 5, margin + 3);
+            ctx.fillText(min.toFixed(0) + unit, w - margin - 5, h - margin);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>电路仿真实验室 · SIMLAB</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="./js/lib/konva.min.js"></script>
+</head>
+<body>
+
+<!-- ══════════════════ HEADER ══════════════════ -->
+<header class="app-header">
+  <div class="header-left">
+    <span class="logo-mark">⚡</span>
+    <span class="logo-text">SIMLAB <em>Circuit Lab</em></span>
+  </div>
+  <div class="header-center">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-label">就绪 · 从左侧拖拽器件开始</span>
+  </div>
+  <div class="header-right">
+    <button class="hdr-btn primary" id="btn-run">▶ 运行</button>
+    <button class="hdr-btn" id="btn-stop">■ 停止</button>
+    <button class="hdr-btn" id="btn-reset">↺ 重置</button>
+  </div>
+</header>
+
+<!-- ══════════════════ BODY ══════════════════ -->
+<div class="app-body">
+
+  <!-- LEFT PALETTE -->
+  <aside class="sidebar-left">
+    <div class="sidebar-title">器件库</div>
+
+    <div class="palette-group">
+      <div class="group-label">// 电源</div>
+      <div class="palette-item" data-device="DCVoltageSource">
+        <div class="item-symbol" data-sym="dcv"></div>
+        <div class="item-meta"><b>直流电源</b><small>DC Voltage Source</small></div>
+      </div>
+      <div class="palette-item" data-device="ACVoltageSource">
+        <div class="item-symbol" data-sym="acv"></div>
+        <div class="item-meta"><b>交流电源</b><small>AC Voltage Source</small></div>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <div class="group-label">// 无源器件</div>
+      <div class="palette-item" data-device="Resistor">
+        <div class="item-symbol" data-sym="res"></div>
+        <div class="item-meta"><b>电阻</b><small>Resistor</small></div>
+      </div>
+      <div class="palette-item" data-device="Capacitor">
+        <div class="item-symbol" data-sym="cap"></div>
+        <div class="item-meta"><b>电容</b><small>Capacitor</small></div>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <div class="group-label">// 半导体</div>
+      <div class="palette-item" data-device="Diode">
+        <div class="item-symbol" data-sym="diode"></div>
+        <div class="item-meta"><b>二极管</b><small>Diode (Si)</small></div>
+      </div>
+      <div class="palette-item" data-device="BJT">
+        <div class="item-symbol" data-sym="bjt"></div>
+        <div class="item-meta"><b>三极管</b><small>BJT NPN</small></div>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <div class="group-label">// 仪表</div>
+      <div class="palette-item" data-device="Multimeter">
+        <div class="item-symbol" data-sym="meter"></div>
+        <div class="item-meta"><b>万用表</b><small>Digital Multimeter</small></div>
+      </div>
+    </div>
+
+    <div class="palette-tip">
+      <span>💡</span> 点击或拖拽添加器件<br/>点击器件接线柱连线
+    </div>
+  </aside>
+
+  <!-- CANVAS -->
+  <main class="canvas-area" id="canvas-area">
+    <div id="konva-container"></div>
+    <div class="canvas-empty" id="canvas-empty">
+      <div class="empty-icon">⚡</div>
+      <div class="empty-title">电路画布</div>
+      <div class="empty-sub">从左侧点击或拖拽器件到此处<br/>点击器件接线柱开始连线</div>
+    </div>
+  </main>
+
+  <!-- RIGHT PANEL -->
+  <aside class="sidebar-right">
+    <div class="sidebar-title">属性面板</div>
+    <div id="prop-panel">
+      <div class="prop-empty">
+        <div>🔧</div>
+        <div>选中器件查看属性</div>
+      </div>
+    </div>
+
+    <div class="tool-section">
+      <div class="sidebar-title">操作模式</div>
+      <div class="tool-btns">
+        <button class="tool-btn active" id="mode-wire">⟵ 连线</button>
+        <button class="tool-btn" id="mode-move">✥ 移动</button>
+        <button class="tool-btn danger" id="mode-delete">✕ 删除</button>
+      </div>
+    </div>
+
+    <div class="log-section">
+      <div class="sidebar-title">仿真日志</div>
+      <div id="sim-log">
+        <div class="log-line log-info">▷ 系统初始化完成</div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

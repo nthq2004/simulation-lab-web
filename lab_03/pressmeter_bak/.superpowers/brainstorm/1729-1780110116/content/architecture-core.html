@@ -1,0 +1,167 @@
+<h2>第三层：事件总线 + 数字孪生核心</h2>
+<p class="subtitle">连接 2D/3D 视图的神经中枢和统一设备对象模型</p>
+
+<div class="section">
+  <h3>事件总线 (EventBus)</h3>
+  <div style="background:#f5f5f5;padding:16px;border-radius:8px">
+    <pre style="margin:0;font-size:13px">
+// 发布-订阅模式，单例
+class EventBus {
+  channels = {
+    'equipment:select':    [subscribers],  // 设备选中
+    'equipment:hover':     [subscribers],  // 设备悬停
+    'equipment:stateChange': [subscribers], // 状态变更
+    'equipment:alarm':     [subscribers],  // 报警触发
+    'camera:focus':        [subscribers],  // 3D相机聚焦
+    'view:switch':         [subscribers],  // 2D/3D/分屏切换
+    'scene:load':          [subscribers],  // 加载场景
+    'scene:reset':         [subscribers],  // 重置场景
+    'workflow:step':       [subscribers],  // 教学步骤推进
+  }
+  emit(topic, payload) { ... }
+  on(topic, callback) { ... }
+  off(topic, callback) { ... }
+}
+
+// 2D → 3D 示例:
+// 用户在原理图点击"1号发电机"
+EventBus.emit('equipment:select', {id:'gen-01'})
+// 3D 模块收到后高亮模型 + 聚焦相机
+
+// 3D → 2D 示例:
+// 3D 中某设备温度超限
+EventBus.emit('equipment:alarm', {id:'me-01', type:'temp_high', value:98})
+// 2D 原理图中该设备符号闪烁红色
+    </pre>
+  </div>
+</div>
+
+<div class="section">
+  <h3>数字孪生设备对象</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div style="background:#f0f4ff;padding:12px;border-radius:8px">
+      <h4 style="margin:0 0 8px 0">设备对象模型</h4>
+      <pre style="font-size:12px;background:#fafafa;padding:8px;border-radius:4px">
+class EngineRoomEquipment {
+  id: 'me-01'
+  type: 'diesel_engine'
+  label: '主机'
+
+  // 2D/3D 引用 (由各渲染层注册)
+  konvaRef: Konva.Group | null
+  threeRef: THREE.Group | null
+
+  // 传感器/执行器
+  sensors: {
+    rpm:    Sensor,
+    temp_exhaust: Sensor,
+    temp_coolant: Sensor,
+    press_oil:    Sensor,
+    fuel_flow:    Sensor,
+  }
+  actuators: {
+    throttle: Actuator,
+    start_air: Actuator,
+  }
+
+  // 状态
+  state: {
+    running: false,
+    load_pct: 0,
+    alarms: [],
+  }
+
+  // 物理模型引用
+  physicsRef: Object | null
+  // (指向求解器中的对应设备对象)
+}
+      </pre>
+    </div>
+    <div style="background:#f0fff0;padding:12px;border-radius:8px">
+      <h4 style="margin:0 0 8px 0">设备对象池</h4>
+      <pre style="font-size:12px;background:#fafafa;padding:8px;border-radius:4px">
+class EquipmentPool {
+  devices: Map&lt;string, EngineRoomEquipment&gt;
+  // 按系统分组便于查询
+  systems: {
+    'main_engine':  ['me-01'],
+    'generators':   ['gen-01', 'gen-02'],
+    'cooling':      ['pump-sw-01', 'pump-fw-01',
+                     'hx-01', 'valve-01'],
+    'fuel':         ['pump-fuel-01', 'purifier-01',
+                     'tank-daily-01'],
+    'air':          ['compressor-01', 'air-bottle-01'],
+    'bilge':        ['pump-bilge-01'],
+  }
+
+  // 按系统查询所有设备
+  getBySystem(system: string): EngineRoomEquipment[]
+  // 查询某管路连通的所有设备
+  getConnectedDevices(pipeId: string): EngineRoomEquipment[]
+  // 广播状态变更
+  notifyStateChange(devId: string, key: string, value: any)
+}
+      </pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>物理仿真扩展</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div style="background:#fff8f0;padding:12px;border-radius:8px">
+      <h4 style="margin:0 0 8px 0">新增: ThermalSolver (热力求解器)</h4>
+      <p style="font-size:13px">主机缸体/冷却水/排气/滑油的热交换计算：</p>
+      <ul style="font-size:13px">
+        <li>热节点网络 (热阻 + 热容模型)</li>
+        <li>换热器模型 (板式/管壳式)</li>
+        <li>燃烧放热模型 (基于负荷)</li>
+        <li>与 PneumaticSolver 耦合 (冷却水流路)</li>
+      </ul>
+    </div>
+    <div style="background:#fff0f0;padding:12px;border-radius:8px">
+      <h4 style="margin:0 0 8px 0">扩展: 多介质管路系统</h4>
+      <p style="font-size:13px">现有 PneumaticSolver 只支持单一介质（空气/水），扩展支持：</p>
+      <ul style="font-size:13px">
+        <li>燃油、滑油、淡水、海水、蒸汽</li>
+        <li>每种介质独立物性参数 (密度/粘度/比热)</li>
+        <li>多回路耦合 (如冷却水→换热器→海水)</li>
+        <li>阀门/泵特性曲线</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>与现有 ControlSystem 的关系</h3>
+  <div style="background:#f3e5f5;padding:12px;border-radius:8px;font-size:13px">
+    <p><b>关键设计决策:</b> <code>ControlSystem</code> 保持为总控入口，新增模块作为其子模块扩展</p>
+    <pre style="font-size:12px;background:#fafafa;padding:8px;border-radius:4px;margin-top:8px">
+// 在 consys.js 的 init() 中新增加载:
+export class ControlSystem {
+  init() {
+    // 现有初始化...
+    this.voltageSolver = new CircuitSolver(this)
+    this.pressSolver   = new PneumaticSolver(this)
+    this.digitalSolver = new DigitalSolver(this)
+    // ...新增:
+    this.thermalSolver = new ThermalSolver(this)  // 热力求解器
+    this.equipmentPool = new EquipmentPool()       // 设备对象池
+    this.eventBus      = new EventBus()             // 事件总线
+    this.engineRoom3D  = null                       // 3D模块(按需加载)
+  }
+
+  _updatePhysics() {
+    // 原顺序不变
+    this.voltageSolver.update()
+    this.pressSolver.solve()
+    this.digitalSolver.update()
+    // ...新增:
+    this.thermalSolver?.solve()  // 热力计算
+    this.equipmentPool?.syncInternalState() // 同步状态
+    this._tickAll(dt)
+  }
+}
+    </pre>
+  </div>
+</div>

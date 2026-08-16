@@ -1,0 +1,453 @@
+/* ===== 基础布局 ===== */
+body {
+    margin: 0;
+    background: #1e272e;
+    overflow: hidden;
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* ===== 顶部工具栏 ===== */
+#toolbar {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    background: rgba(121, 148, 132, 0.85);
+    color: #fff;
+    z-index: 1000;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+#toolbar button {
+    background: transparent;
+    border: 2px solid rgba(49, 44, 191, 0.25);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+#toolbar button:hover {
+    background: rgba(6, 222, 85, 0.3);
+}
+
+#toolbar button:disabled {
+    background-color: #f5f5f5;
+    color: #bcbcbc;
+    border: 1px solid #d9d9d9;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+#toolbar select {
+    padding: 5px;
+    border-radius: 6px;
+}
+
+/* ===== 故障弹窗 ===== */
+#faultModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background: #fff;
+    width: 400px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    background: #34495e;
+    color: white;
+    padding: 15px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.modal-body {
+    padding: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    background: #f1f2f6;
+    padding: 15px;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.btn-cancel {
+    padding: 8px 20px;
+    background: #95a5a6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btn-apply {
+    padding: 8px 25px;
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+/* ===== 故障复选框 ===== */
+.f-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.f-checkbox:hover {
+    background: #eae8a4;
+}
+
+.f-checkbox input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.f-checkbox:last-child {
+    border-bottom: none;
+}
+
+/* ===== 仪表菜单复选框 ===== */
+.i-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.i-checkbox:hover {
+    background: #eae8a4;
+}
+
+.i-checkbox input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.i-checkbox:last-child {
+    border-bottom: none;
+}
+
+/* ===== 仪表选择弹窗 ===== */
+#instrumentModal {
+    display: none;
+    position: fixed;
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: transparent;
+    z-index: 2000;
+}
+
+#instrumentModal .modal-content {
+    width: 300px;
+    max-height: 420px;
+}
+
+#instrumentModal .modal-body {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* ===== Konva容器 ===== */
+#container {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    background: #f6f8f9;
+    background-image: radial-gradient(rgba(0, 0, 0, .15) 1px, transparent 1px);
+    background-size: 60px 60px;
+    position: relative;
+}
+
+/* ===== 面板通用样式 ===== */
+.side-panel {
+    display: none;
+    position: fixed;
+    top: 52px;
+    right: 12px;
+    width: 420px;
+    max-height: calc(100vh - 70px);
+    background: #1e272e;
+    border: 1px solid #34495e;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    z-index: 1500;
+    color: #ecf0f1;
+    font-size: 13px;
+    overflow: hidden;
+}
+
+.side-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #2c3e50;
+    font-weight: bold;
+    font-size: 14px;
+    border-bottom: 1px solid #34495e;
+}
+
+.side-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.side-panel-body {
+    padding: 8px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+}
+
+.btn-close {
+    background: none;
+    border: none;
+    color: #95a5a6;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+.btn-close:hover { color: #e74c3c; }
+
+.btn-small {
+    padding: 4px 10px;
+    font-size: 11px;
+    border: 1px solid #5d6d7e;
+    background: #34495e;
+    color: #ecf0f1;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.btn-small:hover { background: #4a6785; }
+.btn-small.btn-danger { border-color: #c0392b; background: #a93226; }
+.btn-small.btn-danger:hover { background: #c0392b; }
+
+/* ===== 硬件网关面板 ===== */
+#btnGateway {
+    background: #8e44ad;
+    border-color: #9b59b6;
+}
+
+.gateway-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    font-size: 13px;
+    color: #ecf0f1;
+}
+
+.gateway-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #34495e;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.gateway-status {
+    font-size: 11px;
+    font-weight: normal;
+    color: #f39c12;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: rgba(243, 156, 18, 0.15);
+}
+
+.gateway-status.connected {
+    color: #2ecc71;
+    background: rgba(46, 204, 113, 0.15);
+}
+
+.gateway-section {
+    padding: 10px 0;
+    border-bottom: 1px solid #2c3e50;
+}
+
+.gateway-section:last-child {
+    border-bottom: none;
+}
+
+.gateway-section-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #7f8c8d;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+}
+
+.gateway-radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.gateway-radio {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.gateway-radio input[type="radio"] {
+    cursor: pointer;
+}
+
+.gateway-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.gateway-field label {
+    min-width: 50px;
+    font-size: 12px;
+    color: #95a5a6;
+}
+
+.gateway-select {
+    flex: 1;
+    padding: 5px 8px;
+    background: #2c3e50;
+    color: #ecf0f1;
+    border: 1px solid #5d6d7e;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.gateway-input {
+    flex: 1;
+    padding: 5px 8px;
+    background: #2c3e50;
+    color: #ecf0f1;
+    border: 1px solid #5d6d7e;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.gateway-input::placeholder {
+    color: #5d6d7e;
+}
+
+.gateway-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+    border: 1px solid #5d6d7e;
+    background: #34495e;
+    color: #ecf0f1;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.gateway-btn:hover {
+    background: #4a6785;
+}
+
+.gateway-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.gateway-btn-primary {
+    background: #2980b9;
+    border-color: #3498db;
+}
+
+.gateway-btn-primary:hover {
+    background: #3498db;
+}
+
+.gateway-btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: #2980b9;
+}
+
+.gateway-btn-danger {
+    background: #c0392b;
+    border-color: #e74c3c;
+}
+
+.gateway-btn-danger:hover {
+    background: #e74c3c;
+}
+
+.gateway-log {
+    max-height: 200px;
+    overflow-y: auto;
+    background: #1a1a2e;
+    border: 1px solid #34495e;
+    border-radius: 4px;
+    padding: 6px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.gateway-log-empty {
+    color: #5d6d7e;
+    text-align: center;
+    padding: 20px 0;
+    font-size: 12px;
+}
+
+.gateway-log-line {
+    padding: 1px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    word-break: break-all;
+}
+
+.gateway-log-info {
+    color: #7f8c8d;
+}
+
+.gateway-log-rx {
+    color: #2ecc71;
+}
+
+.gateway-log-tx {
+    color: #3498db;
+}
+
+.gateway-log-error {
+    color: #e74c3c;
+}
+

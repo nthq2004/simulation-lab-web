@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTC 快速参考卡</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            page-break-inside: avoid;
+        }
+        
+        .card h2 {
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .row.full {
+            grid-template-columns: 1fr;
+        }
+        
+        .column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        .item {
+            background: #f5f5f5;
+            padding: 10px;
+            border-left: 3px solid #667eea;
+            border-radius: 4px;
+        }
+        
+        .item-label {
+            color: #666;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+        
+        .item-value {
+            color: #333;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .formula {
+            background: #e3f2fd;
+            border-left: 3px solid #2196f3;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+        
+        .timeline {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            line-height: 1.6;
+        }
+        
+        .timeline-item {
+            margin-bottom: 8px;
+            padding-left: 10px;
+            border-left: 2px solid #667eea;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border-left: 3px solid #ffc107;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background: #d4edda;
+            border-left: 3px solid #28a745;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 11px;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            padding: 8px;
+            text-align: left;
+            font-weight: bold;
+        }
+        
+        td {
+            padding: 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        tr:hover {
+            background: #f5f5f5;
+        }
+        
+        .code {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        
+        .highlight {
+            background: #ffffcc;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+        
+        @media print {
+            body {
+                background: white;
+            }
+            
+            .card {
+                page-break-inside: avoid;
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 标题卡 -->
+        <div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-align: center;">
+            <h1 style="margin-bottom: 5px; border: none; color: white;">🔌 PTC 自恢复保险丝</h1>
+            <p style="font-size: 12px; margin-bottom: 5px;">快速参考卡 v1.0</p>
+            <p style="font-size: 10px; opacity: 0.9;">Positive Temperature Coefficient Thermistor — Resettable Fuse</p>
+        </div>
+        
+        <!-- 核心参数卡 -->
+        <div class="card">
+            <h2>📊 核心参数表</h2>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>参数名称</th>
+                        <th>符号</th>
+                        <th>典型值</th>
+                        <th>单位</th>
+                        <th>关键作用</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>最小电阻</td>
+                        <td>Rmin</td>
+                        <td>10</td>
+                        <td>Ω</td>
+                        <td>正常工作损耗</td>
+                    </tr>
+                    <tr>
+                        <td>最大电阻</td>
+                        <td>Rmax</td>
+                        <td>1M</td>
+                        <td>Ω</td>
+                        <td>过流限制</td>
+                    </tr>
+                    <tr>
+                        <td>切换温度</td>
+                        <td>Tswitch</td>
+                        <td>80</td>
+                        <td>°C</td>
+                        <td>保护触发点</td>
+                    </tr>
+                    <tr>
+                        <td>居里温度</td>
+                        <td>Tcurie</td>
+                        <td>110</td>
+                        <td>°C</td>
+                        <td>最大保护点</td>
+                    </tr>
+                    <tr>
+                        <td>热容量</td>
+                        <td>C_th</td>
+                        <td>0.5</td>
+                        <td>J/°C</td>
+                        <td>响应速度</td>
+                    </tr>
+                    <tr>
+                        <td>热阻</td>
+                        <td>R_th</td>
+                        <td>15</td>
+                        <td>°C/W</td>
+                        <td>散热能力</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- 工作状态卡 -->
+        <div class="card">
+            <h2>🔄 工作状态机</h2>
+            
+            <div class="row">
+                <div class="column">
+                    <div class="item">
+                        <div class="item-label">① 正常状态</div>
+                        <div class="item-value">
+                            T &lt; 75°C<br/>
+                            R = Rmin<br/>
+                            I ≈ 1A
+                        </div>
+                    </div>
+                    
+                    <div class="item">
+                        <div class="item-label">② 过渡状态</div>
+                        <div class="item-value">
+                            75°C ≤ T &lt; 85°C<br/>
+                            R ↑↑ 指数增长<br/>
+                            I ↓ 快速下降
+                        </div>
+                    </div>
+                    
+                    <div class="item">
+                        <div class="item-label">③ 限流状态</div>
+                        <div class="item-value">
+                            85°C ≤ T &lt; 110°C<br/>
+                            R ≈ 1k～100kΩ<br/>
+                            I ≈ 10～100mA
+                        </div>
+                    </div>
+                    
+                    <div class="item">
+                        <div class="item-label">④ 保护状态</div>
+                        <div class="item-value">
+                            T ≥ 110°C<br/>
+                            R ≈ Rmax = 1MΩ<br/>
+                            I ≈ 0.01mA
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 电阻公式卡 -->
+        <div class="card">
+            <h2>⚡ R-T 特性公式</h2>
+            
+            <div class="formula">
+                <strong>区域 1 (T &lt; Tswitch)：NTC 区</strong><br/>
+                R(T) = Rmin × exp[-α×(T - Tswitch)]<br/>
+                其中 α = 0.02（NTC衰减系数）
+            </div>
+            
+            <div class="formula">
+                <strong>区域 2 (Tswitch ≤ T ≤ Tcurie)：居里点突变</strong><br/>
+                R(T) = Rmin × exp[β×(T - Tswitch)²]<br/>
+                其中 β = ln(Rmax/Rmin) / (Tcurie - Tswitch)²
+            </div>
+            
+            <div class="formula">
+                <strong>区域 3 (T &gt; Tcurie)：高温饱和</strong><br/>
+                R(T) = Rmax × (1 - 0.1×(T - Tcurie)/50)
+            </div>
+        </div>
+        
+        <!-- 热学模型卡 -->
+        <div class="card">
+            <h2>🌡️ 热动力学模型</h2>
+            
+            <div class="formula">
+                <strong>热平衡方程：</strong><br/>
+                I²R - (T - T_amb)/R_th = C_th × dT/dt<br/>
+                <br/>
+                <strong>组成部分：</strong><br/>
+                • I²R = 焦耳热输入功率 (W)<br/>
+                • (T - T_amb)/R_th = 对流散热功率 (W)<br/>
+                • C_th × dT/dt = 热容造成的温度变化率
+            </div>
+            
+            <div class="success">
+                <strong>✓ 物理意义：</strong> 输入热量 - 散失热量 = 温度上升速率
+            </div>
+        </div>
+        
+        <!-- 故障过程卡 -->
+        <div class="card">
+            <h2>⚠️ 短路故障时间线</h2>
+            
+            <div class="timeline">
+                <div class="timeline-item"><strong>t = 0ms：</strong> 短路发生（Rload: 5Ω → 0.1Ω）</div>
+                <div class="timeline-item"><strong>t = 0~100ms：</strong> 电流瞬间从1A跳到10A，功率1188W</div>
+                <div class="timeline-item"><strong>t = 100~500ms：</strong> 温度快速上升（25°C → 80°C），电阻开始增大</div>
+                <div class="timeline-item"><strong>t = 500~1000ms：</strong> 进入居里点，电阻急剧增加（10Ω → 1MΩ）</div>
+                <div class="timeline-item"><strong>t = 1000~2000ms：</strong> 电流急剧下降（10A → 0.01A），过流被切断</div>
+                <div class="timeline-item"><strong>t &gt; 2000ms：</strong> 电路被保护，功率稳定在0.1W</div>
+            </div>
+            
+            <div class="warning">
+                <strong>⚡ 保护效果：</strong> 防止1188W的功率释放，电路被有效保护！
+            </div>
+        </div>
+        
+        <!-- 恢复过程卡 -->
+        <div class="card">
+            <h2>🔄 自动恢复时间线</h2>
+            
+            <div class="timeline">
+                <div class="timeline-item"><strong>t = 2000ms：</strong> 故障消除（短路被移除）</div>
+                <div class="timeline-item"><strong>t = 2000~2500ms：</strong> 电流恢复→电阻下降→温度快速降低</div>
+                <div class="timeline-item"><strong>t = 2500~3500ms：</strong> 温度从110°C降至80°C（离开居里点）</div>
+                <div class="timeline-item"><strong>t = 3500~5000ms：</strong> 温度继续自然冷却（80°C → 25°C）</div>
+                <div class="timeline-item"><strong>t &gt; 5000ms：</strong> 电阻恢复至Rmin，电路恢复正常工作</div>
+            </div>
+            
+            <div class="success">
+                <strong>✓ 可重复使用：</strong> 无需更换，无限次恢复，完全自动化！
+            </div>
+        </div>
+        
+        <!-- 计算示例卡 -->
+        <div class="card">
+            <h2>🧮 计算示例</h2>
+            
+            <div class="timeline">
+                <div style="margin-bottom: 12px;">
+                    <strong>正常工作状态 (T = 25°C)：</strong><br/>
+                    • Vsupply = 12V, Rload = 5Ω<br/>
+                    • R(25°C) = 10 × exp[-0.02×(25-80)] = 10 × exp[1.1] ≈ 30Ω<br/>
+                    • I = 12/(30+5) = 0.3A<br/>
+                    • P = 0.3² × 30 = 2.7W
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <strong>临界点 (T = 80°C)：</strong><br/>
+                    • R(80°C) = 10Ω (从NTC切换到PTC)<br/>
+                    • I = 12/(10+5) = 0.8A<br/>
+                    • P = 0.8² × 10 = 6.4W
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <strong>保护激活 (T = 100°C)：</strong><br/>
+                    • β = ln(10⁶/10) / 30² ≈ 0.0099<br/>
+                    • R(100°C) = 10 × exp[0.0099×(100-80)²] ≈ 10×exp[3.96] ≈ 520Ω<br/>
+                    • I = 12/(520+5) ≈ 0.023A<br/>
+                    • P = 0.023² × 520 = 0.275W
+                </div>
+                
+                <div>
+                    <strong>完全保护 (T = 110°C)：</strong><br/>
+                    • R(110°C) ≈ 1MΩ<br/>
+                    • I = 12/(1M+5) ≈ 0.000012A = 12μA<br/>
+                    • P ≈ 0.00012W
+                </div>
+            </div>
+        </div>
+        
+        <!-- 对比卡 -->
+        <div class="card">
+            <h2>⚖️ 保护方案对比</h2>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>特性</th>
+                        <th>PTC</th>
+                        <th>熔断丝</th>
+                        <th>继电器</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>自动恢复</td>
+                        <td>✓</td>
+                        <td>✗</td>
+                        <td>✓</td>
+                    </tr>
+                    <tr>
+                        <td>可重复使用</td>
+                        <td>✓</td>
+                        <td>✗</td>
+                        <td>✓</td>
+                    </tr>
+                    <tr>
+                        <td>无需电源</td>
+                        <td>✓</td>
+                        <td>✓</td>
+                        <td>✗</td>
+                    </tr>
+                    <tr>
+                        <td>响应速度</td>
+                        <td>快</td>
+                        <td>中等</td>
+                        <td>中等</td>
+                    </tr>
+                    <tr>
+                        <td>成本</td>
+                        <td>中</td>
+                        <td>低</td>
+                        <td>中</td>
+                    </tr>
+                    <tr>
+                        <td>可靠性</td>
+                        <td>△</td>
+                        <td>✓</td>
+                        <td>△</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- 应用卡 -->
+        <div class="card">
+            <h2>📱 典型应用场景</h2>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>应用</th>
+                        <th>电压</th>
+                        <th>电流</th>
+                        <th>Tswitch</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>USB充电</td>
+                        <td>5V</td>
+                        <td>2.5A</td>
+                        <td>50°C</td>
+                    </tr>
+                    <tr>
+                        <td>电池管理</td>
+                        <td>12～48V</td>
+                        <td>10～100A</td>
+                        <td>70°C</td>
+                    </tr>
+                    <tr>
+                        <td>通讯基站</td>
+                        <td>48V</td>
+                        <td>6A/路</td>
+                        <td>80°C</td>
+                    </tr>
+                    <tr>
+                        <td>工业控制</td>
+                        <td>380V</td>
+                        <td>30～50A</td>
+                        <td>100°C</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- 选型指南卡 -->
+        <div class="card">
+            <h2>🔧 PTC选型三步法</h2>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <strong>第一步：确定保护电流Ilimit</strong><br/>
+                    设 Ilimit = 1.5～2.0 × Inormal（过载倍数）<br/>
+                    选择Rmin使得 V/(Rmin+Rload) ≈ Ilimit
+                </div>
+                <div class="timeline-item">
+                    <strong>第二步：确定Tswitch和Tcurie</strong><br/>
+                    • 应用温度越高 → Tswitch越高<br/>
+                    • 响应需求越快 → Tswitch越低<br/>
+                    • 通常 Tcurie = Tswitch + 20~40°C
+                </div>
+                <div class="timeline-item">
+                    <strong>第三步：验证过流限制</strong><br/>
+                    当Rload降到最坏值时，确认R(T_max)足够大<br/>
+                    使得I_limited &lt; 器件额定电流 × 0.1
+                </div>
+            </div>
+        </div>
+        
+        <!-- 调试卡 -->
+        <div class="card">
+            <h2>🐛 常见问题排查</h2>
+            
+            <div class="column">
+                <div class="item">
+                    <div class="item-label">❓ 保护不触发</div>
+                    <div class="item-value">
+                        检查项：<br/>
+                        • Tswitch太高？<br/>
+                        • 短路程度不够？<br/>
+                        • Rmin设置过大？
+                    </div>
+                </div>
+                
+                <div class="item">
+                    <div class="item-label">❓ 恢复太慢</div>
+                    <div class="item-value">
+                        检查项：<br/>
+                        • 热阻R_th过大？<br/>
+                        • 散热条件差？<br/>
+                        • 环境温度高？
+                    </div>
+                </div>
+                
+                <div class="item">
+                    <div class="item-label">❓ 温度不升</div>
+                    <div class="item-value">
+                        检查项：<br/>
+                        • 环境温度Tambient设置？<br/>
+                        • 热容C_th太大？<br/>
+                        • 焦耳热计算正确？
+                    </div>
+                </div>
+                
+                <div class="item">
+                    <div class="item-label">❓ 波形异常</div>
+                    <div class="item-value">
+                        检查项：<br/>
+                        • 浏览器兼容性<br/>
+                        • 页面缓存<br/>
+                        • 控制台错误
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 快速参考卡 -->
+        <div class="card" style="background: #fff3cd; border: 2px solid #ffc107;">
+            <h2 style="color: #ff6f00;">⚡ 30秒快速理解</h2>
+            
+            <p style="margin-bottom: 10px;">
+                <strong>PTC = 温度控制的电阻</strong>
+            </p>
+            
+            <div style="font-size: 13px; line-height: 1.8;">
+                ✓ 正常时：电阻小 (10Ω) → 电流大 (1A) → 设备正常工作<br/>
+                ✓ 过流时：焦耳热多 → 温度高 → 电阻大 (1MΩ) → 电流小 → 设备保护<br/>
+                ✓ 故障消除：电流小 → 热量少 → 温度降 → 电阻复原 → 自动恢复<br/>
+                <br/>
+                💡 核心：利用器件自身发热改变电阻，被动保护，无需控制！
+            </div>
+        </div>
+        
+        <!-- 底部 -->
+        <div class="card" style="text-align: center; color: #999; font-size: 12px; border-top: 2px solid #ddd; margin-top: 40px;">
+            <p>PTC 自恢复保险丝 · 快速参考卡</p>
+            <p style="margin-top: 5px;">打印建议：A4纸张，双面打印，精读版本</p>
+            <p style="margin-top: 5px; font-size: 10px;">© 2026 仿真教学团队 | 教学使用</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -c \"E:\\\\BaiduSyncdisk\\\\03 教学材料\\\\仿真软件制作\\\\网站\\\\lab_03\\\\difftransformer\\\\tools\\\\MCS51Solver.js\")"
+    ]
+  }
+}
