@@ -7,19 +7,17 @@
 | 目录 | 内容 |
 |---|---|
 | `lab_01` ~ `lab_07` | 各类仿真实验模块（传感器、控制回路、CAN、电路仿真等） |
-| `blog/todo-app` | 待办事项 Demo 应用 |
+| `blog/` | 博客类应用（`my-blog` 前端、`tech-blog` API Worker、`todo-app` Demo） |
 | `claude` | 测试用素材 |
 | `temp` | 临时草稿/原型（lab 副本等） |
 | `lastproj` | 早期项目汇总（consys/digital 等） |
 | `cloudflare d1和r2.js` | Cloudflare D1/R2 配置参考片段 |
 
-> `lab-simulator-pay`、`blog/my-blog`、`blog/tech-blog` 仍在独立仓库中维护，未收录进本仓库。
+> `lab-simulator-pay` 仍在独立仓库中维护，未收录进本仓库。
 
 ## 独立仓库
 
 - <https://github.com/nthq2004/lab-simulator-pay>
-- <https://github.com/nthq2004/my-blog>
-- <https://github.com/nthq2004/blog>
 
 ## 本地开发
 
