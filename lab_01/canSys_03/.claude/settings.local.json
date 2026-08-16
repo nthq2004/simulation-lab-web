@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --input-type=module)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(gh repo *)",
+      "Bash(curl -s https://api.github.com/repos/forrestchang/andrej-karpathy-skills)",
+      "Bash(curl -s https://api.github.com/repos/forrestchang/andrej-karpathy-skills/contents/)",
+      "Bash(python3 -c \"import sys,json; [print\\(i['name'],i['type']\\) for i in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s https://api.github.com/repos/forrestchang/andrej-karpathy-skills/contents/.claude-plugin)",
+      "Bash(curl -s https://api.github.com/repos/forrestchang/andrej-karpathy-skills/contents/skills)",
+      "Bash(curl -s https://raw.githubusercontent.com/forrestchang/andrej-karpathy-skills/main/.claude-plugin/plugin.json)",
+      "Bash(curl -s https://raw.githubusercontent.com/forrestchang/andrej-karpathy-skills/main/.claude-plugin/marketplace.json)",
+      "Bash(curl -s https://api.github.com/repos/forrestchang/andrej-karpathy-skills/contents/skills/karpathy-guidelines)",
+      "Bash(curl *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(mkdir -p \"C:/Users/Administrator/.claude/plugins/marketplaces/community-forrestchang/external_plugins/andrej-karpathy-skills/.claude-plugin\")",
+      "Bash(cp -r /tmp/andrej-karpathy-skills/.claude-plugin/* \"C:/Users/Administrator/.claude/plugins/marketplaces/community-forrestchang/external_plugins/andrej-karpathy-skills/.claude-plugin/\")",
+      "Bash(cp -r /tmp/andrej-karpathy-skills/skills \"C:/Users/Administrator/.claude/plugins/marketplaces/community-forrestchang/external_plugins/andrej-karpathy-skills/\")",
+      "Bash(cp /tmp/andrej-karpathy-skills/CLAUDE.md /tmp/andrej-karpathy-skills/EXAMPLES.md \"C:/Users/Administrator/.claude/plugins/marketplaces/community-forrestchang/external_plugins/andrej-karpathy-skills/\")",
+      "Bash(cp /tmp/andrej-karpathy-skills/.claude-plugin/plugin.json \"C:/Users/Administrator/.claude/plugins/marketplaces/community-forrestchang/external_plugins/andrej-karpathy-skills/.claude-plugin/\")",
+      "Bash(cp /tmp/andrej-karpathy-skills/.claude-plugin/marketplace.json \"C:/Users/Administrator/.claude/plugins/marketplaces/community-forrestchang/external_plugins/andrej-karpathy-skills/.claude-plugin/\")",
+      "Bash(node -e ' *)",
+      "mcp__ide__getDiagnostics",
+      "Bash(ls -la \"e:/BaiduSyncdisk/03 教学材料/仿真软件制作/网站/lab_01/canSys_03/can/dpu/AO.\"*)",
+      "Bash(node --check \"e:/BaiduSyncdisk/03 教学材料/仿真软件制作/网站/lab_01/canSys_03/can/DI.js\")",
+      "Bash(node --check \"e:/BaiduSyncdisk/03 教学材料/仿真软件制作/网站/lab_01/canSys_03/can/DO.js\")",
+      "Bash(node --check \"e:/BaiduSyncdisk/03 教学材料/仿真软件制作/网站/lab_01/canSys_03/can/dpu/DI.constants.js\")",
+      "Bash(node --check \"e:/BaiduSyncdisk/03 教学材料/仿真软件制作/网站/lab_01/canSys_03/can/dpu/DI.visuals.js\")",
+      "Bash(node --check \"e:/BaiduSyncdisk/03 教学材料/仿真软件制作/网站/lab_01/canSys_03/can/dpu/DI.can.js\")",
+      "Bash(node --check \"e:/BaiduSyncdisk/03 教学材料/仿真软件制作/网站/lab_01/canSys_03/can/dpu/DO.constants.js\")",
+      "Bash(node --check \"e:/BaiduSyncdisk/03 教学材料/仿真软件制作/网站/lab_01/canSys_03/can/dpu/DO.visuals.js\")"
+    ]
+  }
+}

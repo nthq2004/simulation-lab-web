@@ -27,9 +27,7 @@ Thumbs.db
 *.db
 
 # ---- 已独立维护到 GitHub 的项目目录（本仓库不重复收录）----
-# 对应仓库：github.com/nthq2004/{lab_01,lab_02,lab-simulator-pay,my-blog,blog}
-lab_01/
-lab_02/
+# 对应仓库：github.com/nthq2004/{lab-simulator-pay,my-blog,blog}
 lab-simulator-pay/
 blog/my-blog/
 blog/tech-blog/
