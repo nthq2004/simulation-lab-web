@@ -1,0 +1,28 @@
+-- 专栏表
+CREATE TABLE IF NOT EXISTS columns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL
+);
+
+-- 文章表
+CREATE TABLE IF NOT EXISTS articles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  colId INTEGER,
+  isHot BOOLEAN DEFAULT 0,
+  views INTEGER DEFAULT 0,
+  date TEXT
+);
+
+-- 评论表
+CREATE TABLE IF NOT EXISTS comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  artId INTEGER,
+  user TEXT,
+  text TEXT,
+  date TEXT
+);
+
+-- 初始插入一个默认专栏
+INSERT OR REPLACE INTO columns (id, name) VALUES (0, '所有文章');

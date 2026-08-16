@@ -1,0 +1,14 @@
+name = "tech-blog-api"
+main = "src/worker/index.js"
+compatibility_date = "2026-03-29"
+
+# 绑定 D1 数据库
+[[d1_databases]]
+binding = "DB"
+database_name = "my-blog-db"
+database_id = "5771c031-4809-494e-b4a4-3e3909596282"
+
+# 绑定 R2 存储桶
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "my-blog-assets"
