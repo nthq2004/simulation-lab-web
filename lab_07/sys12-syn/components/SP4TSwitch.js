@@ -591,6 +591,11 @@ export class SP4TSwitch extends BaseComponent {
 
             if (diff > 0) this.toggleNext();
             else          this.togglePrev();
+            // 部件标记：拨动手柄顺带记录 lastClickedPartId（供工作流 find 识别）
+            if (this.sys) {
+                this.sys.lastClickedId = this.id;
+                this.sys.lastClickedPartId = this.id + '/sel-knob';
+            }
         });
         hitArea.on('mouseenter', () => { document.body.style.cursor = 'pointer'; });
         hitArea.on('mouseleave', () => { document.body.style.cursor = 'default'; });

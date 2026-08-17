@@ -59,12 +59,14 @@ export class GeneratorRemotePanel extends BaseComponent {
         this._lcd = { x: 8, y: 30, w: PANEL_W - 16, h: 58 };
         this._lcdRows = [34, 52, 70];
 
-        // 三排控件中心：排1 合闸/分闸，排2 起动/停止，排3 运行灯/调速旋钮
+        // 三排控件中心：排1 合闸/分闸，排2 起动/停止，排3 运行灯+READY灯/调速旋钮
         this._btnClose = { x: 58,  y: 112,  r: 17 };
         this._btnOpen  = { x: 152, y: 112,  r: 17 };
         this._btnStart = { x: 58,  y: 155, r: 17 };
         this._btnStop  = { x: 152, y: 155, r: 17 };
-        this._runLed   = { x: 58,  y: 199, r: 17 };   // 运行灯与起动按钮同大
+        // 运行灯（原半径 17，按需求缩小为原来的一半 → r 8.5），其右侧并列 READY FOR START 灯（同样大小）
+        this._runLed   = { x: 54,  y: 199, r: 8.5 };
+        this._readyLed = { x: 96,  y: 199, r: 8.5 };
         this._knob     = { x: 152, y: 199, r: 17 };
 
         // 端口坐标（顶部 close 端口位于合闸按钮上方，open 端口位于分闸按钮上方）
@@ -88,6 +90,20 @@ export class GeneratorRemotePanel extends BaseComponent {
         this.genId = config.genId !== undefined ? config.genId : '';
         this.qfId  = config.qfId  !== undefined ? config.qfId  : '';
 
+        // ── 合闸联锁条件配置（不配置则保持无条件合闸，兼容旧工程）──
+        // busId     ：汇流排组件 id（用于判断"电网是否有电"，如 'bus1'；空则不启用联锁）
+        // syncSelId ：同步表选择开关组件 id（如 'sync_sel'）
+        // selPos    ：本机在同步表选择开关上的档位（1~4），如 1号机=2、2号机=3
+        this.busId    = config.busId    || '';
+        this.syncSelId = config.syncSelId || '';
+        this.selPos   = parseInt(config.selPos) || 0;
+        // 合闸允许标志（tick 中更新）：false 时手动/通信合闸指令均不输出
+        this._closePermit = true;
+        // 电网"有电"滑窗峰值检测：瞬时值会周期性过零，不能用单帧瞬时值判断；
+        // 记录采样峰值，仅当连续多帧大幅低于峰值才视为电网掉电（峰值归零重判）
+        this._busLivePeak = 0;   // 汇流排电压采样峰值（绝对值）
+        this._busDeadFrames = 0; // 连续低于峰值的帧数
+
         // 供电状态：p24 电压 >1V 连续 3 帧才认为有电
         this._powered = false;
         this._powerTimer = 0;
@@ -98,6 +114,11 @@ export class GeneratorRemotePanel extends BaseComponent {
         this._userClosePressed = false;
         this._userOpenPressed  = false;
         this._userSpdVolt      = 0;
+
+        // 合闸按钮按压动作检测：无论联锁是否放行，按下"合闸"按钮即计数。
+        // 教学流程用（如"联锁封锁"步骤须先产生合闸动作才能通过）。
+        this._closeAttempts       = 0;     // 合闸按钮按压次数（自上次复位起）
+        this._userClosePressedPrev = false; // 上一帧按压状态（检测 false→true 边沿）
 
         // 实际控制状态（tick 中由手动状态与通信命令合成）
         this._startPressed = false;
@@ -122,6 +143,8 @@ export class GeneratorRemotePanel extends BaseComponent {
         this._drawStaticParts();
         this._createDynamicNodes();
         this._bindInteraction();
+        // READY FOR START 指示灯可点击部件（教学流程 find 步骤"点击该灯即可跳过"）
+        this.addClickablePart('ready-led', this._readyLed.x - 12, this._readyLed.y - 12, 24, 24);
     }
 
     // ═══════════════════════════════════════════
@@ -143,7 +166,7 @@ export class GeneratorRemotePanel extends BaseComponent {
         // 标题
         s.add(new Konva.Text({
             x: 0, y: 12, width: PANEL_W, align: 'center',
-            text: '发电机组遥控面板', fontSize: 16, fontStyle: 'bold', fill: '#1a252f',
+            text: this.label, fontSize: 16, fontStyle: 'bold', fill: '#1a252f',
         }));
         // LCD 黑底
         s.add(new Konva.Rect({
@@ -161,7 +184,11 @@ export class GeneratorRemotePanel extends BaseComponent {
         });
         // RUNNING 运行灯底盘
         s.add(new Konva.Circle({ x: this._runLed.x, y: this._runLed.y, radius: this._runLed.r + 4, fill: '#cdd8e0', stroke: '#5a6a75', strokeWidth: 1 }));
-        s.add(new Konva.Text({ x: this._runLed.x - 26, y: this._runLed.y + this._runLed.r + 4, width: 52, align: 'center', text: '运行', fontSize: 11, fontStyle: 'bold', fill: '#1a252f' }));
+        s.add(new Konva.Text({ x: this._runLed.x - 15, y: this._runLed.y + this._runLed.r + 6, width: 30, align: 'center', text: '运行', fontSize: 12, fontStyle: 'bold', fill: '#1a252f' }));
+        // READY FOR START 指示灯底盘（运行灯右侧，与运行灯同大小）
+        s.add(new Konva.Circle({ x: this._readyLed.x, y: this._readyLed.y, radius: this._readyLed.r + 4, fill: '#cdd8e0', stroke: '#5a6a75', strokeWidth: 1 }));
+        s.add(new Konva.Text({ x: this._readyLed.x - 40, y: this._readyLed.y + this._readyLed.r - 40, width: 80, align: 'center', text: 'READY FOR', fontSize: 10, fontStyle: 'bold', fill: '#1a252f' }));
+        s.add(new Konva.Text({ x: this._readyLed.x - 27, y: this._readyLed.y + this._readyLed.r - 30, width: 54, align: 'center', text: 'START', fontSize: 10, fontStyle: 'bold', fill: '#1a252f' }));
         // 调速旋钮底盘
         s.add(new Konva.Circle({ x: this._knob.x, y: this._knob.y, radius: this._knob.r + 3, fill: '#cfd8df', stroke: '#5a6a75', strokeWidth: 1 }));
         s.add(new Konva.Text({ x: this._knob.x - 26, y: this._knob.y + this._knob.r + 4, width: 52, align: 'center', text: '调速', fontSize: 11, fill: '#333' }));
@@ -226,6 +253,11 @@ export class GeneratorRemotePanel extends BaseComponent {
         d.add(runLed);
         ui.runLed = runLed;
 
+        // READY FOR START 指示灯（初始灰色，满足条件后点亮绿色）
+        const readyLed = new Konva.Circle({ x: this._readyLed.x, y: this._readyLed.y, radius: this._readyLed.r, fill: '#8a8a8a', stroke: '#222', strokeWidth: 1 });
+        d.add(readyLed);
+        ui.readyLed = readyLed;
+
         // 调速旋钮（瞬时偏转回弹）
         const knobG = new Konva.Group({ x: this._knob.x, y: this._knob.y });
         const knobDisk = new Konva.Circle({ radius: this._knob.r, fill: '#7f8c8d', stroke: '#4a5a63', strokeWidth: 2 });
@@ -242,10 +274,17 @@ export class GeneratorRemotePanel extends BaseComponent {
             node.on('mousedown touchstart', (e) => { e.cancelBubble = true; onDown(); });
             node.on('mouseup touchend mouseleave', () => { onUp(); });
         };
-        hold(ui.closeFace.g, () => { this._userClosePressed = true; },  () => { this._userClosePressed = false; });
-        hold(ui.openFace.g,  () => { this._userOpenPressed = true; },   () => { this._userOpenPressed = false; });
-        hold(ui.startFace.g, () => { this._userStartPressed = true; },  () => { this._userStartPressed = false; });
-        hold(ui.stopFace.g,  () => { this._userStopPressed = true; },   () => { this._userStopPressed = false; });
+        // 部件标记：按下按钮时顺带记录 lastClickedPartId（供工作流 find 识别，不拦截交互）
+        const mark = (partId) => {
+            if (this.sys) {
+                this.sys.lastClickedId = this.id;
+                this.sys.lastClickedPartId = this.id + '/' + partId;
+            }
+        };
+        hold(ui.closeFace.g, () => { this._userClosePressed = true; mark('btn-close'); }, () => { this._userClosePressed = false; });
+        hold(ui.openFace.g,  () => { this._userOpenPressed = true;  mark('btn-open');  }, () => { this._userOpenPressed  = false; });
+        hold(ui.startFace.g, () => { this._userStartPressed = true; mark('btn-start'); }, () => { this._userStartPressed = false; });
+        hold(ui.stopFace.g,  () => { this._userStopPressed = true;  mark('btn-stop');  }, () => { this._userStopPressed  = false; });
 
         ui.knobDisk.on('mousedown touchstart', (e) => {
             e.cancelBubble = true;
@@ -318,6 +357,10 @@ export class GeneratorRemotePanel extends BaseComponent {
     // ═══════════════════════════════════════════
 
     tick(dt) {
+        // 合闸按钮按压边沿计数（false→true 记为一次按压动作）
+        if (this._userClosePressed && !this._userClosePressedPrev) this._closeAttempts++;
+        this._userClosePressedPrev = this._userClosePressed;
+
         this._sensePower();
         this._synthesizeCommand();
         this._sampleGen();
@@ -333,7 +376,9 @@ export class GeneratorRemotePanel extends BaseComponent {
         const c = this._commCmd;
         this._startPressed = this._userStartPressed || c === 'start';
         this._stopPressed  = this._userStopPressed  || c === 'stop';
-        this._closePressed = this._userClosePressed || c === 'close';
+        // 合闸联锁：允许 = 电网无电（直接允许） ∨ 电网有电且同步表选择开关在本机档位
+        this._closePermit  = this._calcClosePermit();
+        this._closePressed = this._closePermit && (this._userClosePressed || c === 'close');
         this._openPressed  = this._userOpenPressed  || c === 'open';
         if (this._userSpdVolt !== 0) {
             this._spdVolt = this._userSpdVolt;
@@ -348,6 +393,55 @@ export class GeneratorRemotePanel extends BaseComponent {
         } else {
             this._spdVolt = 0;
         }
+    }
+
+    // ── 合闸联锁辅助 ────────────────────────────────────────────
+    // 电网是否有电：汇流排线电压滑窗峰值超过阈值（>120V，380V 系统正常瞬时峰值约 600V）
+    // 视为有电。未配置 busId 时视为"无电"（不联锁，保持无条件合闸）。
+    //
+    // 采用滑窗峰值而非单帧瞬时值：50Hz 正弦线电压瞬时值周期性过零，
+    // 若用单帧判断，用户长按合闸时会撞上瞬时 <100V 的帧导致联锁被短暂绕过。
+    _busPowered() {
+        if (!this.busId || !this.sys || !this.sys.getVoltageBetween) return false;
+        const p1 = `${this.busId}_wire_l1_1`, p2 = `${this.busId}_wire_l2_1`;
+        try {
+            const v = this.sys.getVoltageBetween(p1, p2);
+            if (typeof v === 'number' && isFinite(v)) {
+                const a = Math.abs(v);
+                if (a > this._busLivePeak * 0.15) {
+                    // 采样幅值与峰值同量级 → 电网仍在正常供电（过零帧很快回升）
+                    this._busDeadFrames = 0;
+                } else {
+                    this._busDeadFrames++;
+                }
+                if (a > this._busLivePeak) this._busLivePeak = a;
+                // 连续约 0.4s（8 帧）采样均大幅低于峰值 → 电网已掉电，峰值归零重新判断
+                if (this._busDeadFrames > 8) {
+                    this._busLivePeak = 0;
+                    this._busDeadFrames = 0;
+                }
+                return this._busLivePeak > 120;
+            }
+        } catch (e) { /* ignore */ }
+        return false;
+    }
+
+    // 同步表选择开关当前档位（1~4）；未配置 syncSelId 返回 0
+    _syncSelector() {
+        if (!this.syncSelId || !this.sys || !this.sys.comps) return 0;
+        const sel = this.sys.comps[this.syncSelId];
+        if (sel && typeof sel.getPosition === 'function') return sel.getPosition();
+        return 0;
+    }
+
+    // 合闸允许条件
+    _calcClosePermit() {
+        // 未配置联锁（无 busId 或 selPos）→ 始终允许（兼容旧工程）
+        if (!this.busId || !this.selPos) return true;
+        // 电网无电 → 允许（无需选择开关）
+        if (!this._busPowered()) return true;
+        // 电网有电 → 必须同步表选择开关转到本机编号档位
+        return this._syncSelector() === this.selPos;
     }
 
     _sensePower() {
@@ -369,20 +463,28 @@ export class GeneratorRemotePanel extends BaseComponent {
         this._sample = this._snapshot(this.genId, this.qfId);
     }
 
+    // 直接读取发电机显示参数（与发电机本体 LCD 同源同值），保证两处显示一致
     _snapshot(genId, qfId) {
         const gen = genId && this.sys.comps[genId] ? this.sys.comps[genId] : null;
         if (!gen) return null;
-        const s = { on: !!gen.isOn, qfOn: null };
+        // 优先使用发电机统一接口（电压采用实测端子电压、含功率因数），与本体 LCD 数据源一致
+        let s = null;
+        if (typeof gen.getDisplayParams === 'function') {
+            s = gen.getDisplayParams();
+        } else {
+            // 后备兼容：未实现 getDisplayParams 的老发电机，按设定值读取
+            s = {
+                on:    !!gen.isOn,
+                lineV: gen.getLineVoltage ? gen.getLineVoltage() : 0,
+                freq:  (gen._freqOut ?? gen.freq) || 0,
+                I:     gen._rmsI || 0,
+                P:     gen._pwr || 0,
+                cos:   gen._rmsI > 0 ? Math.min(1, Math.max(-1, (gen._pwr * 1000) / (Math.sqrt(3) * (s && s.lineV || 1) * gen._rmsI))) : 0,
+            };
+        }
+        s = { ...s };
         const qf = qfId && this.sys.comps[qfId] ? this.sys.comps[qfId] : null;
         if (qf && typeof qf._state === 'string') s.qfOn = qf._state === 'on';
-        if (s.on) {
-            const lv = gen.getLineVoltage ? gen.getLineVoltage() : 0;
-            s.lineV = lv;
-            s.freq  = (gen._freqOut ?? gen.freq) || 0;
-            s.I = gen._rmsI || 0;
-            s.P = gen._pwr || 0;
-            s.cos = s.I > 0 ? Math.min(1, Math.max(-1, (s.P * 1000) / (Math.sqrt(3) * s.lineV * s.I))) : 0;
-        }
         return s;
     }
 
@@ -416,6 +518,18 @@ export class GeneratorRemotePanel extends BaseComponent {
         ui.stopFace.face.fill(this._stopPressed ? ui.stopFace.face._dark : ui.stopFace.face._base);
         // 运行灯：初始灰色，点亮后白色
         ui.runLed.fill(s && s.on ? '#ffffff' : '#8a8a8a');
+
+        // READY FOR START 灯：面板 24V 供电正常 + 遥控位 + 无原动机故障（超速/滑油低压/水温高）+ 发电机未运行
+        // 即"可以安全起动"状态；不供电、运行中或故障时熄灭（灰色）
+        let ready = false;
+        const gen = (this.genId && this.sys && this.sys.comps) ? this.sys.comps[this.genId] : null;
+        if (gen && this._powered) {
+            let f = null;
+            if (typeof gen.getEngineFaults === 'function') f = gen.getEngineFaults();
+            ready = gen.mode === 'remote' && !gen.isOn
+                && (!f || (!f.overspeed && !f.oilPress && !f.coolantTemp));
+        }
+        ui.readyLed.fill(ready ? '#7dffb0' : '#8a8a8a');
     }
 
     _updateKnobs() {
@@ -437,6 +551,8 @@ export class GeneratorRemotePanel extends BaseComponent {
     isStopPressed()  { return this._stopPressed; }
     isClosePressed() { return this._closePressed; }
     isOpenPressed()  { return this._openPressed; }
+    // 合闸是否被允许（供联锁条件检测 / 工作流 check 步骤使用）
+    isClosePermitted() { return this._closePermit; }
 
     // 自动控制模块通信命令接口（经右侧 com_a/com_b 通信端口下发）
     setCommCmd(cmd) { this._commCmd = cmd || null; }
@@ -446,12 +562,18 @@ export class GeneratorRemotePanel extends BaseComponent {
         return [
             { label: '发电机 ID', key: 'genId', type: 'text' },
             { label: '主开关 ID', key: 'qfId', type: 'text' },
+            { label: '汇流排 ID（电网检测，留空不联锁）', key: 'busId', type: 'text' },
+            { label: '同步表选择开关 ID', key: 'syncSelId', type: 'text' },
+            { label: '本机档位（1~4）', key: 'selPos', type: 'number', min: 0, max: 4, step: 1 },
         ];
     }
 
     onConfigUpdate(cfg) {
         if (cfg.genId !== undefined) this.genId = cfg.genId;
         if (cfg.qfId  !== undefined) this.qfId  = cfg.qfId;
+        if (cfg.busId    !== undefined) this.busId    = cfg.busId;
+        if (cfg.syncSelId !== undefined) this.syncSelId = cfg.syncSelId;
+        if (cfg.selPos   !== undefined) this.selPos   = parseInt(cfg.selPos) || 0;
         this.config.genId = this.genId;
         this.config.qfId  = this.qfId;
         this.markDirty();

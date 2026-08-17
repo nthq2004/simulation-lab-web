@@ -39,7 +39,7 @@ import { CurrentTransformer, ACVoltmeter, PotentialTransformer, SinglePhaseFuse,
 
 import { DistributionBox } from './export.js';
 
-import { componentConfigs, initSlider } from './project/sys_ljdq3-3.js';
+import { componentConfigs, initSlider } from './project/sys_ljdq4-1.js';
     
 /**
  * ControlSystem - 控制系统仿真引擎

@@ -30,6 +30,13 @@ export class MarineMainsSwitch extends BaseComponent {
             initWorkPos:      ['connected', 'test', 'disconnected'][this._workPos],
             animDur:          this._animDur,
             coilResistance:   this._coilResistance,
+            syncScopeId:      this.syncScopeId,
+            phaseMin:         this.phaseMin,
+            phaseMax:         this.phaseMax,
+            freqDiffMax:      this.freqDiffMax,
+            genId:            this.genId,
+            revPowerKw:       this.revPowerKw,
+            revTime:          this.revTime,
         };
 
         // 主回路端口（顶部 L1/L2/L3，底部 T1/T2/T3 + 右侧 ET 电子脱扣接口）
@@ -140,6 +147,29 @@ export class MarineMainsSwitch extends BaseComponent {
         this._vibPhase            = 0;      // 当前小幅振动脉冲的相位（s）
         this._vibPulseT           = 0;      // 下一次振动脉冲的倒计时（s）
         this._agingDelay          = 0;      // 老化脱扣延迟剩余时间（s）
+
+        // ── 非同期/频差并车保护（并车保护）──
+        // syncScopeId 为空时不启用（兼容旧工程）。
+        // genId：本主开关对应的发电机 id（用于排除"本机机组"，避免把本机误判为"其它在网机组"）
+        // 合闸瞬间满足以下任一条件即视为危险并车，立即触发全船主开关跳闸：
+        //   1) 相位差落在 [phaseMin, phaseMax]（非同期）；
+        //   2) 频差 |fGen−fBus| > freqDiffMax（freqDiffMax<=0 时不启用该项）。
+        // 保护只跳开主开关，发电机保持运行（空载），可调速后重新并车。
+        this.genId      = config.genId || '';
+        this.syncScopeId = config.syncScopeId || '';
+        this.phaseMin    = config.phaseMin    !== undefined ? config.phaseMin : 60;   // 非同期相位差下界(°)
+        this.phaseMax    = config.phaseMax    !== undefined ? config.phaseMax : 270;  // 非同期相位差上界(°)
+        this.freqDiffMax = config.freqDiffMax !== undefined ? config.freqDiffMax : 0; // 允许最大频差(Hz)，<=0 不启用
+
+        // ── 逆功率保护（发电机主开关电子脱扣）──
+        // 本开关所联发电机处于"原动机故障拖转"状态（gen._primeTrip）且输出逆功率
+        // 超过 revPowerKw 时开始计时，持续 revTime 秒后跳闸（只跳本机主开关，
+        // 发电机不停机、其它主开关不受影响）。仅 _primeTrip 时启用——低频并车等
+        // 单纯的显示逆功率（物理功率仍为正）不触发本保护。
+        this.revPowerKw  = config.revPowerKw  !== undefined ? config.revPowerKw : 8; // 逆功率定值 kW
+        this.revTime     = config.revTime     !== undefined ? config.revTime    : 5; // 动作延时 s
+        this._revTimer   = 0;    // 逆功率超定值持续时间（s）
+        this._revTrip    = false; // 逆功率保护是否已动作（供教学 check 用）
 
         const s = (config.initState || 'off').toLowerCase();
         this._state = s === 'on' ? 'on' : 'off';
@@ -1051,6 +1081,119 @@ export class MarineMainsSwitch extends BaseComponent {
     }
 
     // ═══════════════════════════════════════════
+    // 非同期合闸保护（并车保护）
+    // ═══════════════════════════════════════════
+
+    /**
+     * 自动同期（并车冲击抑制）：
+     * 并联合闸接通瞬间，若待并机已满足同期条件（相位差处于允许区、
+     * 频差不越限），立即将其相位偏移 / 波形频率 / 输出电压对齐到在网机组。
+     * 由于本模型电源电动势为 ωt+φ 解析式，相位与频率一致即处处同相 → 合闸
+     * 瞬间无相位差冲击（几百安培的来源），也无并网后持续环流。
+     * 非同期合闸（相位差 60°~270° 或频差 >freqDiffMax）时不做对齐，
+     * 保留真实非同期相位差，交由 _checkOutOfSyncClose() 触发保护跳闸。
+     */
+    _autoSyncIncoming() {
+        if (!this.genId || !this.sys || !this.sys.comps) return;
+        const gen = this.sys.comps[this.genId];
+        if (!gen || gen.type !== 'source_3p' || !gen.isOn) return;
+        // 母线已在网机组（leader，排除本机所联发电机）
+        let leader = null;
+        for (const id in this.sys.comps) {
+            const c = this.sys.comps[id];
+            if (c.type === 'source_3p' && c.isOn && c.id !== this.genId) { leader = c; break; }
+        }
+        if (!leader) return; // 首台投入：无并车对象，无需同期
+        // 同期条件复核：相位差必须处于允许区（不在 [phaseMin, phaseMax]）
+        if (this.syncScopeId && this.sys.comps[this.syncScopeId]) {
+            const sc = this.sys.comps[this.syncScopeId];
+            if (typeof sc._phaseDiff === 'number') {
+                const deg = sc._phaseDiff * 180 / Math.PI;
+                if (deg >= this.phaseMin && deg <= this.phaseMax) return; // 非同期：不对齐
+            }
+            if (this.freqDiffMax > 0 && typeof sc._fGen === 'number' && typeof sc._fBus === 'number') {
+                if (Math.abs(sc._fGen - sc._fBus) > this.freqDiffMax) return; // 频差越限：不对齐
+            }
+        }
+        // 对齐：相位偏移、波形物理频率（getPhaseVoltage 用 this.freq）、显示频率、输出电压
+        gen._phaseShift = leader._phaseShift || 0;
+        if (isFinite(leader.freq))       gen.freq = leader.freq;
+        if (isFinite(leader._freq))      gen._freq = leader._freq;
+        if (isFinite(leader._freqRate))  gen._freqRate = leader._freqRate;
+        if (isFinite(leader._vRmsOut)) {
+            gen._vRmsOut = leader._vRmsOut;
+            gen._avrComp   = leader._avrComp || 0;
+            gen._avrTimer  = leader._avrTimer || 0;
+        }
+    }
+
+    /**
+     * 合闸完成瞬间调用。
+     * 仅当属于"并联投入"（母线已带电、存在其它在网机组）时检查并车条件：
+     *   - 同步表测得的相位差（待并机 − 母线，0~360°）落在 [phaseMin, phaseMax]；
+     *   - 频差 |fGen − fBus| 超过 freqDiffMax（freqDiffMax>0 时启用）。
+     * 任一越界即视为危险并车 → 立即触发全船主开关跳闸（发电机不停机）。
+     */
+    _checkOutOfSyncClose() {
+        if (!this.syncScopeId || !this.sys || !this.sys.comps) return;
+        // 首台投入（无其它在网机组 / 无其它合闸主开关）不构成"同期"，不检查。
+        // 注意排除本机所联发电机（genId），否则首台合闸时本机正在运行会被误判为"其它机组"，
+        // 从而用同步表残留相位差（待并机停机/未接入时保留旧值）误触发全船跳闸。
+        let othersOn = false;
+        for (const id in this.sys.comps) {
+            const c = this.sys.comps[id];
+            if (!c || c === this) continue;
+            // 仅算"其它发电机主开关"（带 genId 的 MarineMainsSwitch），
+            // 排除负载/母联开关（如 acb_l）与其它无关 ACB。
+            if (c.type === 'ACB' && c.genId && c._state === 'on') { othersOn = true; break; }
+            if (c.type === 'source_3p' && c.isOn && c.id !== this.genId) { othersOn = true; break; }
+        }
+        if (!othersOn) return;
+        const sc = this.sys.comps[this.syncScopeId];
+        if (!sc) return;
+        let reason = '';
+        // 1) 相位差越界（非同期并车）
+        if (typeof sc._phaseDiff === 'number') {
+            const deg = sc._phaseDiff * 180 / Math.PI;   // [0, 360)
+            if (deg >= this.phaseMin && deg <= this.phaseMax) {
+                reason = `相位差 ${Math.round(deg)}° 越界`;
+            }
+        }
+        // 2) 频差越界（freqDiffMax<=0 时不检查）
+        if (!reason && this.freqDiffMax > 0
+            && typeof sc._fGen === 'number' && typeof sc._fBus === 'number') {
+            const df = sc._fGen - sc._fBus;
+            if (Math.abs(df) > this.freqDiffMax) {
+                reason = `频差 ${df.toFixed(2)}Hz 越限（允许 ±${this.freqDiffMax}Hz）`;
+            }
+        }
+        if (reason) this._tripAllBreakers(reason);
+    }
+
+    /**
+     * 全船跳闸保护动作：所有合闸主开关自动分闸（跳闸）。
+     * 注意：发电机不停机——频差/相位差过大并车只切除主回路，
+     * 原动机仍在运行（空载），可重新调速后再次并车。
+     */
+    _tripAllBreakers(reason) {
+        const sys = this.sys;
+        if (!sys || !sys.comps) return;
+        const openList = [];
+        for (const id in sys.comps) {
+            const c = sys.comps[id];
+            if (!c) continue;
+            // 只跳闸"发电机主开关"（带 genId 的 MarineMainsSwitch）。
+            // 不能按 type==='ACB' 全匹配——会把负载/母联开关（如 acb_l）一并分闸，
+            // 导致跳闸后照明负载支路离线，即使重新合闸母线也带不起灯。
+            if (c.type === 'ACB' && c.genId && c._state === 'on') openList.push(c);
+        }
+        openList.forEach(t => { t._startAnim('open'); });
+        if (typeof console !== 'undefined') {
+            console.warn(`[并车保护] ${reason}，触发全船主开关跳闸（发电机保持运行）`);
+        }
+    }
+
+    // ═══════════════════════════════════════════
     // 仿真主循环
     // ═══════════════════════════════════════════
 
@@ -1111,6 +1254,23 @@ export class MarineMainsSwitch extends BaseComponent {
                     this.tryTrip();
                 }
             }
+            // ── 逆功率保护 ──
+            // 本机发电机原动机故障拖转（_primeTrip）且输出逆功率超定值 → 延时跳闸。
+            // 其它情况下（含低频并车显示逆功率，物理 _pwr 仍为正）不触发、不累计。
+            const gen = (this.genId && this.sys && this.sys.comps) ? this.sys.comps[this.genId] : null;
+            if (gen && gen._primeTrip && gen._pwr < -this.revPowerKw) {
+                this._revTimer += dt;
+                if (this._revTimer >= this.revTime) {
+                    this._revTimer = 0;
+                    this._revTrip = true;
+                    this.tryTrip();
+                    if (typeof console !== 'undefined') {
+                        console.warn(`[逆功率保护] ${this.id} 逆功率 ${Math.abs(gen._pwr).toFixed(1)}kW 持续 ${this.revTime}s，跳闸`);
+                    }
+                }
+            } else {
+                this._revTimer = 0;
+            }
         }
         // 储能电机通电 → 自动储能（储能弹簧损坏则无法储能）
         if (!this._faultStoreSpring && this._coilI.m >= this._pickupI.m && this._chargeProg < 5) {
@@ -1170,6 +1330,13 @@ export class MarineMainsSwitch extends BaseComponent {
                     this._animating = false; this._animJustEnded = true;
                     if (this._uvOn) {
                         this._state = 'on'; // 脱扣轴正常位，合闸保持
+                        // 自动同期：满足同期条件时先对齐待并机相位/频率/电压，
+                        // 消除合闸冲击电流；非同期合闸不对齐，走下方保护跳闸。
+                        this._autoSyncIncoming();
+                        // 并联合闸瞬间检查相位差：非同期（相位差越界）立即触发全船跳闸
+                        this._checkOutOfSyncClose();
+                        // 重新合闸视为新会话：逆功率保护动作标记复位
+                        this._revTrip = false;
                     } else {
                         // 失压无电：脱扣轴处于脱扣位，分闸弹簧拉回，合闸失败（脱扣轴仍不动）
                         this._state = 'off';
@@ -1185,6 +1352,7 @@ export class MarineMainsSwitch extends BaseComponent {
                 if (done) {
                     this._state = 'off';
                     this._animating = false; this._animJustEnded = true;
+                    this._revTimer = 0; // 分闸清除逆功率计时
                     // 脱扣轴保持在脱扣位，稳态逻辑 tBase 接管
                 }
             } else if (this._animMode === 'reject') {
@@ -1283,12 +1451,17 @@ export class MarineMainsSwitch extends BaseComponent {
     getConfigFields() {
         return [
             { label: '位号/名称',          key: 'label',              type: 'text' },
+            { label: '对应发电机 ID（并车保护用）', key: 'genId', type: 'text' },
             { label: '控制回路额定电压 (V)', key: 'ratedCtrlVoltage',   type: 'number' },
             { label: '初始状态 on/off',    key: 'initState',          type: 'text' },
             { label: '初始储能 on/off',    key: 'initCharge',         type: 'text' },
             { label: '初始工作位 connected/test/disconnected', key: 'initWorkPos', type: 'text' },
             { label: '动作时间 (s)',        key: 'animDur',            type: 'number' },
             { label: '控制线圈电阻 (Ω)',    key: 'coilResistance',     type: 'number' },
+            { label: '同步表 ID（非同期保护，留空不启用）', key: 'syncScopeId', type: 'text' },
+            { label: '非同期相位差下界 (°)', key: 'phaseMin',          type: 'number' },
+            { label: '非同期相位差上界 (°)', key: 'phaseMax',          type: 'number' },
+            { label: '允许最大频差 (Hz)，0=不启用', key: 'freqDiffMax', type: 'number' },
         ];
     }
 
@@ -1297,6 +1470,10 @@ export class MarineMainsSwitch extends BaseComponent {
         if (cfg.ratedCtrlVoltage !== undefined) { this.ratedCtrlVoltage = parseFloat(cfg.ratedCtrlVoltage); this._recalcCurrentThresholds(); }
         if (cfg.animDur          !== undefined) this._animDur         = parseFloat(cfg.animDur);
         if (cfg.coilResistance   !== undefined) { this._coilResistance = parseFloat(cfg.coilResistance); this._coilR = { m1: this._coilResistance, c1: this._coilResistance, uv1: this._coilResistance, et1: this._coilResistance }; this._coilOhm = { m: this._coilResistance, c: this._coilResistance, uv: this._coilResistance, et: this._coilResistance, fl: this._tripCoilR }; this._recalcCurrentThresholds(); }
+        if (cfg.syncScopeId  !== undefined) this.syncScopeId = String(cfg.syncScopeId);
+        if (cfg.phaseMin     !== undefined) this.phaseMin = parseFloat(cfg.phaseMin);
+        if (cfg.phaseMax     !== undefined) this.phaseMax = parseFloat(cfg.phaseMax);
+        if (cfg.freqDiffMax  !== undefined) this.freqDiffMax = parseFloat(cfg.freqDiffMax);
         if (cfg.uvCoilR         !== undefined) { this._uvCoilR = parseFloat(cfg.uvCoilR); this._recalcCurrentThresholds(); }
         this._applyCoilR(); // 失压/合闸/储能电机的独立电阻（标称值或断线无穷大）
         if (cfg.initState !== undefined) {

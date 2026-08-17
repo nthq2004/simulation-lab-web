@@ -1,7 +1,7 @@
 import { PROJECT_WORKFLOWS, FAULT_CONFIGS,
     fiveStep as defaultFiveStep,
     applyAllPresets as defaultApplyAllPresets,
-    applyStartSystem as defaultApplyStartSystem } from '../project/sys_ljdq3-3.js';
+    applyStartSystem as defaultApplyStartSystem } from '../project/sys_ljdq4-1.js';
 
 /**
  * WorkflowManager - 流程与故障管理模块

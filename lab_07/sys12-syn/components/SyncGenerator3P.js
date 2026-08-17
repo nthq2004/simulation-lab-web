@@ -138,6 +138,38 @@ export class SyncGenerator3P extends BaseComponent {
         this._rOnEff = this.rOn;
         this._phaseShift = 0;   // 并联相位偏移（弧度）：并车时对齐到系统相位
         this._peerFreq = null;  // 并联集群共享频率（本机参与集群控制后同步）
+        // ── 并车显示功率修正（教学规律：原机组只减 5%，仅 5% 转移给新并入机组）──
+        // 内部真实功率 _pwr 仍由电路求解器计算（供调差/下垂/AVR 用），
+        // 而面板/本体 LCD 显示的功率 _displayP 遵循教学规律，不直接显示内部重分配值。
+        // _lastStandaloneP：单机运行（未被并联）期间最近一次实测稳定的有功功率（即"并车前功率"）；
+        // 并网瞬间作为显示基准。_parMode=false → _displayP 恒等于 _pwr（正常显示）。
+        this._lastStandaloneP = 0;
+        this._parBaseP   = 0;     // 并车前原机功率基准 P_before
+        this._parMode    = false; // 并车显示修正模式
+        this._parIsNew   = false; // true=本机为新并入机组（显示 5%），false=原机组（显示 95%）
+        this._parPaired  = null;  // 并车的另一台机组引用（供解列时协同复位）
+        this._displayP   = 0;     // 面板/本体 LCD 显示的功率
+        // —— 并车新增负载按调差系数分配显示 ——
+        this._parShare       = 0;   // 本机有功分配比例（∝1/freqDroop，iSum 归一化）
+        this._parDP          = 0;   // 电网新增功率 ΔP（leader 低通后广播，每台一致）
+        this._parTotalBase   = NaN; // 并车稳定后总负载零点（校零用，仅 leader 维护）
+        this._parBenchFrames = 0;   // 校零倒计时：并车后短暂采样稳态总功率作为零点
+        // —— 并车份额由"并车瞬间频差"动态决定（此前固定 5%）——
+        this._parRatio = 0;         // 本机对 P_before 的显示份额（新机=Δf×20%，原机=1−新机）
+        // 单机运行期间持续记录的并车前频率（物理对齐前最后值）：
+        // 合闸/并网帧会把本机 freq 强制对齐 leader，故频差须在单机期间采样
+        this._freqStandalone   = this.freq;   // 并车前设定频率（含工作流调频）
+        this._freqOutStandalone = this._freqOut; // 并车前实际输出频率（含下垂）
+        // —— 并联期间显示频率动态基准（调节任一机设定频率 → 电网频率同步变化）——
+        // 并车后调节调速旋钮只改设定频率 this.freq，物理上系统频率按"平均设定−下垂"变化；
+        // 显示频率基准也随平均设定频率实时平移，保证两机面板读数同步跟随。
+        this._parFbase    = NaN; // 当前显示频率基准（leader 广播）
+        this._parFsetInit = NaN; // 并车时刻的平均设定频率（平移零点）
+        this._parFbaseInit = NaN; // 并车初始显示基准（=原机设定频率）
+        // —— 并联运行时频率调节 → 功率转移 ——
+        // 调高本机设定频率 → 本机显示功率增大、另一台对称减小（总功率守恒）。
+        // 相对平均设定的频偏每 0.1Hz 转移 2% 总功率（与并车频差份额同口径，无饱和）。
+        this._parTrans = 0;      // 本机运行时功率转移份额（leader 广播，无饱和）
 
         // ── 调差特性参数 ──
         // 频率-有功下垂：满载(ratedPower) 时频率下降 freqDroop Hz（调差率 4%，50×4%=2Hz）
@@ -149,14 +181,19 @@ export class SyncGenerator3P extends BaseComponent {
         // AVR 自动电压调节：压降持续 avrDelay 秒后开始补偿，avrTime 秒内恢复原值
         this.avrDelay = parseFloat(config.avrDelay) || 8;
         this.avrTime  = parseFloat(config.avrTime)  || 5;
-        // AVR 闭环最大可补偿的线电压降（V）：阻性/感性负载的内阻分压均可恢复
-        this.maxDropV = parseFloat(config.maxDropV) || 40;
-        // AVR 最大补偿比例（0~1）：限制最大升压，避免重载/起动瞬间补偿过头导致电压过冲
-        this.avrMaxComp = parseFloat(config.avrMaxComp) !== undefined ? parseFloat(config.avrMaxComp) : 0.7;
+        // 最大可补偿的线电压降（V）：需覆盖满载内阻压降 + 无功下垂，保证 AVR 最终将
+        // 端子电压补回额定值（真实发电机励磁调节即可做到）。默认 150V 线电压：
+        // 额定 400V/80kW 满载（Ie≈144A、rOn=0.4Ω）内阻线压降≈100V，覆盖有余。
+        this.maxDropV = parseFloat(config.maxDropV) || 150;
+        // AVR 最大补偿比例（0~1）：1.0 允许全额补偿到额定电压（电压仅受 1.3·vRms 防
+        // 冲击上限约束）；比例速率控制 + 死区 + 延时已保证无过冲。
+        this.avrMaxComp = parseFloat(config.avrMaxComp) !== undefined ? parseFloat(config.avrMaxComp) : 1.0;
 
         // 实际输出量（含调差），供波形/LCD/遥控面板读取
         this._freqOut  = this.freq;
         this._vRmsOut  = this.vRms;
+        this._displayFreq = this.freq; // 显示频率（并车修正时随显示功率下垂）
+        this._freqSetPre = NaN;        // 并网前设定频率（并车显示频率的基准，防并网对齐覆盖）
         this._avrTimer = 0;   // 压降持续时间
         this._avrComp  = 0;   // AVR 补偿量 0~1
         this._errFilt  = 0;   // 端子电压误差低通滤波值（相电压）
@@ -173,6 +210,22 @@ export class SyncGenerator3P extends BaseComponent {
         this._faultGovernor = false;
         // 调压器（AVR）故障：线电压降至 200V，频率不受影响
         this._faultAVR      = false;
+
+        // ── 原动机故障标志（用于遥控面板 READY FOR START 指示灯条件）──
+        // 运行时任一故障被置位 → 原动机保护停机（isOn 强制置 false）；
+        // 故障未清除前无法再次起动（遥控/本地起动指令均会被保护逻辑立即清零）。
+        this._faultOverspeed   = false; // 原动机超速故障
+        this._faultOilPress    = false; // 滑油低压故障
+        this._faultCoolantTemp = false; // 冷却水温高故障
+
+        // ── 原动机故障拖转（逆功率）──
+        // 冷却水温高且并联运行：原动机故障停机，发电机被母线拖动（电动机方式），
+        // 输出真实逆功率，从 0 线性爬升至 revMaxKw。主开关逆功率保护在逆功率
+        // 达到 8kW 后延时 5s 跳闸（保护由 MarineMainsSwitch 实现）。
+        this._primeTrip   = false;      // 原动机故障拖转中
+        this._primeTripT  = 0;          // 故障持续时间（s，驱动逆功率爬升）
+        this.revRiseKw    = parseFloat(config.revRiseKw) || 1.5; // 逆功率爬升率 kW/s（0→9kW 约 6s）
+        this.revMaxKw     = parseFloat(config.revMaxKw)  || 9;   // 逆功率上限 kW
     }
 
     _recalcRatedCurrent() {
@@ -517,9 +570,10 @@ export class SyncGenerator3P extends BaseComponent {
     getPhaseVoltage(phase, time) {
         if (!this.isOn) return 0;
         const vRms = this._vRmsOut || this.vRms;
-        // 实际输出波形频率恒为设定频率（50Hz），保证感应电机相序检测与同步速稳定。
-        // _freqOut（调差下垂后的显示频率）只用于表计显示，不影响实际波形。
-        const freq = this.freq || 50;
+        // 波形频率恒定为电网基频 50Hz：频率-有功下垂（_freqOut）只反映在表计显示上，
+        // 不改变实际输出波形频率。因此并联机组波形严格同频，相位由 _phaseShift 唯一决定，
+        // 不会因带载调差或调速方式差异产生相位漂移 → 并车无相位冲击、无持续环流。
+        const freq = 50;
         const peak = vRms * Math.SQRT2;
         const omega = 2 * Math.PI * freq;
         let offset = 0;
@@ -596,6 +650,22 @@ export class SyncGenerator3P extends BaseComponent {
                 if (remoteStop)  this.isOn = false; // 停止指令优先
             }
 
+            // 原动机保护停机：超速 / 滑油低压 → 立即停机（保护动作）；
+            // 冷却水温高 → 并联运行时原动机故障、发电机被母线拖转（输出逆功率），
+            // 单机运行时停机。故障未清除前无法起动。
+            if (this._faultOverspeed || this._faultOilPress || this._faultCoolantTemp) {
+                if (this._faultCoolantTemp && this._peers.length > 0 && this.isOn) {
+                    // 并网拖转：保持并网（MNA 仍 stamp 电压源），进入逆功率状态
+                    if (!this._primeTrip) { this._primeTrip = true; this._primeTripT = 0; }
+                } else {
+                    this.isOn = false; // 单机停机 / 其它原动机故障停机
+                }
+            } else if (this._primeTrip) {
+                // 冷却水温高故障已修复 → 退出拖转状态
+                this._primeTrip = false;
+                this._primeTripT = 0;
+            }
+
             // 加速/减速指令端口：正电压加速、负电压减速
             const cP = solver.portToCluster.get(`${this.id}_wire_freq_in_p`);
             const cN = solver.portToCluster.get(`${this.id}_wire_freq_in_n`);
@@ -660,6 +730,14 @@ export class SyncGenerator3P extends BaseComponent {
                     this._rmsV = (avg(this._vBufU) + avg(this._vBufV) + avg(this._vBufW)) / 3;
                     // 缓冲为空（起动/并网清窗后测量帧被过滤）时不能算 0/0=NaN
                     this._pwr = this._pBuf.length > 0 ? this._pBuf.reduce((a, b) => a + b, 0) / this._pBuf.length : 0;
+
+                    // 原动机故障拖转：发电机被母线拖动，输出真实逆功率。
+                    // 从 0 线性爬升至 revMaxKw（默认 9kW）后保持，供主开关逆功率
+                    // 保护检测（≥8kW 延时 5s 跳闸）。显示层与保护均读此 _pwr。
+                    if (this._primeTrip) {
+                        this._primeTripT += dt;
+                        this._pwr = -Math.min(this.revMaxKw, this.revRiseKw * this._primeTripT);
+                    }
                 }
             } else {
                 this._curBufU.length = this._curBufV.length = this._curBufW.length = 0;
@@ -668,6 +746,27 @@ export class SyncGenerator3P extends BaseComponent {
                 this._rmsI = 0;
                 this._pwr = 0;
                 this._rmsV = 0;
+                // 停机/起动翻转：并车显示基准与修正模式复位，
+                // 避免上次会话的旧基准残留污染下一次并车显示
+                this._lastStandaloneP = 0;
+                this._parMode = false;
+                this._parPaired = null;
+                this._displayP = 0;
+                this._displayFreq = this.freq;
+                this._freqSetPre = NaN;
+                this._parShare = 0;
+                this._parDP = 0;
+                this._parTotalBase = NaN;
+                this._parBenchFrames = 0;
+                this._parRatio = 0;
+                this._freqStandalone = this.freq;
+                this._freqOutStandalone = this._freqOut;
+                this._parFbase = NaN;
+                this._parFsetInit = NaN;
+                this._parFbaseInit = NaN;
+                this._parTrans = 0;
+                this._primeTrip = false;
+                this._primeTripT = 0;
             }
             // 起动瞬间/并网瞬间：本机与在网机组建立连接（0→N peer）时，
             // 将频率与相位对齐到集群主机。本模型电动势相位为 ω·t 解析式，
@@ -681,6 +780,12 @@ export class SyncGenerator3P extends BaseComponent {
                     this._phaseShift = leader._phaseShift || 0;
                     this._freq = leader._freq;
                     this._freqRate = leader._freqRate;
+                    // 波形物理频率必须同步对齐：getPhaseVoltage 使用 this.freq 生成波形，
+                    // 若仅对齐 _freq（显示频率），两机频率不同会导致并网后相位持续漂移，
+                    // 产生数百安培的持续环流。对齐后只要双方频率严格相等即相位恒等。
+                    // 先记录并网前设定频率（并车显示频率的基准），再被覆盖为 leader 设定值。
+                    this._freqSetPre = this.freq;
+                    if (isFinite(leader.freq)) this.freq = leader.freq;
                     // 并联机组挂同一母线，端子电压必须一致：复制主机输出电动势幅值，
                     // 避免本机因并网前空载电压偏高/偏低造成电压差 → 环流。
                     if (isFinite(leader._vRmsOut)) {
@@ -697,6 +802,146 @@ export class SyncGenerator3P extends BaseComponent {
                     if (p._curBufU) p._curBufU.length = p._curBufV.length = p._curBufW.length = 0;
                     if (p._pBuf) p._pBuf.length = 0;
                 }
+            }
+
+            // ── 并车显示功率修正（教学规律:原机组只减 5%，仅 5% 转移给新并入机组）──
+            // 内部功率 _pwr（求解器按电路/调差计算）保留，仅修改面板/本体 LCD 的显示功率。
+            if (this.isOn && this._peers.length === 0) {
+                // 单机运行（未并联）：持续记录"并车前功率"作为并车显示基准；
+                // 且单机必须显示内部真实功率（_parMode=false → _displayP=_pwr）
+                this._lastStandaloneP = isFinite(this._pwr) ? this._pwr : this._lastStandaloneP;
+                // 并车前频率（物理对齐前的最后值）：并车份额按并车瞬间频差决定，
+                // 频差 = 新机设定频率 − 原机实际输出频率，须在单机期间持续采样
+                this._freqStandalone = this.freq;
+                this._freqOutStandalone = this._freqOut;
+                if (this._parMode) { this._parMode = false; this._parPaired = null; }
+                this._refreshDisplayP();
+            }
+            const becamePar = this.isOn && this._peers.length > 0 && this._lastPeerCnt === 0;
+            if (becamePar) {
+                // 本机刚并入：决定"原机组 / 新机组"并广播显示基准
+                let leader = this;
+                for (const p of this._peers) if (p.id < leader.id) leader = p;
+                // 原机组 = 并车前的在网机组（此场景 leader 即原机组）：
+                // 其 _lastStandaloneP 保存了并车前最近的实测功率，作为 P_before
+                const owner = (leader && leader !== this && leader._lastStandaloneP > 0)
+                    ? leader                                  // 并车进已有网络：原机是 leader
+                    : this;                                   // 多台同时并入（罕见）：以本机作基准
+                const Pbefore = owner._lastStandaloneP > 0 ? owner._lastStandaloneP
+                    : (isFinite(this._pwr) ? this._pwr : 0);
+                // 配对新入机组（供解列时原机复位对方）
+                let newGen = null;
+                for (const p of this._peers) if (p !== owner) { newGen = p; break; }
+                // 边界：本机帧（this===owner）的 peers 恰都不被排除时 newGen 为 null，
+                // 此时以本机自身与会由 leader 帧广播一致的方案兜底，避免空引用崩溃。
+                const incGen = newGen || (this !== owner ? this : null);
+                // ── 并车瞬间频差决定显示份额（替代固定 5%）──
+                // 频差 = 新机并车前设定频率 − 原机并车前实际输出频率（Hz）。
+                // 每 0.1Hz 频差对应 2% 总功率：份额 = Δf×20%（如 +0.2Hz→4%、−0.1Hz→−2%）；
+                // clamp ±10% 对应同步保护频差边界 ±0.5Hz。频差为负 → 新机份额为负（吸收功率）、
+                // 原机份额 >100%（如 −2% → 原机 102%）。物理上合闸/并网帧会强制将新机 freq
+                // 对齐 leader，故频差取单机期间的 _freqStandalone/_freqOutStandalone 记录。
+                const df = incGen && isFinite(owner._freqOutStandalone) && isFinite(incGen._freqStandalone)
+                    ? incGen._freqStandalone - owner._freqOutStandalone
+                    : 0;
+                const ratioNew = Math.max(-0.1, Math.min(0.1, (isFinite(df) ? df : 0) * 0.2));
+                // 新增负载按调差系数反比分配：freqDroop 大的机组分得的有功小。
+                // 与物理分配一致（_rOnEff ∝ freqDroop → P_i ∝ 1/freqDroop）。
+                const invD = (g) => 1 / ((g && g.freqDroop > 0) ? g.freqDroop : 1);
+                const allGens = [...this._peers, this];
+                let iSum = 0;
+                for (const g of allGens) iSum += invD(g);
+                // 并车显示频率基准：并车时刻平均设定频率作为平移零点，
+                // 之后调节任一机设定频率 → 平均设定变化 → 电网显示频率同步变化。
+                // 注：此帧各机 freq 已被 _autoSyncIncoming/并网对齐（均等于 leader 设定），
+                // 故 fSetInit 即对齐后的共同设定频率，fBaseInit 取原机设定。
+                let fSetSum = 0;
+                for (const g of allGens) fSetSum += g.freq;
+                const fSetInit = fSetSum / allGens.length;
+                const fBaseInit = owner.freq;
+                // 给集群内全部机组（含自身）写入显示基准
+                // （多机场景：owner 的份额应为 1−Σ各新机份额；本工程两机，owner=1−ratioNew）
+                const apply = (g, isNew) => {
+                    g._parMode = true;
+                    // 并车原负载基准：起步用并车前原机稳态实测负载 Pbefore
+                    //（单机期间持续采样的稳态值，无并网冲击污染）；
+                    // 校零期内由 leader 帧逐步平滑过渡到 _parTotalBase（见 leader 帧）。
+                    g._parBaseP = Pbefore;
+                    g._parIsNew = isNew;
+                    g._parPaired = isNew ? owner : (newGen || null);
+                    g._parShare = iSum > 0 ? invD(g) / iSum : 0;
+                    g._parRatio = isNew ? ratioNew : (1 - ratioNew);
+                    g._parDP = 0;
+                    g._parTotalBase = NaN;
+                    g._parBenchFrames = 50; // 并车后 2.5s 校零
+                    g._parFsetInit = fSetInit;
+                    g._parFbaseInit = fBaseInit;
+                    g._parFbase = fBaseInit;
+                    g._parTrans = 0;
+                };
+                for (const p of this._peers) apply(p, p !== owner);
+                apply(this, this !== owner);
+                // 立即刷新一次显示功率
+                this._refreshDisplayP();
+                for (const p of this._peers) if (p._refreshDisplayP) p._refreshDisplayP();
+            } else if (this.isOn && this._peers.length === 0 && this._lastPeerCnt > 0) {
+                // 解列（N→0）：恢复显示真实功率
+                if (this._parPaired && this._parPaired._parMode) this._parPaired._parMode = false;
+                this._parMode = false;
+                this._parPaired = null;
+                this._displayP = isFinite(this._pwr) ? this._pwr : 0;
+            }
+            // 并联保持期间：电网新增负载功率按调差系数分配加到显示功率上。
+            // leader 统一计算并广播，保证两台面板读数一致。
+            if (this._parMode && this._peers.length > 0) {
+                let leader = this;
+                for (const p of this._peers) if (p.id < leader.id) leader = p;
+                if (leader === this) {
+                    // 当前并联总负载（各机内部真实功率求和）
+                    let tot = isFinite(this._pwr) ? this._pwr : 0;
+                    for (const p of this._peers) tot += (isFinite(p._pwr) ? p._pwr : 0);
+                    if (this._parBenchFrames > 0) {
+                        // 校零期：并车后测量窗波动大，不判定新增负载，仅平滑采稳态总功率作零点
+                        this._parBenchFrames--;
+                        this._parTotalBase = (this._parBenchFrames === 49)
+                            ? tot
+                            : (isFinite(this._parTotalBase) ? this._parTotalBase * 0.8 + tot * 0.2 : tot);
+                        this._parDP = 0;
+                        // 原负载基准逐步平滑过渡到校零稳态值（从并车前 Pbefore 起平滑），
+                        // 避免校零结束瞬间显示跳变；两机基准保持一致。
+                        this._parBaseP = this._parTotalBase;
+                        for (const p of this._peers) p._parBaseP = this._parTotalBase;
+                    } else {
+                        // 新增功率 = 当前总负载 - 并车稳态零点，经低通平滑（抑制波动）
+                        const dp = Math.max(0, tot - this._parTotalBase);
+                        this._parDP = this._parDP * 0.8 + dp * 0.2;
+                    }
+                    for (const p of this._peers) {
+                        p._parDP = this._parDP;
+                        p._parBenchFrames = this._parBenchFrames;
+                    }
+                    // ── 显示频率动态基准：平均设定频率平移叠加到并车初始基准 ──
+                    // 并联运行后调节任一机调速旋钮（只改 this.freq），电网频率随之变化，
+                    // 两机显示频率须同步跟随。物理上 fTarget=平均设定−下垂，此处同口径：
+                    //   fBase = 并车初始基准 +（当前平均设定 − 并车时平均设定）
+                    let fSum = this.freq, nF = 1;
+                    for (const p of this._peers) { fSum += p.freq; nF++; }
+                    const fAvg = fSum / nF;
+                    const fBaseDyn = (isFinite(this._parFbaseInit) && isFinite(this._parFsetInit))
+                        ? this._parFbaseInit + (fAvg - this._parFsetInit)
+                        : this.freq;
+                    this._parFbase = fBaseDyn;
+                    // ── 运行时频率调节 → 功率转移份额 ──
+                    // 相对平均设定越高 → 本机承担越多。每 0.1Hz 频偏 → 2% 总功率，
+                    // 无饱和限制：持续调节频率（至旋钮限位 45~55Hz）功率持续转移，
+                    // 两机 Σtransfer=0 保证总显示功率守恒。份额可超 100%（另一台为负）。
+                    this._parTrans = (isFinite(this.freq - fAvg) ? (this.freq - fAvg) : 0) * 0.2;
+                    for (const p of this._peers) {
+                        p._parFbase = fBaseDyn;
+                        p._parTrans = (isFinite(p.freq - fAvg) ? (p.freq - fAvg) : 0) * 0.2;
+                    }
+                }
+                this._refreshDisplayP();
             }
             this._lastPeerCnt = this._peers.length;
             this._prevIsOn = this.isOn;
@@ -791,7 +1036,7 @@ export class SyncGenerator3P extends BaseComponent {
             this._errFilt = (this._errFilt || 0) + (dropPh - (this._errFilt || 0)) * Math.min(1, dt / 0.2);
             const db = 1.0;   // 死区（V，相电压）
             const satErr = 10; // 误差达到此值（V相）时为满速率
-            const maxC = this.avrMaxComp || 0.7;  // 补偿量上限（防起动瞬间过冲）
+            const maxC = this.avrMaxComp || 1.0; // 补偿量上限（防起动瞬间过冲）
             const errAbs = Math.abs(this._errFilt);
             // 速率比例系数：|err|≤死区→0，≥satErr→1，线性过渡（比例控制，天然防过冲）
             const kRate = Math.min(1, Math.max(0, (errAbs - db) / (satErr - db)));
@@ -843,23 +1088,66 @@ export class SyncGenerator3P extends BaseComponent {
         if (this.sys && typeof this.sys.requestRedraw === 'function') this.sys.requestRedraw();
     }
 
+    // ── 显示读数（本体 LCD 与遥控面板共用同一来源）────────────────
+    // 电压使用实测端子值（滑窗 RMS）；功率使用 _displayP（并车教学修正）；
+    // 电流与功率因数均随显示功率自洽推导：
+    //   ① 功率因数取"真实负载功率因数"——由内部有功 _pwr 与真实电流 _rmsI 得出，
+    //      保留电路真实物理特性（白炽灯≈1、电机感性≈0.8 等）；
+    //   ② 显示电流由 显示功率/(√3·线电压·真实功率因数) 反推，
+    //      使并车修正下 I、P、cosφ 三者严格自洽（P=√3·V·I·cosφ）。
+    // 单机时 _displayP=_pwr，反推电流与真实 _rmsI 数学恒等，显示不变。
+    _displayReading() {
+        const lineV = this._rmsV > 0 ? Math.sqrt(3) * this._rmsV : this.getLineVoltage();
+        const P = isFinite(this._displayP) ? this._displayP : this._pwr;
+        const pwrReal = isFinite(this._pwr) ? this._pwr : 0;
+        let cos = 0;
+        if (this._rmsI > 0 && lineV > 0 && pwrReal !== 0) {
+            // 逆功率（拖转/低频并车）时功率因数为正（数值上取 |有功|），
+            // 电流方向由有功符号表达，cosφ 本身恒为 0~1
+            cos = Math.min(1, Math.max(0, (Math.abs(pwrReal) * 1000) / (Math.sqrt(3) * lineV * this._rmsI)));
+        }
+        let I = 0;
+        if (P !== 0 && lineV > 0) {
+            if (cos > 0) {
+                I = (Math.abs(P) * 1000) / (Math.sqrt(3) * lineV * cos);
+            } else {
+                // 真实功率因数丢失（如无功环流/励磁分量）→ 按纯阻性估算，避免除零爆表
+                I = (Math.abs(P) * 1000) / (Math.sqrt(3) * lineV);
+            }
+        }
+        return {
+            on:    !!this.isOn,
+            lineV: lineV,
+            // 并车修正模式下的显示频率：
+            //   原机组：随自身显示功率下垂（_displayFreq，功率只减 5% → 频率几乎不变）；
+            //   新机组：[2 号机]直接复制原机组(_parPaired)的显示频率——并联机组必须同频，
+            //      新机若按自身 5% 显示功率单独下垂会得到偏高的频率（近似空载频率），
+            //      与新机已并网运行的物理事实不符、且与原机显示不一致。
+            // 非并车修正（单机/解列）：显示真实频率 _freqOut。
+            freq:  (this._parMode && isFinite(this._parBaseP) && this._parBaseP > 0)
+                ? ((this._parIsNew && this._parPaired && isFinite(this._parPaired._displayFreq))
+                    ? this._parPaired._displayFreq
+                    : (isFinite(this._displayFreq) ? this._displayFreq : (this._freqOut ?? this.freq)))
+                : ((this._freqOut ?? this.freq) || 0),
+            I:     I || 0,
+            P:     P || 0,
+            cos:   cos,
+        };
+    }
+
     _updateDisplay() {
         // LCD 与遥控面板一致：行1 电压/频率，行2 电流/功率，行3 功率因数
-        // 电压使用实测端子值（与电子脱扣器同步）；未测到前回退到设定值
-        const lineV = this._rmsV > 0 ? Math.sqrt(3) * this._rmsV : this.getLineVoltage();
-        const cos = this._rmsI > 0
-            ? Math.min(1, Math.max(-1, (this._pwr * 1000) / (Math.sqrt(3) * lineV * this._rmsI)))
-            : 0;
+        const r = this._displayReading();
         // 电流/功率 >100 去掉小数点，否则保留 1 位小数
         const fmt = (v) => v > 100 ? v.toFixed(0) : v.toFixed(1);
         if (this._lcdFreq) {
-            this._lcdFreq.text(this.isOn ? `V ${lineV.toFixed(1)}V  F ${(this._freqOut ?? this.freq).toFixed(1)}Hz` : 'V--  F--');
+            this._lcdFreq.text(this.isOn ? `V ${r.lineV.toFixed(1)}V  F ${r.freq.toFixed(1)}Hz` : 'V--  F--');
         }
         if (this._lcdVolt) {
-            this._lcdVolt.text(this.isOn ? `I ${fmt(this._rmsI)}A  P ${fmt(this._pwr)}kW` : 'I--  P--');
+            this._lcdVolt.text(this.isOn ? `I ${fmt(r.I)}A  P ${fmt(r.P)}kW` : 'I--  P--');
         }
         if (this._lcdRated) {
-            this._lcdRated.text(this.isOn ? `COSφ ${cos.toFixed(2)}` : 'COS--');
+            this._lcdRated.text(this.isOn ? `COSφ ${r.cos.toFixed(2)}` : 'COS--');
         }
         // 带灯按钮：运行→起动灯亮(绿)，停机→停止灯亮(红)
         if (this._startLed) {
@@ -868,6 +1156,82 @@ export class SyncGenerator3P extends BaseComponent {
         if (this._stopLed) {
             this._stopLed.fill(this.isOn ? '#3a3a3a' : '#ff7d6b');
         }
+    }
+
+    // ── 原动机故障（供遥控面板 READY FOR START 指示灯与故障教学使用）──
+    getEngineFaults() {
+        return {
+            overspeed:   !!this._faultOverspeed,
+            oilPress:    !!this._faultOilPress,
+            coolantTemp: !!this._faultCoolantTemp,
+        };
+    }
+
+    // 刷新并车修正后的显示功率：
+    // 显示功率 = 并车基准份额(_parRatio：由并车瞬间频差决定，替代固定 5%)
+    //            + 运行时频率调节转移份额(_parTrans：调高本机频率→功率增大)
+    //            × P_before
+    //            + 电网新增负载功率按调差系数分配的本机份额（_parShare×_parDP）。
+    // 非并车修正模式下 _displayP 恒等于内部功率 _pwr。
+    // 显示频率与显示功率联动：并车修正时按"显示功率×单机下垂公式"计算（随显示功率
+    // 变化，不随真实功率），故原机功率只减 5% → 显示频率几乎不变；单机/解列时显示
+    // 真实频率 _freqOut。
+    _refreshDisplayP() {
+        // 原动机故障拖转：显示真实逆功率（负），频率跟随并联母线（不复刻单机下垂）
+        if (this._primeTrip) {
+            this._displayP = isFinite(this._pwr) ? this._pwr : 0;
+            this._displayFreq = (this._parMode && this._parPaired && isFinite(this._parPaired._displayFreq))
+                ? this._parPaired._displayFreq
+                : this._freqOut;
+            return;
+        }
+        if (!this.isOn || !this._parMode || !isFinite(this._parBaseP) || this._parBaseP <= 0) {
+            this._displayP = isFinite(this._pwr) ? this._pwr : 0;
+            this._displayFreq = this._freqOut;
+            return;
+        }
+        // 三层功率分配语义（教学规律）：
+        //  1) 并车原负载（_parBaseP）：按并车瞬间频差份额 _parRatio 分配（正频差 0.1Hz→2%，
+        //     由并车前新机设定频率 − 原机输出频率决定），并叠加运行时调设定产生的转移份额
+        //     _parTrans（调节调速器只在本层转移功率，Σratio=1、Σtrans=0）；
+        //  2) 电网新增负载（_parDP）：按调差系数份额 _parShare 分配（调差系数相同 → 均分，
+        //     Σshare=1）。
+        // 总显示功率 = (ratio+trans)×base + share×dp，Σ=1 → 守恒。
+        const base = this._parBaseP;
+        const ratio = this._parRatio || 0;
+        const trans = isFinite(this._parTrans) ? this._parTrans : 0;
+        const share = this._parShare || 0;
+        const dp = (share > 0 && isFinite(this._parDP) && this._parDP > 0)
+            ? this._parDP    // 新增负载功率
+            : 0;
+        this._displayP = (ratio + trans) * base + share * dp;
+        // 显示频率按显示功率单机下垂（与 fTarget 单机公式一致）：
+        //   f = 并车前设定频率 fBase - (P_display/ratedPower)×freqDroop
+        // fBase 采用并联期间 leader 广播的动态基准（_parFbase）：并车后调节任一机
+        // 设定频率 → 平均设定变化 → 电网显示频率同步平移；并网瞬间物理层会把 freq
+        // 对齐到 leader，_freqSetPre 仅在广播基准不可用时兜底。
+        const fBase = isFinite(this._parFbase)
+            ? this._parFbase
+            : (isFinite(this._freqSetPre) ? this._freqSetPre : this.freq);
+        const Pkw = Math.max(-2 * this.ratedPower, Math.min(2 * this.ratedPower, this._displayP));
+        this._displayFreq = this.ratedPower > 0
+            ? fBase - (Pkw / this.ratedPower) * this.freqDroop
+            : fBase;
+    }
+
+    // ── 显示参数（供遥控面板 LCD 直接读取，与本体 LCD 完全同源同步）──
+    getDisplayParams() {
+        return this._displayReading();
+    }
+
+    // 设置原动机故障：kind ∈ 'overspeed' | 'oilPress' | 'coolantTemp'；on=true 置位故障
+    setEngineFault(kind, on) {
+        const map = { overspeed: '_faultOverspeed', oilPress: '_faultOilPress', coolantTemp: '_faultCoolantTemp' };
+        const k = map[kind];
+        if (!k) return;
+        this[k] = !!on;
+        this.markDirty();
+        if (this.sys && typeof this.sys.requestRedraw === 'function') this.sys.requestRedraw();
     }
 
     // ─────────────────────────── 配置 ───────────────────────────
@@ -903,6 +1267,10 @@ export class SyncGenerator3P extends BaseComponent {
             this.mode = cfg.mode === 'remote' ? 'remote' : 'local';
             if (this._switchKnob) this._switchKnob.rotation(this.mode === 'local' ? -45 : 45);
         }
+        // 原动机故障注入（故障教学 / READY FOR START 灯演示）
+        if (cfg.faultOverspeed   !== undefined) this._faultOverspeed   = cfg.faultOverspeed   === true || cfg.faultOverspeed   === 'true';
+        if (cfg.faultOilPress    !== undefined) this._faultOilPress    = cfg.faultOilPress    === true || cfg.faultOilPress    === 'true';
+        if (cfg.faultCoolantTemp !== undefined) this._faultCoolantTemp = cfg.faultCoolantTemp === true || cfg.faultCoolantTemp === 'true';
         if (cfg.freqDroop !== undefined) this.freqDroop = parseFloat(cfg.freqDroop) || 2;
         if (cfg.qDroopVar !== undefined) this.qDroopVar = parseFloat(cfg.qDroopVar) || 40000;
         if (cfg.vDroopV   !== undefined) this.vDroopV   = parseFloat(cfg.vDroopV)   || 20;
