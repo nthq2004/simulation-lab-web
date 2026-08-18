@@ -114,6 +114,7 @@ export class GeneratorRemotePanel extends BaseComponent {
         this._userClosePressed = false;
         this._userOpenPressed  = false;
         this._userSpdVolt      = 0;
+        this._openPressedPrev  = false;   // 分闸按钮边沿检测（按压瞬间冻结解列前快照）
 
         // 合闸按钮按压动作检测：无论联锁是否放行，按下"合闸"按钮即计数。
         // 教学流程用（如"联锁封锁"步骤须先产生合闸动作才能通过）。
@@ -363,6 +364,13 @@ export class GeneratorRemotePanel extends BaseComponent {
 
         this._sensePower();
         this._synthesizeCommand();
+        // 分闸按钮按压瞬间：冻结关联发电机及其并联伙伴的"解列前"显示状态，
+        // 供 SyncGenerator3P 解列分支做等效设定复位（避免断线过渡帧污染基准）。
+        if (this._openPressed && !this._openPressedPrev) {
+            const g = (this.genId && this.sys && this.sys.comps) ? this.sys.comps[this.genId] : null;
+            if (g && typeof g.freezeDecouple === 'function') g.freezeDecouple();
+        }
+        this._openPressedPrev = this._openPressed;
         this._sampleGen();
         this._updateLCD();
         this._updateButtons();

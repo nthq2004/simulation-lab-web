@@ -98,6 +98,10 @@ export class SyncGenerator3P extends BaseComponent {
         this.freq    = parseFloat(config.freq)    || 50;
         this.freqMin = parseFloat(config.freqMin) || 45;
         this.freqMax = parseFloat(config.freqMax) || 55;
+        // 解列后自动把设定软复位到"解列前系统状态对应的等效设定"：
+        // 使解列动作仅体现被转移负载对应的频率下垂（留网机降、被解列机升），
+        // 默认关闭，仅特定教学流程启用（sys_ljdq4-1.js 的 gen1/gen2）。
+        this.autoDecoupleTrim = config.autoDecoupleTrim === true;
         this.vRms    = parseFloat(config.vRms)    || 230;
         this.rOn     = parseFloat(config.rOn)     || 0.4;
         this.isOn    = config.isOn === true || config.isOn === 'true';
@@ -156,6 +160,9 @@ export class SyncGenerator3P extends BaseComponent {
         this._parBenchFrames = 0;   // 校零倒计时：并车后短暂采样稳态总功率作为零点
         // —— 并车份额由"并车瞬间频差"动态决定（此前固定 5%）——
         this._parRatio = 0;         // 本机对 P_before 的显示份额（新机=Δf×20%，原机=1−新机）
+        // —— 解列前快照（面板分闸按钮按下瞬间冻结，供解列分支等效设定复位）——
+        this._parDecP = NaN;        // 解列前本机显示功率
+        this._parDecF = NaN;        // 解列前系统频率（_freqOut）
         // 单机运行期间持续记录的并车前频率（物理对齐前最后值）：
         // 合闸/并网帧会把本机 freq 强制对齐 leader，故频差须在单机期间采样
         this._freqStandalone   = this.freq;   // 并车前设定频率（含工作流调频）
@@ -765,6 +772,8 @@ export class SyncGenerator3P extends BaseComponent {
                 this._parFsetInit = NaN;
                 this._parFbaseInit = NaN;
                 this._parTrans = 0;
+                this._parDecP = NaN;
+                this._parDecF = NaN;
                 this._primeTrip = false;
                 this._primeTripT = 0;
             }
@@ -888,6 +897,42 @@ export class SyncGenerator3P extends BaseComponent {
                 // 解列（N→0）：恢复显示真实功率
                 if (this._parPaired && this._parPaired._parMode) this._parPaired._parMode = false;
                 this._parMode = false;
+                // 解列瞬间把设定软复位到"解列前系统状态对应的等效设定"：
+                //   newFreq = 解列前系统频率 fSys + 本机解列前显示功率/额定×下垂
+                // 解列后两机端口簇各自独立，均满足 peers:0→0 走本分支，因此各机按
+                // 自身快照复位即可——留网机承接负载频率微降、被解列机卸载空载频率
+                // 微升，两机特征对称连续、无跳变。
+                // 仅在"设定明显偏离解列前系统频率"(>0.3Hz，转移功率残留场景)时生效；
+                // 正常设定（如 reverse-power 中 1# 满载 50Hz 设定）不触发，避免复并后
+                // 系统频率被异常设定抬高。跳闸解列（isOn=false）不走本分支，零影响。
+                if (this.autoDecoupleTrim) {
+                    // 系统频率与显示功率优先取"分闸按钮按下瞬间"冻结的快照（_parDecF/_parDecP），
+                    // 断线过渡帧会把 _displayP 重组（dp 分层丢失）并污染 _freqOut，快照失效再回退。
+                    const fSys = (isFinite(this._parDecF) && this._parDecF > 0)
+                        ? this._parDecF
+                        : ((isFinite(this._freqOut) && this._freqOut > 0) ? this._freqOut : this._displayFreq);
+                    // Ps 允许负值：解列前处于逆功率的机组（如 reverse-power 流程）其显示
+                    // 功率为负，快照必须原样使用，否则会回退到断线过渡帧被重组污染的
+                    // _displayP（实测解列帧瞬间 _displayP 会从 -1.3kW 跳成 +9.7kW）。
+                    const Ps = isFinite(this._parDecP)
+                        ? this._parDecP
+                        : (isFinite(this._displayP) ? this._displayP : 0);
+                    // 仅当"两机设定均值明显偏离解列前系统频率"（转移功率残留场景，如流程 5
+                    // 步骤 9 后 1#=51.7/2#=49.6、均值 50.65 vs fSys 49.995 差 0.66Hz）才复位；
+                    // 正常设定（如 reverse-power 中 1#=50/2#≈50、均值≈fSys）及复并 act 正在
+                    // 准备的设定不触发，避免破坏复并流程。均值须用 _parPaired（分支末尾才清）。
+                    const pairF = (this._parPaired && isFinite(this._parPaired.freq))
+                        ? this._parPaired.freq : this.freq;
+                    const dev = Math.abs((this.freq + pairF) / 2 - fSys);
+                    if (isFinite(fSys) && dev > 0.3) {
+                        const newFreq = this.ratedPower > 0
+                            ? fSys + (Ps / this.ratedPower) * this.freqDroop
+                            : fSys;
+                        if (isFinite(newFreq) && Math.abs(this.freq - newFreq) > 0.02) {
+                            this.freq = Math.max(this.freqMin, Math.min(this.freqMax, newFreq));
+                        }
+                    }
+                }
                 this._parPaired = null;
                 this._displayP = isFinite(this._pwr) ? this._pwr : 0;
             }
@@ -1165,6 +1210,21 @@ export class SyncGenerator3P extends BaseComponent {
             oilPress:    !!this._faultOilPress,
             coolantTemp: !!this._faultCoolantTemp,
         };
+    }
+
+    // ── 解列前快照（面板分闸按钮按下瞬间由 GeneratorRemotePanel 调用）──
+    // 并联稳态时冻结本机与并联伙伴的显示功率与系统频率，供解列分支做
+    // "等效设定复位"：newFreq = 解列前系统频率 + 本机解列前下垂。此刻尚未断线，
+    // _displayP/_freqOut 都是并联稳态值，不受断线过渡帧重组污染。
+    freezeDecouple() {
+        const freeze = (g) => {
+            if (!g) return;
+            g._parDecP = isFinite(g._displayP) ? g._displayP : g._pwr;
+            g._parDecF = (isFinite(g._freqOut) && g._freqOut > 0) ? g._freqOut : g._displayFreq;
+        };
+        const peer = (this._parMode && this._parPaired) ? this._parPaired : null;
+        freeze(this);
+        if (peer) freeze(peer);
     }
 
     // 刷新并车修正后的显示功率：

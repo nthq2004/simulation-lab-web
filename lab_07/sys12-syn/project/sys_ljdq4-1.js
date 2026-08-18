@@ -356,7 +356,7 @@ export const PROJECT_WORKFLOWS = {
                 },
             },
             {
-                msg: '第 9 步：复位重建（恢复 1 号机供电，2 号机待并）', mode: 'check',
+                msg: '第 9 步：复位重建（关闭同步表，恢复 1 号机供电，2 号机待并）', mode: 'check',
                 async act() {
                     const sys = this.sys;
                     const g1 = sys.comps.gen1, g2 = sys.comps.gen2;
@@ -394,7 +394,7 @@ export const PROJECT_WORKFLOWS = {
                 check() {
                     const sys = this.sys;
                     const sc = sys.comps.sync1;
-                    return Math.abs(sc._fGen - sc._fBus) < 0.5;
+                    return Math.abs(sc._fGen - sc._fBus) < 0.5&& sys.comps.sync_sel.getPosition() === 3;
                 },
             },
             {
@@ -441,7 +441,7 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 12 步：测试题——非同期并车的后果', mode: 'quiz',
                 quizConfig: {
-                    question: '相位差处于 60°~270°（非同期）时强行并车合闸，保护动作结果是（　）。',
+                    question: '相位差处于 30°~300°（非同期）时强行并车合闸，保护动作结果是（　）。',
                     options: [
                         '合闸正常进行，两机平稳并联',
                         '主开关合闸后立即自动分闸，发电机继续运行',
@@ -598,15 +598,15 @@ export const PROJECT_WORKFLOWS = {
                     await _sleep(800);
                     for (let i = 0; i < 100; i++) {
                         const p = g2._displayP;
-                        if (Math.abs(p - 2) <= 0.5) break;
-                        g2.freq += (p < 2 ? 1 : -1) * 0.01;
+                        if (Math.abs(p - 5) <= 0.5) break;
+                        g2.freq += (p < 5 ? 1 : -1) * 0.01;
                         await _sleep(150);
                     }
                 },
                 check() {
                     const sys = this.sys;
                     const load = sys.comps.load3, g2 = sys.comps.gen2;
-                    return !!(load && load.isLoaded()) && Math.abs(g2._displayP - 2) <= 0.5;
+                    return !!(load && load.isLoaded()) && Math.abs(g2._displayP - 5) <= 0.8;
                 },
             },
             {
@@ -845,15 +845,11 @@ export const PROJECT_WORKFLOWS = {
                 msg: '第 10 步：2 号发电机主开关分闸（解列）,2 号发电机停机，负荷全部由 1 号机承担', mode: 'check',
                 async act() {
                     const sys = this.sys;
-                    const g1 = sys.comps.gen1, g2 = sys.comps.gen2;
+                    // 分闸解列 2#：模型自动把两机设定软复位到解列前等效设定
+                    // （SyncGenerator3P 解列分支 autoDecoupleTrim），频率连续过渡——
+                    // 1# 承接 2# 负载频率微降（约 0.075Hz）、2# 卸载空载频率微升（特征对称）。
                     await _pressPanelBtn(sys, 'genpanel2', '_userOpenPressed', 500);
-                    await _sleep(1000);
-                    // 解列后复位设定频率（模拟操作员回油门到正常位）：
-                    // 2 号机即将停机，空载机设定回 50Hz（停机前空载频率≈50 符合实际）；
-                    // 1 号机单独带全部负载，设定 50.5Hz 使带载频率≈49.2Hz（符合带重载频率下垂）。
-                    g2.freq = 50;
-                    g1.freq = 50.5;
-                    await _sleep(2000);  // 等 1 号机单机频率下垂收敛到约 49.2Hz
+                    await _sleep(4000);  // 等两机频率过渡到新平衡
                     await _pressPanelBtn(sys, 'genpanel2', '_userStopPressed', 1200);
                     await _sleep(2000);
                 },
@@ -875,12 +871,12 @@ export const PROJECT_WORKFLOWS = {
 
 export const componentConfigs = [
     // ── 主回路：同步发电机 → 主开关 → 汇流排 ──
-    { Class: SyncGenerator3P, id: 'gen1', x: -100, y: 700, vRms: 230, freq: 50, isOn: false, mode: 'remote', label: '1#同步发电机', ratedPower: 80, ratedVoltage: 400, ratedCosPhi: 0.8, maxDropV: 200, avrMaxComp: 1, avrDelay: 2, avrTime: 5, visible: true },
+    { Class: SyncGenerator3P, id: 'gen1', x: -100, y: 700, vRms: 230, freq: 50, isOn: false, mode: 'remote', label: '1#同步发电机', ratedPower: 80, ratedVoltage: 400, ratedCosPhi: 0.8, maxDropV: 200, avrMaxComp: 1, avrDelay: 2, avrTime: 5, autoDecoupleTrim: true, visible: true },
     { Class: MarineMainsSwitch, id: 'qf1', x: -180, y: 180, ratedCtrlVoltage: 24, label: '主开关', genId: 'gen1', syncScopeId: 'sync1', phaseMin: 60, phaseMax: 270, freqDiffMax: 0.5, revPowerKw: 8, revTime: 5, visible: true },
     { Class: GeneratorRemotePanel, id: 'genpanel', x: 330, y: 700, genId: 'gen1', qfId: 'qf1', label: '1#发电机组遥控面板', busId: 'bus1', syncSelId: 'sync_sel', selPos: 2, visible: true },
 
     // ── 2号机组：2号同步发电机 → 2号主开关 → 汇流排 ──
-    { Class: SyncGenerator3P, id: 'gen2', x: 850, y: 700, vRms: 230, freq: 50, isOn: false, mode: 'remote', label: '2#同步发电机', ratedPower: 80, ratedVoltage: 400, ratedCosPhi: 0.8, maxDropV: 200, avrMaxComp: 1, avrDelay: 2, avrTime: 5, visible: true },
+    { Class: SyncGenerator3P, id: 'gen2', x: 850, y: 700, vRms: 230, freq: 50, isOn: false, mode: 'remote', label: '2#同步发电机', ratedPower: 80, ratedVoltage: 400, ratedCosPhi: 0.8, maxDropV: 200, avrMaxComp: 1, avrDelay: 2, avrTime: 5, autoDecoupleTrim: true, visible: true },
     { Class: MarineMainsSwitch, id: 'qf2', x: 1100, y: 180, ratedCtrlVoltage: 24, label: '主开关2', genId: 'gen2', syncScopeId: 'sync1', phaseMin: 60, phaseMax: 270, freqDiffMax: 0.5, revPowerKw: 8, revTime: 5, visible: true },
     { Class: GeneratorRemotePanel, id: 'genpanel2', x: 1300, y: 700, genId: 'gen2', qfId: 'qf2', label: '2#发电机组遥控面板', busId: 'bus1', syncSelId: 'sync_sel', selPos: 3, visible:true },
     { Class: DCPower, id: 'dc_uv2', x: 1580, y: 750, voltage: 24, isOn: true, label: '失压脱扣电源2', visible: true },
