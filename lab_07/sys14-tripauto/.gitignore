@@ -1,0 +1,10 @@
+# 排除调试截图与临时快照（不入库）
+# 注意：根目录 *.png 会被忽略（调试截图），但 images/ 素材图与 favicon.png 保留
+*.png
+!favicon.png
+!images/*
+*.yml
+*.yaml
+
+# IDE 本地配置
+.vscode/
