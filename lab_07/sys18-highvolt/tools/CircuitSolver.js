@@ -277,7 +277,8 @@ export class CircuitSolver {
                     resistSigs.push(`${d.id}:state=${d._state || 'idle'}`);
                 }
                 if (d.type === 'ACB') {
-                    resistSigs.push(`${d.id}:state=${d._state}`);
+                    const gndSt = typeof d.isGrounded === 'function' ? (d.isGrounded() ? 1 : 0) : 0;
+                    resistSigs.push(`${d.id}:state=${d._state}:gnd=${gndSt}`);
                 }
                 if (d.type === 'PDB') {
                     const ncSt = typeof d.isNCClosed === 'function' ? (d.isNCClosed() ? 1 : 0) : 0;
@@ -368,6 +369,13 @@ export class CircuitSolver {
         syncroscopeDevs.forEach(s => {
             const cIdx = this.portToCluster.get(`${s.id}_wire_gnd`);
             if (cIdx !== undefined) this.gndClusterIndices.add(cIdx);
+        });
+        // ---真空断路器接地开关闭合时，其 T 端口所接内部地簇视为接地点---
+        acbDevs.forEach(a => {
+            if (typeof a.isGrounded === 'function' && a.isGrounded()) {
+                const cIdx = this.portToCluster.get(`${a.id}_wire_gnd`);
+                if (cIdx !== undefined) this.gndClusterIndices.add(cIdx);
+            }
         });
         // ---默认将电源的负极视为接地点---
         powerDevs.forEach(p => {

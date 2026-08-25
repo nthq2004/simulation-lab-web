@@ -164,6 +164,19 @@ export class CircuitTopology {
                         if (!acbOn) internalUnion(`${id}_wire_nc1`, `${id}_wire_nc2`);
                     }
                 }
+                // 接地开关闭合：T1/T2/T3 出线侧与内部虚拟地短接（与地同簇）
+                if (typeof dev.isGrounded === 'function' ? dev.isGrounded() : (dev._gsClosed === true)) {
+                    ['t1', 't2', 't3'].forEach(p => {
+                        const tid = `${id}_wire_${p}`;
+                        const gid = `${id}_wire_gnd`;
+                        activePorts.add(tid);
+                        activePorts.add(gid);
+                        internalUnion(tid, gid);
+                    });
+                } else {
+                    // 未接地时仅登记端口（不合并，端口保持独立）
+                    ['t1', 't2', 't3'].forEach(p => activePorts.add(`${id}_wire_${p}`));
+                }
             }
 
             // 三相汇流排：同一相位铜条上所有已连线端口短接为同一节点
@@ -188,6 +201,14 @@ export class CircuitTopology {
         let firstGnd = null;
         rawDevices.forEach(dev => {
             if (dev.type === 'gnd' || dev.type === 'syncroscope') {
+                const pid = `${dev.id}_wire_gnd`;
+                if (activePorts.has(pid)) {
+                    if (firstGnd === null) firstGnd = pid;
+                    else union(firstGnd, pid);
+                }
+            }
+            // 真空断路器接地开关闭合：其内部虚拟地端口并入全局地
+            if (dev.type === 'ACB' && typeof dev.isGrounded === 'function' && dev.isGrounded()) {
                 const pid = `${dev.id}_wire_gnd`;
                 if (activePorts.has(pid)) {
                     if (firstGnd === null) firstGnd = pid;

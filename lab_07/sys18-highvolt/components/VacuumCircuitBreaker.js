@@ -25,8 +25,8 @@ export class VacuumCircuitBreaker extends BaseComponent {
     constructor(config, sys) {
         super(config, sys);
 
-        this.width  = Math.max(300, config.width  || 320);
-        this.height = Math.max(220, config.height || 255);
+        this.width  = Math.max(300, config.width  || 340);
+        this.height = Math.max(400, config.height || 420);  // 增加高度以容纳接地开关栏
 
         this.type    = 'ACB';
         this.special = 'MainsSwitch';
@@ -105,7 +105,35 @@ export class VacuumCircuitBreaker extends BaseComponent {
             ['uv1', 154], ['uv2', 182],
             ['fla', 210], ['flb', 236],
         ];
-        this._controlLabels = { m: '储能电机', c: '合闸线圈', uv: '失压', fl: '分励' };
+        this._controlLabels = { m: '储能电机', c: '合闸线圈', uv: '失压线圈', fl: '分励线圈' };
+
+        // ═══════════════════════════════════════════
+        // 接地开关栏几何参数（位于真空断路器下方）
+        // ═══════════════════════════════════════════
+        this._gsBarY = 280;      // 接地开关栏起始 Y
+        this._gsBarH = 120;      // 接地开关栏高度
+        
+        // 左侧：摇柄插入孔和电磁锁
+        this._gsInsertHoleX = 60;   // 摇柄插入孔 X
+        this._gsInsertHoleY = 330;  // 摇柄插入孔 Y
+        this._gsInsertHoleR = 12;   // 插入孔半径
+        
+        // 电缆位置（从断路器下端一直向下）
+        this._gsCableX = this._staticXs;  // 三根电缆的 X 位置（与断路器三相对齐）
+        
+        // 接地开关和接地母排（母排在地接开关右边）
+        this._gsSwitchX = this._divX + 110;  // 接地开关 X（再左移5px）
+        this._gsSwitchWidth = 40;             // 接地开关宽度（缩短）
+        this._gsBusX = this.width - 12;      // 接地母排 X（接地开关右侧，最右边）
+        this._gsBusTopY = 290;               // 接地母排顶部 Y
+        this._gsBusBotY = 380;               // 接地母排底部 Y
+        
+        // 三个接地开关位置（水平排列，间距30px）
+        this._gsSwitchY = [305, 335, 365];   // 三个接地开关 Y（错开）
+        
+        // 手柄摇动计数（5次闭合，5次断开）
+        this._crankTurnCount = 0;
+        this._crankTargetTurns = 5;
     }
 
     // ═══════════════════════════════════════════
@@ -194,6 +222,27 @@ export class VacuumCircuitBreaker extends BaseComponent {
         ['m', 'c', 'uv', 'fl'].forEach(k => { this._coilI[k] = 0; });
 
         this.opsCount = config.initOps || 0;
+
+        // ═══════════════════════════════════════════
+        // 接地开关栏参数
+        // ═══════════════════════════════════════════
+        // 电磁锁状态（true=解锁，摇柄可插入）
+        this._emLockUnlocked = config.emLockUnlocked !== undefined ? config.emLockUnlocked : false;
+        // 摇柄插入状态（true=已插入）
+        this._crankInserted = config.crankInserted !== undefined ? config.crankInserted : false;
+        // 摇柄旋转角度（用于动画）
+        this._crankRotation = 0;
+        this._crankCur = 0;  // 摇柄当前平滑旋转角度（动画插值）
+        // 摇柄摇动计数（正=顺时针，负=逆时针）
+        this._crankTurnCount = 0;
+        this._crankTargetTurns = 5;  // 需要摇动5次才能完全闭合/断开
+        // 三个接地开关状态（true=闭合，接地）
+        this._gsSwitches = config.gsSwitches || [false, false, false];
+        // 接地开关动画进度（0=断开，1=闭合）
+        this._gsAnimProgress = this._gsSwitches.map(s => s ? 1 : 0);
+        // 接地开关默认断开，动触臂逆时针30度
+        this._gsDefaultAngle = -22;  // 断开时的角度（逆时针22度）
+        this._gsClosedAngle = 0;     // 闭合时的角度
     }
 
     _recalcCurrentThresholds() {
@@ -256,6 +305,7 @@ export class VacuumCircuitBreaker extends BaseComponent {
         this._drawButtons();
         this._drawVacuumBottle();
         this._drawControlTerminals();
+        this._drawGroundSwitchBar();  // 绘制接地开关栏
     }
 
     _drawFrame() {
@@ -360,8 +410,122 @@ export class VacuumCircuitBreaker extends BaseComponent {
         Object.keys(this._controlLabels).forEach(k => {
             const pair = this._controlPorts.find(p => p[0].startsWith(k));
             this._staticGroup.add(new Konva.Text({
-                x: this._portRightX - 66, y: pair[1] - 11, width: 56, align: 'right',
+                x: this._portRightX - 63, y: pair[1] + 9, width: 56, align: 'right',
                 text: this._controlLabels[k], fontSize: 12, fill: '#555', fontStyle: 'bold',
+            }));
+        });
+    }
+
+    /** 接地开关栏静态部件 */
+    _drawGroundSwitchBar() {
+        const s = this._staticGroup;
+        const colors = ['#e03030', '#20a030', '#2050e0'];
+        
+        // 接地开关栏背景
+        s.add(new Konva.Rect({
+            x: 2, y: this._gsBarY, width: this.width - 4, height: this._gsBarH,
+            fill: '#f5f5f0', stroke: '#8a8a7a', strokeWidth: 1, cornerRadius: [0, 0, 6, 6],
+        }));
+        
+        // 接地开关栏标题
+        s.add(new Konva.Text({
+            x: 8, y: this._gsBarY + 5, width: 100, text: '接地开关', 
+            fontSize: 12, fontStyle: 'bold', fill: '#333',
+        }));
+        
+        // ── 左侧：摇柄插入孔 ──
+        // 插入孔外圈（电磁锁指示）
+        s.add(new Konva.Circle({
+            x: this._gsInsertHoleX, y: this._gsInsertHoleY, 
+            radius: this._gsInsertHoleR + 4,
+            fill: '#4a4a4a', stroke: '#2a2a2a', strokeWidth: 2,
+        }));
+        // 插入孔内圈
+        s.add(new Konva.Circle({
+            x: this._gsInsertHoleX, y: this._gsInsertHoleY, 
+            radius: this._gsInsertHoleR,
+            fill: '#1a1a1a', stroke: '#3a3a3a', strokeWidth: 1,
+        }));
+        // 插入孔中心点
+        s.add(new Konva.Circle({
+            x: this._gsInsertHoleX, y: this._gsInsertHoleY, 
+            radius: 3, fill: '#5a5a5a',
+        }));
+        
+        // 电磁锁标签
+        s.add(new Konva.Text({
+            x: this._gsInsertHoleX - 30, y: this._gsInsertHoleY + 20,
+            width: 60, align: 'center', text: '电磁锁', 
+            fontSize: 10, fill: '#666',
+        }));
+        
+        // ── 右侧：接地示意图 ──
+        // 从断路器下端一直向下的三根电缆（重新绘制覆盖接地开关栏背景，保证视觉连续）
+        this._gsCableX.forEach((x, i) => {
+            // 垂直线从接地开关栏顶部一直向下到栏底部
+            s.add(new Konva.Line({
+                points: [x, this._gsBarY, x, this._gsBarY + this._gsBarH],
+                stroke: colors[i], strokeWidth: 2.5, lineCap: 'round',
+            }));
+        });
+        
+        // 三个接地开关（水平排列）
+        this._gsSwitchY.forEach((y, i) => {
+            const x = this._gsSwitchX;
+            // 开关左侧线（从垂直电缆引出）
+            s.add(new Konva.Line({
+                points: [this._gsCableX[i], y, x, y],
+                stroke: colors[i], strokeWidth: 2.5, lineCap: 'round',
+            }));
+            // 开关右侧引线（到接地母排）
+            s.add(new Konva.Line({
+                points: [x + this._gsSwitchWidth, y, this._gsBusX, y],
+                stroke: colors[i], strokeWidth: 2.5, lineCap: 'round',
+            }));
+            // 开关触点（左侧固定）
+            s.add(new Konva.Circle({
+                x: x, y: y, radius: 4, fill: '#c8a24a', stroke: '#7a6028', strokeWidth: 1,
+            }));
+            // 开关触点（右侧固定）
+            s.add(new Konva.Circle({
+                x: x + this._gsSwitchWidth, y: y, radius: 4, fill: '#c8a24a', stroke: '#7a6028', strokeWidth: 1,
+            }));
+        });
+        
+        // 接地母排（竖直粗线，最右边）
+        s.add(new Konva.Line({
+            points: [this._gsBusX, this._gsBusTopY, this._gsBusX, this._gsBusBotY],
+            stroke: '#333', strokeWidth: 6, lineCap: 'round',
+        }));
+        
+        // 接地符号
+        const gndY = this._gsBusBotY + 5;
+        s.add(new Konva.Line({
+            points: [this._gsBusX - 15, gndY, this._gsBusX + 15, gndY],
+            stroke: '#333', strokeWidth: 3, lineCap: 'round',
+        }));
+        s.add(new Konva.Line({
+            points: [this._gsBusX - 10, gndY + 8, this._gsBusX + 10, gndY + 8],
+            stroke: '#333', strokeWidth: 2.5, lineCap: 'round',
+        }));
+        s.add(new Konva.Line({
+            points: [this._gsBusX - 5, gndY + 16, this._gsBusX + 5, gndY + 16],
+            stroke: '#333', strokeWidth: 2, lineCap: 'round',
+        }));
+        
+        // 接地母排标签（组件内完整显示）
+        s.add(new Konva.Text({
+            x: this._gsBusX - 60, y: this._gsBusBotY + 20,
+            width: 60, align: 'center', text: '接地母排', 
+            fontSize: 10, fill: '#333',
+        }));
+        
+        // 接地开关标签
+        this._gsSwitchY.forEach((y, i) => {
+            s.add(new Konva.Text({
+                x: this._gsSwitchX - 5, y: y - 15,
+                width: 50, align: 'center', text: `GS${i + 1}`, 
+                fontSize: 10, fill: '#666',
             }));
         });
     }
@@ -401,6 +565,7 @@ export class VacuumCircuitBreaker extends BaseComponent {
         this._createIndicators();
         this._createHandle();
         this._createDial();
+        this._createGroundSwitchDynamics();  // 创建接地开关动态节点
     }
 
     /** 三相动触头：三个水平圆面（正视成横线），装在垂直导电杆顶端。
@@ -485,7 +650,91 @@ export class VacuumCircuitBreaker extends BaseComponent {
         this._dynamicGroup.add(this._workPosText);
     }
 
-    _workPosName() { return ['连接', '试验', '断开'][this._workPos]; }
+    _workPosName() { return ['连接', '试验', '检修'][this._workPos]; }
+
+    /** 创建接地开关动态节点（摇柄和接地开关触头） */
+    _createGroundSwitchDynamics() {
+        const colors = ['#e03030', '#20a030', '#2050e0'];
+        
+        // ── 摇柄（可旋转，电磁锁控制可见性）──
+        this._crankGroup = new Konva.Group({
+            x: this._gsInsertHoleX,
+            y: this._gsInsertHoleY,
+            rotation: this._crankRotation,
+            opacity: this._emLockUnlocked ? 1 : 0.3,  // 电磁锁未解锁时虚化
+        });
+        // 摇柄杆
+        this._crankGroup.add(new Konva.Line({
+            points: [0, 0, 0, -35],
+            stroke: '#8a4a20', strokeWidth: 6, lineCap: 'round',
+        }));
+        // 摇柄手柄
+        this._crankGroup.add(new Konva.Rect({
+            x: -8, y: -45, width: 16, height: 12,
+            fill: '#b06a2e', stroke: '#7a4a1c', strokeWidth: 1.5, cornerRadius: 2,
+        }));
+        this._dynamicGroup.add(this._crankGroup);
+        
+        // ── 电磁锁状态指示（插入孔右侧偏上，避免与摇动热区重叠）──
+        this._emLockIndicator = new Konva.Circle({
+            x: this._gsInsertHoleX + 34, y: this._gsInsertHoleY - 30,
+            radius: 7,
+            fill: this._emLockUnlocked ? '#20a030' : '#c0392b',
+            stroke: '#333', strokeWidth: 1,
+        });
+        this._dynamicGroup.add(this._emLockIndicator);
+        // 电磁锁状态文字
+        this._emLockLabel = new Konva.Text({
+            x: this._gsInsertHoleX + 22, y: this._gsInsertHoleY - 46,
+            width: 40, align: 'center', text: this._emLockUnlocked ? '解锁' : '锁定',
+            fontSize: 9, fontStyle: 'bold', fill: this._emLockUnlocked ? '#20a030' : '#c0392b',
+        });
+        this._dynamicGroup.add(this._emLockLabel);
+        
+        // ── 接地开关动触头（三个）──
+        this._gsSwitchBlades = [];
+        this._gsSwitchY.forEach((y, i) => {
+            const x = this._gsSwitchX;
+            const blade = new Konva.Group({
+                x: x,
+                y: y,
+                rotation: this._gsDefaultAngle,  // 默认断开，逆时针22度
+            });
+            // 开关刀片
+            blade.add(new Konva.Line({
+                points: [0, 0, this._gsSwitchWidth, 0],
+                stroke: colors[i], strokeWidth: 4, lineCap: 'round',
+            }));
+            // 刀片端点
+            blade.add(new Konva.Circle({
+                x: this._gsSwitchWidth, y: 0, radius: 5,
+                fill: '#c8a24a', stroke: '#7a6028', strokeWidth: 1,
+            }));
+            this._dynamicGroup.add(blade);
+            this._gsSwitchBlades.push(blade);
+        });
+        
+        // ── 接地开关状态标签 ──
+        this._gsStatusTexts = [];
+        this._gsSwitchY.forEach((y, i) => {
+            const text = new Konva.Text({
+                x: this._gsSwitchX + this._gsSwitchWidth + 5, y: y - 8,
+                width: 40, text: this._gsSwitches[i] ? '合' : '分',
+                fontSize: 10, fontStyle: 'bold',
+                fill: this._gsSwitches[i] ? '#20a030' : '#c0392b',
+            });
+            this._dynamicGroup.add(text);
+            this._gsStatusTexts.push(text);
+        });
+        
+        // ── 摇动次数显示 ──
+        this._crankCountText = new Konva.Text({
+            x: this._gsInsertHoleX - 30, y: this._gsInsertHoleY - 60,
+            width: 60, align: 'center', text: '',
+            fontSize: 11, fontStyle: 'bold', fill: '#333',
+        });
+        this._dynamicGroup.add(this._crankCountText);
+    }
 
     // ═══════════════════════════════════════════
     // 交互
@@ -546,6 +795,82 @@ export class VacuumCircuitBreaker extends BaseComponent {
         hover(openHit);
         this._interactGroup.add(closeHit);
         this._interactGroup.add(openHit);
+
+        // ═══════════════════════════════════════════
+        // 接地开关栏交互
+        // ═══════════════════════════════════════════
+        
+        // 电磁锁按钮（点击切换解锁/锁定状态，位于插入孔右侧偏上）
+        const emLockHit = new Konva.Circle({
+            x: this._gsInsertHoleX + 34, y: this._gsInsertHoleY - 30, radius: 13,
+            fill: 'transparent',
+        });
+        emLockHit.on('click tap', (e) => {
+            e.cancelBubble = true;
+            this._emLockUnlocked = !this._emLockUnlocked;
+            // 如果锁定时摇柄已插入，自动拔出
+            if (!this._emLockUnlocked && this._crankInserted) {
+                this._crankInserted = false;
+            }
+        });
+        hover(emLockHit);
+        this._interactGroup.add(emLockHit);
+        
+        // 插入孔右边区域（顺时针摇动）
+        const insertHoleRight = new Konva.Rect({
+            x: this._gsInsertHoleX, y: this._gsInsertHoleY - 20,
+            width: 20, height: 40,
+            fill: 'transparent',
+        });
+        insertHoleRight.on('click tap', (e) => {
+            e.cancelBubble = true;
+            if (this._emLockUnlocked && this._crankInserted) {
+                // 顺时针摇动：增加摇动次数
+                if (this._crankTurnCount < this._crankTargetTurns) {
+                    this._crankTurnCount++;
+                    this._crankRotation += 360;  // 顺时针转动1圈
+                    // 更新接地开关状态
+                    this._updateGroundSwitchState();
+                }
+            } else if (this._emLockUnlocked && !this._crankInserted) {
+                // 如果电磁锁解锁但摇柄未插入，先插入摇柄
+                this._crankInserted = true;
+            }
+        });
+        hover(insertHoleRight);
+        this._interactGroup.add(insertHoleRight);
+        
+        // 插入孔左边区域（逆时针摇动）
+        const insertHoleLeft = new Konva.Rect({
+            x: this._gsInsertHoleX - 30, y: this._gsInsertHoleY - 20,
+            width: 30, height: 40,
+            fill: 'transparent',
+        });
+        insertHoleLeft.on('click tap', (e) => {
+            e.cancelBubble = true;
+            if (this._emLockUnlocked && this._crankInserted) {
+                // 逆时针摇动：减少摇动次数
+                if (this._crankTurnCount > 0) {
+                    this._crankTurnCount--;
+                    this._crankRotation -= 360;  // 逆时针转动1圈
+                    // 更新接地开关状态
+                    this._updateGroundSwitchState();
+                }
+            } else if (this._emLockUnlocked && !this._crankInserted) {
+                // 如果电磁锁解锁但摇柄未插入，先插入摇柄
+                this._crankInserted = true;
+            }
+        });
+        hover(insertHoleLeft);
+        this._interactGroup.add(insertHoleLeft);
+    }
+
+    /** 更新接地开关状态（根据摇动次数） */
+    _updateGroundSwitchState() {
+        // 根据摇动次数计算接地开关状态
+        // 摇动次数达到目标次数时，接地开关闭合
+        const progress = this._crankTurnCount / this._crankTargetTurns;
+        this._gsSwitches = [progress >= 1, progress >= 1, progress >= 1];
     }
 
     _dialTurn(dir) {
@@ -722,6 +1047,8 @@ export class VacuumCircuitBreaker extends BaseComponent {
         this._handleRot += (hTarget - this._handleRot) * Math.min(1, dt * 10);
         // 工作位圆盘
         this._dialCur += (this._dialAngle - this._dialCur) * Math.min(1, dt * 10);
+        // 摇柄平滑旋转（1圈=360° 动画）
+        this._crankCur += (this._crankRotation - this._crankCur) * Math.min(1, dt * 6);
 
         // 合/分闸机构动画：合闸动触头上移、分闸动触头下移
         if (this._animating) {
@@ -794,6 +1121,39 @@ export class VacuumCircuitBreaker extends BaseComponent {
         // 储能手柄
         this._handleGroup.rotation(this._handleRot);
         this._handleGroup.opacity(closed ? 0.45 : 1);
+
+        // ═══════════════════════════════════════════
+        // 接地开关栏动态更新
+        // ═══════════════════════════════════════════
+        
+        // 摇柄状态
+        this._crankGroup.opacity(this._emLockUnlocked ? 1 : 0.3);
+        this._crankGroup.rotation(this._crankCur);
+        
+        // 电磁锁指示灯
+        this._emLockIndicator.fill(this._emLockUnlocked ? '#20a030' : '#c0392b');
+        this._emLockLabel.text(this._emLockUnlocked ? '解锁' : '锁定');
+        this._emLockLabel.fill(this._emLockUnlocked ? '#20a030' : '#c0392b');
+        
+        // 接地开关状态
+        const progress = this._crankTurnCount / this._crankTargetTurns;
+        this._gsSwitchBlades.forEach((blade, i) => {
+            // 根据摇动进度计算目标角度
+            // 0次摇动：-30度（断开）
+            // 5次摇动：0度（闭合）
+            const targetAngle = this._gsDefaultAngle + (this._gsClosedAngle - this._gsDefaultAngle) * progress;
+            // 平滑动画
+            const currentAngle = blade.rotation();
+            const newAngle = currentAngle + (targetAngle - currentAngle) * 0.2;
+            blade.rotation(newAngle);
+            
+            // 更新状态标签
+            this._gsStatusTexts[i].text(progress >= 1 ? '合' : '分');
+            this._gsStatusTexts[i].fill(progress >= 1 ? '#20a030' : '#c0392b');
+        });
+        
+        // 摇动次数显示
+        this._crankCountText.text(progress >= 1 ? '' : `${this._crankTurnCount}/${this._crankTargetTurns}`);
     }
 
     // ═══════════════════════════════════════════
@@ -807,6 +1167,8 @@ export class VacuumCircuitBreaker extends BaseComponent {
     isRevTrip()  { return this._revTrip; }
     isUvTrip()   { return this._uvTrip; }
     isOverloadTrip() { return this._overloadTrip; }
+    /** 接地开关是否全部闭合（T1-T3 对地短接） */
+    isGrounded() { return Array.isArray(this._gsSwitches) && this._gsSwitches.length === 3 && this._gsSwitches.every(Boolean); }
 
     update(state) {
         const s = String(state).toLowerCase();
@@ -825,6 +1187,8 @@ export class VacuumCircuitBreaker extends BaseComponent {
             { label: '初始工作位 connected/test/disconnected', key: 'initWorkPos', type: 'text' },
             { label: '动作时间 (s)',               key: 'animDur',            type: 'number' },
             { label: '控制线圈电阻 (Ω)',           key: 'coilResistance',     type: 'number' },
+            { label: '电磁锁初始状态 locked/unlocked', key: 'emLockUnlocked', type: 'text' },
+            { label: '摇柄初始状态 inserted/removed', key: 'crankInserted', type: 'text' },
         ];
     }
 
@@ -852,6 +1216,13 @@ export class VacuumCircuitBreaker extends BaseComponent {
             this._dialAngle = this._detent * 90;
             this._dialCur = this._dialAngle;
             this._syncMainCircuits();
+        }
+        // 接地开关栏配置
+        if (cfg.emLockUnlocked !== undefined) {
+            this._emLockUnlocked = String(cfg.emLockUnlocked).toLowerCase() === 'unlocked';
+        }
+        if (cfg.crankInserted !== undefined) {
+            this._crankInserted = String(cfg.crankInserted).toLowerCase() === 'inserted';
         }
         this.config = { ...this.config, ...cfg };
         this._recalcGeometry();
