@@ -20,6 +20,9 @@ build/
 .DS_Store
 Thumbs.db
 
+# ---- opencode 运行时目录（本地 agent 状态，非项目源码）----
+.opencode/
+
 # ---- 临时索引 / 调试产物 ----
 .playwright-mcp/
 .codegraph/
