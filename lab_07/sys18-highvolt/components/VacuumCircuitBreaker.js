@@ -70,17 +70,25 @@ export class VacuumCircuitBreaker extends BaseComponent {
         this._divX = 150; // 左控制面板宽度
         const w = this.width, h = this.height;
 
-        // 右侧真空泡：去掉左侧空隙，紧贴分隔线（高度减半）
+        // 右侧真空泡：去掉左侧空隙，紧贴分隔线；整体下移 30px，
+        // 在泡的上、下引线中腾出隔离连接片（一次插头）的安装空间
         this._bottle = {
             x: this._divX + 6,   // 去掉真空泡左边空隙
-            y: 46,
+            y: 76,
             w: 104,
-            h: 130,               // 高度较之前减半
+            h: 130,
         };
         // 三相主触头水平并排（进线 L 在上、出线 T 在下）
         const gap = 34;
         const cx = this._bottle.x + this._bottle.w / 2;
         this._staticXs = [cx - gap, cx, cx + gap]; // 三相列 x
+        // ══════ 隔离连接片（一次插头）几何 ══════
+        // 上、下引线中各开一个断口：连接位（工作位）时连接片桥接接通；
+        // 试验位 / 检修位时连接片向右移动 20px，引线断开
+        this._isoTopY    = this._bottle.y - 22;              // 上引线断口中心 y
+        this._isoBotY    = this._bottle.y + this._bottle.h + 24; // 下引线断口中心 y
+        this._isoGapHalf = 9;                                // 断口半间隙（上下端子间距的一半）
+        this._isoMoveX   = 20;                               // 试验/检修位连接片右移量
         // 上静触头（三个水平圆面，正视成横线）y —— 接 L 进线
         this._contactTopY = this._bottle.y + 35;
         // 动触头圆面下行的基准点 y（出线接触位置，接 T）
@@ -114,7 +122,7 @@ export class VacuumCircuitBreaker extends BaseComponent {
         this._gsBarH = 120;      // 接地开关栏高度
         
         // 左侧：摇柄插入孔和电磁锁
-        this._gsInsertHoleX = 60;   // 摇柄插入孔 X
+        this._gsInsertHoleX = 75;   // 摇柄插入孔 X（与上方工作位转换开关中心线对齐）
         this._gsInsertHoleY = 330;  // 摇柄插入孔 Y
         this._gsInsertHoleR = 12;   // 插入孔半径
         
@@ -134,6 +142,17 @@ export class VacuumCircuitBreaker extends BaseComponent {
         // 手柄摇动计数（5次闭合，5次断开）
         this._crankTurnCount = 0;
         this._crankTargetTurns = 5;
+
+        // ═══════════════════════════════════════════
+        // 柜门几何（覆盖右侧原理区：真空泡 + 接地开关栏，
+        // 只露出左侧操作面板 —— 断路器操作面板 + 接地开关左面板）
+        // ═══════════════════════════════════════════
+        this._door = {
+            x: this._divX,             // 从分隔线开始（左面板露出）
+            y: 2,
+            w: this.width - this._divX - 2,
+            h: this.height - 4,
+        };
     }
 
     // ═══════════════════════════════════════════
@@ -191,6 +210,16 @@ export class VacuumCircuitBreaker extends BaseComponent {
         this._animating     = false;
         this._animT         = 0;
         this._animMode      = 'none';
+        // 柜门状态：0=关闭 1=打开（支持 config.initDoor = 'open'/'closed'）
+        this._doorOpen  = (config.initDoor || 'closed').toLowerCase() === 'open';
+        this._doorSlide = this._doorOpen ? 1 : 0;
+        // 隔离连接片位置进度：0=接入引线（连接位），1=右移20px断开（试验/检修位）
+        this._isoT = ((config.initWorkPos || 'connected').toLowerCase() === 'connected') ? 0 : 1;
+        // 手动合闸/分闸按钮防护玻璃盖：open=是否已开盖，t=开度（0=盖住 1=完全翻开）
+        this._btnCovers = {
+            close: { open: false, t: 0 },
+            trip:  { open: false, t: 0 },
+        };
         // 动触片垂直位置（归一化进度 0=分闸下移 1=合闸上移）
         this._contactT      = this._state === 'on' ? 1 : 0;
 
@@ -385,10 +414,19 @@ export class VacuumCircuitBreaker extends BaseComponent {
 
         this._staticXs.forEach((x, i) => {
             const c = colors[i];
-            // 进线 L（顶部端口 → 上静触头圆面）
-            s.add(new Konva.Line({ points: [x, 8, x, this._contactTopY], stroke: c, strokeWidth: 2.5, lineCap: 'round' }));
-            // 出线 T（动触头下行基准点 → 底部端口；下方无静触头，仅导线）
-            s.add(new Konva.Line({ points: [x, this._contactBotY, x, this.height - 8], stroke: c, strokeWidth: 2.5, lineCap: 'round' }));
+            const g = this._isoGapHalf;
+            // 进线 L（顶部端口 → 上断口上端；上断口下端 → 上静触头圆面）
+            s.add(new Konva.Line({ points: [x, 8, x, this._isoTopY - g], stroke: c, strokeWidth: 2.5, lineCap: 'round' }));
+            s.add(new Konva.Line({ points: [x, this._isoTopY + g, x, this._contactTopY], stroke: c, strokeWidth: 2.5, lineCap: 'round' }));
+            // 出线 T（动触头下行基准点 → 下断口上端；下断口下端 → 底部端口；下方无静触头，仅导线）
+            s.add(new Konva.Line({ points: [x, this._contactBotY, x, this._isoBotY - g], stroke: c, strokeWidth: 2.5, lineCap: 'round' }));
+            s.add(new Konva.Line({ points: [x, this._isoBotY + g, x, this.height - 8], stroke: c, strokeWidth: 2.5, lineCap: 'round' }));
+            // 断口端子（四个金点：上引线断口上下端、下引线断口上下端）
+            [this._isoTopY - g, this._isoTopY + g, this._isoBotY - g, this._isoBotY + g].forEach(ty => {
+                s.add(new Konva.Circle({
+                    x, y: ty, radius: 3.2, fill: '#c8a24a', stroke: '#7a6028', strokeWidth: 1,
+                }));
+            });
             // 上静触头：三个水平圆面（正视成横线）
             s.add(new Konva.Ellipse({
                 x, y: this._contactTopY, radiusX: this._discRX, radiusY: this._discRY,
@@ -455,8 +493,8 @@ export class VacuumCircuitBreaker extends BaseComponent {
         // 电磁锁标签
         s.add(new Konva.Text({
             x: this._gsInsertHoleX - 30, y: this._gsInsertHoleY + 20,
-            width: 60, align: 'center', text: '电磁锁', 
-            fontSize: 10, fill: '#666',
+            width: 60, align: 'center', text: '电磁锁',
+            fontSize: 12, fill: '#666',
         }));
         
         // ── 右侧：接地示意图 ──
@@ -562,10 +600,49 @@ export class VacuumCircuitBreaker extends BaseComponent {
 
     _createDynamicNodes() {
         this._createBlades();
+        this._createIsolationLinks();        // 隔离连接片（一次插头）
         this._createIndicators();
         this._createHandle();
         this._createDial();
         this._createGroundSwitchDynamics();  // 创建接地开关动态节点
+        this._createButtonCoverVisuals();    // 手动按钮防护玻璃盖
+        this._drawCabinetDoor();             // 柜门（置于内部图形最上层）
+    }
+
+    /** 隔离连接片（一次插头）：每相上、下引线断口各一片。
+     *  绝缘手柄水平、位于连接片中央；一条虚线横穿三相手柄表示联动。
+     *  连接位（工作位）桥接接通引线；试验位/检修位整体向右移动 20px 断开。
+     *  六片与联动虚线置于同一容器组，动画仅 in-place 更新容器 x。 */
+    _createIsolationLinks() {
+        const g = new Konva.Group({ x: 0, y: 0, listening: false });
+        // 联动虚线：横穿三相绝缘手柄（上、下断口各一条），表示三相同步动作
+        // （置于连接片下层，随容器组一起平移）
+        const x0 = this._staticXs[0], x2 = this._staticXs[2];
+        [this._isoTopY, this._isoBotY].forEach(isoY => {
+            g.add(new Konva.Line({
+                points: [x0 + 4, isoY, x2 + 12, isoY],
+                stroke: '#7a8494', strokeWidth: 1.2, dash: [4, 3], listening: false,
+            }));
+        });
+        // 三相 × 上/下断口各一片连接片
+        [this._isoTopY, this._isoBotY].forEach(isoY => {
+            this._staticXs.forEach(x => {
+                const link = new Konva.Group({ x, y: isoY });
+                // 竖直铜片：桥接断口上下端子（断口全高 = isoGapHalf*2 = 18）
+                link.add(new Konva.Rect({
+                    x: -3.5, y: -10, width: 7, height: 20, cornerRadius: 1.5,
+                    fill: '#c8a24a', stroke: '#7a6028', strokeWidth: 1,
+                }));
+                // 绝缘拉手柄：水平状态，位于连接片中央（垂直居中）
+                link.add(new Konva.Line({
+                    points: [3.5, 0, 12, 0],
+                    stroke: '#8a919e', strokeWidth: 3.5, lineCap: 'round',
+                }));
+                g.add(link);
+            });
+        });
+        this._isoGroup = g;
+        this._dynamicGroup.add(g);
     }
 
     /** 三相动触头：三个水平圆面（正视成横线），装在垂直导电杆顶端。
@@ -648,6 +725,30 @@ export class VacuumCircuitBreaker extends BaseComponent {
             text: this._workPosName(), listening: false,
         });
         this._dynamicGroup.add(this._workPosText);
+
+        // ── 工作位锁定指示（转换开关中心高度、距面板右缘 20px，样式同接地开关电磁锁指示）──
+        //   合闸（闭合）：工作位机械联锁无法切换 → 锁定红色
+        //   分闸（断开）：可切换试验位/检修位 → 解锁绿色
+        const lockedNow = this._state === 'on';
+        this._wpLockIndicator = new Konva.Circle({
+            x: 130, y: 198, radius: 7,
+            fill: lockedNow ? '#c0392b' : '#20a030',
+            stroke: '#333', strokeWidth: 1, listening: false,
+        });
+        this._dynamicGroup.add(this._wpLockIndicator);
+        this._wpLockLabel = new Konva.Text({
+            x: 110, y: 174, width: 40, align: 'center',
+            text: lockedNow ? '锁定' : '解锁',
+            fontSize: 12, fontStyle: 'bold',
+            fill: lockedNow ? '#c0392b' : '#20a030', listening: false,
+        });
+        this._dynamicGroup.add(this._wpLockLabel);
+        // 工作位闭锁原因提示（转换开关下方；锁定时动态显示：带负荷/接地）
+        this._wpLockReasonText = new Konva.Text({
+            x: 30, y: 244, width: 90, align: 'center',
+            text: '', fontSize: 12, fontStyle: 'bold', fill: '#c0392b', listening: false,
+        });
+        this._dynamicGroup.add(this._wpLockReasonText);
     }
 
     _workPosName() { return ['连接', '试验', '检修'][this._workPos]; }
@@ -675,21 +776,27 @@ export class VacuumCircuitBreaker extends BaseComponent {
         }));
         this._dynamicGroup.add(this._crankGroup);
         
-        // ── 电磁锁状态指示（插入孔右侧偏上，避免与摇动热区重叠）──
+        // ── 电磁锁状态指示（插入孔正右方，与工作位锁定指示同列对齐）──
         this._emLockIndicator = new Konva.Circle({
-            x: this._gsInsertHoleX + 34, y: this._gsInsertHoleY - 30,
+            x: 130, y: this._gsInsertHoleY,
             radius: 7,
             fill: this._emLockUnlocked ? '#20a030' : '#c0392b',
             stroke: '#333', strokeWidth: 1,
         });
         this._dynamicGroup.add(this._emLockIndicator);
-        // 电磁锁状态文字
+        // 电磁锁状态文字（指示灯上方，同工作位样式）
         this._emLockLabel = new Konva.Text({
-            x: this._gsInsertHoleX + 22, y: this._gsInsertHoleY - 46,
+            x: 110, y: this._gsInsertHoleY - 24,
             width: 40, align: 'center', text: this._emLockUnlocked ? '解锁' : '锁定',
-            fontSize: 9, fontStyle: 'bold', fill: this._emLockUnlocked ? '#20a030' : '#c0392b',
+            fontSize: 12, fontStyle: 'bold', fill: this._emLockUnlocked ? '#20a030' : '#c0392b',
         });
         this._dynamicGroup.add(this._emLockLabel);
+        // 电磁锁闭锁原因提示（位于电磁锁正下方；锁定时动态显示：工作位/合闸/开门/线路带电）
+        this._emLockReasonText = new Konva.Text({
+            x: 30, y: this._gsInsertHoleY + 34, width: 90, align: 'center',
+            text: '', fontSize: 12, fontStyle: 'bold', fill: '#c0392b', listening: false,
+        });
+        this._dynamicGroup.add(this._emLockReasonText);
         
         // ── 接地开关动触头（三个）──
         this._gsSwitchBlades = [];
@@ -765,7 +872,8 @@ export class VacuumCircuitBreaker extends BaseComponent {
         const dialHit = new Konva.Circle({ x: 75, y: 198, radius: 28, fill: 'transparent' });
         dialHit.on('click tap', (e) => {
             e.cancelBubble = true;
-            if (this._state === 'on') return;
+            // 合闸（带负荷）或接地闭合期间：工作位旋钮闭锁
+            if (this._state === 'on' || this.isGrounded()) return;
             const stage = this.group.getStage();
             if (!stage) return;
             const pointer = stage.getPointerPosition();
@@ -796,17 +904,25 @@ export class VacuumCircuitBreaker extends BaseComponent {
         this._interactGroup.add(closeHit);
         this._interactGroup.add(openHit);
 
+        // 按钮防护玻璃盖命中区（位于按钮命中区之上：盖住时拦截按钮点击）
+        this._createButtonCoverHits();
+
         // ═══════════════════════════════════════════
         // 接地开关栏交互
         // ═══════════════════════════════════════════
         
-        // 电磁锁按钮（点击切换解锁/锁定状态，位于插入孔右侧偏上）
+        // 电磁锁按钮（点击切换解锁/锁定状态，位于指示灯处——插入孔正右方）
         const emLockHit = new Konva.Circle({
-            x: this._gsInsertHoleX + 34, y: this._gsInsertHoleY - 30, radius: 13,
+            x: 130, y: this._gsInsertHoleY, radius: 13,
             fill: 'transparent',
         });
         emLockHit.on('click tap', (e) => {
             e.cancelBubble = true;
+            // 联锁①：VCB 在工作位（连接位）→ 电磁锁机械闭锁
+            // 联锁④：断路器合闸（带电）→ 电磁锁机械闭锁
+            // 联锁③：柜门处于打开状态 → 电磁锁机械闭锁（防开门状态误操作接地开关）
+            // 五防·带电闭锁：T1-T3 端口有电压 → 严禁合接地，无法解锁
+            if (!this._emLockUnlocked && (this._workPos === 0 || this._state === 'on' || this._doorOpen || this._tSideEnergized())) return;
             this._emLockUnlocked = !this._emLockUnlocked;
             // 如果锁定时摇柄已插入，自动拔出
             if (!this._emLockUnlocked && this._crankInserted) {
@@ -824,6 +940,8 @@ export class VacuumCircuitBreaker extends BaseComponent {
         });
         insertHoleRight.on('click tap', (e) => {
             e.cancelBubble = true;
+            // 五防·带电闭锁：T1-T3 带电期间禁止插入摇柄与摇动接地开关
+            if (this._tSideEnergized()) return;
             if (this._emLockUnlocked && this._crankInserted) {
                 // 顺时针摇动：增加摇动次数
                 if (this._crankTurnCount < this._crankTargetTurns) {
@@ -848,6 +966,8 @@ export class VacuumCircuitBreaker extends BaseComponent {
         });
         insertHoleLeft.on('click tap', (e) => {
             e.cancelBubble = true;
+            // 五防·带电闭锁：T1-T3 带电期间禁止摇动接地开关
+            if (this._tSideEnergized()) return;
             if (this._emLockUnlocked && this._crankInserted) {
                 // 逆时针摇动：减少摇动次数
                 if (this._crankTurnCount > 0) {
@@ -863,6 +983,238 @@ export class VacuumCircuitBreaker extends BaseComponent {
         });
         hover(insertHoleLeft);
         this._interactGroup.add(insertHoleLeft);
+
+        // 柜门命中区（置于交互层最上：门关闭时拦截内部所有点击，开门后随门移开）
+        this._createDoorHit();
+    }
+
+    // ═══════════════════════════════════════════
+    // 柜门（覆盖右侧原理区，只露出左侧操作面板）
+    // ═══════════════════════════════════════════
+
+    /** 柜门图形：金属门板 + 加强筋 + 铰链 + 把手 + 标牌 + 警示条。
+     *  加入 _dynamicGroup 末尾（内部图形最上层），开合动画仅 in-place 更新位置/透明度。 */
+    _drawCabinetDoor() {
+        const d = this._door;
+        const g = new Konva.Group({ x: 0, y: 0, listening: false });
+        // 门板主体（金属渐变）
+        g.add(new Konva.Rect({
+            x: d.x, y: d.y, width: d.w, height: d.h, cornerRadius: 3,
+            fillLinearGradientStartPoint: { x: d.x, y: d.y },
+            fillLinearGradientEndPoint: { x: d.x + d.w, y: d.y + d.h },
+            fillLinearGradientColorStops: [0, '#d8dce4', 0.5, '#c2c8d2', 1, '#aab1bd'],
+            stroke: '#6a7280', strokeWidth: 2,
+        }));
+        // 门板内沿（内嵌边）
+        g.add(new Konva.Rect({
+            x: d.x + 7, y: d.y + 7, width: d.w - 14, height: d.h - 14, cornerRadius: 2,
+            stroke: 'rgba(90,100,115,0.55)', strokeWidth: 1.5,
+        }));
+        // 上下加强筋（横向凹槽）
+        [d.y + d.h * 0.22, d.y + d.h * 0.78].forEach(yy => {
+            g.add(new Konva.Rect({
+                x: d.x + 12, y: yy - 4, width: d.w - 24, height: 8, cornerRadius: 3,
+                fill: 'rgba(120,130,145,0.35)', stroke: 'rgba(80,90,105,0.45)', strokeWidth: 0.8,
+            }));
+        });
+        // 左缘铰链（三个）
+        for (let i = 0; i < 3; i++) {
+            const hy = d.y + d.h * (0.18 + i * 0.32);
+            g.add(new Konva.Rect({
+                x: d.x - 3, y: hy - 9, width: 10, height: 18, cornerRadius: 2,
+                fill: '#8a919e', stroke: '#5a6270', strokeWidth: 1,
+            }));
+        }
+        // 右侧把手位置（竖向凹槽式）—— 把手固定在柜体上，不随门扇滑走：
+        // 门关闭时它是门把手；门打开后仍留在右缘，点击它即可关门
+        const hx = d.x + d.w - 26, hyC = d.y + d.h / 2;
+        const hg = new Konva.Group({ x: 0, y: 0, listening: false });
+        hg.add(new Konva.Rect({
+            x: hx, y: hyC - 34, width: 10, height: 68, cornerRadius: 5,
+            fill: '#5a6470', stroke: '#3f4854', strokeWidth: 1,
+        }));
+        hg.add(new Konva.Line({
+            points: [hx + 5, hyC - 26, hx + 5, hyC + 26],
+            stroke: 'rgba(255,255,255,0.35)', strokeWidth: 2, lineCap: 'round',
+        }));
+        // "关门"提示（门打开后显示）
+        this._doorCloseHint = new Konva.Text({
+            x: hx - 64, y: hyC - 16, width: 80, align: 'center',
+            text: '点击关门', fontSize: 11, fill: '#4a5560', listening: false,
+        });
+        this._doorCloseHint.visible(this._doorSlide > 0.6);
+        hg.add(this._doorCloseHint);
+        this._doorHandleGroup = hg;
+        this._dynamicGroup.add(hg);
+        // 标牌（顶部）：柜门名称 + 开关提示
+        g.add(new Konva.Rect({
+            x: d.x + d.w / 2 - 62, y: d.y + 16, width: 124, height: 30, cornerRadius: 3,
+            fill: '#3a4a5a', stroke: '#2c3946', strokeWidth: 1,
+        }));
+        g.add(new Konva.Text({
+            x: d.x + d.w / 2 - 62, y: d.y + 20, width: 124, align: 'center',
+            text: '开关柜柜门', fontSize: 14, fontStyle: 'bold', fill: '#f0f4f8',
+        }));
+        // 门中央操作提示（动态：未接地时显示闭锁原因，接地后显示可开门）
+        this._doorHintText = new Konva.Text({
+            x: d.x, y: d.y + d.h / 2 - 8, width: d.w, align: 'center',
+            text: '点击开门', fontSize: 12, fill: '#5a6470', listening: false,
+        });
+        g.add(this._doorHintText);
+        // 底部警示条（黄黑斜纹）
+        const wzY = d.y + d.h - 22;
+        g.add(new Konva.Rect({
+            x: d.x + 8, y: wzY, width: d.w - 16, height: 12, fill: '#2c3038', cornerRadius: 2,
+        }));
+        g.add(new Konva.Line({
+            points: [d.x + 8, wzY + 6, d.x + d.w - 8, wzY + 6],
+            stroke: '#f0c020', strokeWidth: 10, dash: [10, 10], lineCap: 'butt',
+        }));
+        this._doorGroup = g;
+        this._doorGroup.opacity(this._doorSlide > 0.98 ? 0.1 : 1);
+        this._doorGroup.x(d.w * this._doorSlide);
+        this._dynamicGroup.add(g);
+    }
+
+    /** 柜门命中区：
+     *  · 整门透明矩形 —— 门关闭时拦截内部全部交互，点击开门；
+     *    开门后随门平移并禁用监听，内部按钮/摇柄恢复可操作。
+     *  · 把手小矩形 —— 门完全打开后启用，点击关门（与整门 hit 互斥）。 */
+    _createDoorHit() {
+        const d = this._door;
+        const closedNow = this._doorSlide < 0.9;
+        // 整门命中：点击开门
+        const hit = new Konva.Rect({
+            x: d.x, y: d.y, width: d.w, height: d.h,
+            fill: 'rgba(0,0,0,0.01)', cursor: 'pointer',
+        });
+        hit.on('click tap', (e) => {
+            e.cancelBubble = true;
+            this.toggleDoor();
+        });
+        hit.on('mouseenter', () => { document.body.style.cursor = 'pointer'; });
+        hit.on('mouseleave', () => { document.body.style.cursor = 'default'; });
+        this._doorHit = hit;
+        this._interactGroup.add(hit);
+        // 把手命中：门打开后点击关门
+        const hx = d.x + d.w - 26, hyC = d.y + d.h / 2;
+        const handleHit = new Konva.Rect({
+            x: hx - 10, y: hyC - 46, width: 36, height: 96,
+            fill: 'rgba(0,0,0,0.01)', cursor: 'pointer',
+        });
+        handleHit.on('click tap', (e) => {
+            e.cancelBubble = true;
+            this.toggleDoor();
+        });
+        handleHit.on('mouseenter', () => { document.body.style.cursor = 'pointer'; });
+        handleHit.on('mouseleave', () => { document.body.style.cursor = 'default'; });
+        this._doorHandleHit = handleHit;
+        this._interactGroup.add(handleHit);
+        hit.moveToTop();      // 盖过部件识别热区等既有交互节点
+        handleHit.moveToTop();
+        // 互斥启用：门关闭 → 整门可点；门打开 → 仅把手可点
+        hit.listening(closedNow);
+        handleHit.listening(!closedNow);
+    }
+
+    /** 切换柜门开/关 */
+    toggleDoor() {
+        if (this._animating) return; // 分合闸动作中不开门，避免状态混乱
+        // 联锁②：接地开关未全部闭合（未可靠接地）→ 柜门闭锁，禁止开启
+        // （关门不受限；接地开关闭合后才允许打开柜门）
+        if (!this._doorOpen && !this.isGrounded()) return;
+        const willOpen = !this._doorOpen;
+        this._doorOpen = willOpen;
+        // 联锁③：柜门打开 → 接地开关电磁锁立即闭锁、摇柄拔出
+        if (willOpen && this._emLockUnlocked) {
+            this._emLockUnlocked = false;
+            this._crankInserted = false;
+        }
+        this.opsCount++;
+    }
+
+    isDoorOpen() { return !!this._doorOpen; }
+
+    /** 五防·带电检测：T1-T3 端口任一线电压超过阈值即视为线路带电。
+     *  只有三相全部无压（|U|≤阈值或未量得电压）才允许操作接地开关。 */
+    _tSideEnergized() {
+        const sys = this.sys;
+        if (!sys || typeof sys.getVoltageBetween !== 'function') return false;
+        const th = 5; // V，判电阈值
+        const pairs = [['t1', 't2'], ['t2', 't3'], ['t3', 't1']];
+        for (const [a, b] of pairs) {
+            const v = sys.getVoltageBetween(`${this.id}_wire_${a}`, `${this.id}_wire_${b}`);
+            if (typeof v === 'number' && isFinite(v) && Math.abs(v) > th) return true;
+        }
+        return false;
+    }
+
+    // ═══════════════════════════════════════════
+    // 手动合闸/分闸按钮防护玻璃盖（防误碰罩）
+    //   关盖：拦截按钮点击 → 点一下开盖（向上翻起成小条）
+    //   → 再点按钮才生效 → 再点翻起的盖条重新盖上
+    // ═══════════════════════════════════════════
+
+    /** 盖子几何常量：与 _drawButtons 的按钮位置对应 */
+    static get _COVER_DEFS() { return [['close', 6], ['trip', 78]]; }
+    static get _COVER_BOX()  { return { y: 70, w: 66, h: 26, restH: 7, lift: 19 }; };
+
+    /** 盖子视觉（半透明玻璃 + 高光），加入动态层；随 onConfigUpdate 重建 */
+    _createButtonCoverVisuals() {
+        const box = VacuumCircuitBreaker._COVER_BOX;
+        this._coverVisuals = {};
+        VacuumCircuitBreaker._COVER_DEFS.forEach(([key, bx]) => {
+            const g = new Konva.Group({ x: bx, y: box.y, listening: false });
+            const rect = new Konva.Rect({
+                x: 0, y: 0, width: box.w, height: box.h, cornerRadius: 4,
+                fill: 'rgba(190,214,238,0.42)',
+                stroke: 'rgba(110,140,170,0.85)', strokeWidth: 1.2,
+            });
+            const shine = new Konva.Line({
+                points: [7, box.h - 5, box.w * 0.45, 4],
+                stroke: 'rgba(255,255,255,0.55)', strokeWidth: 3, lineCap: 'round',
+            });
+            g.add(rect);
+            g.add(shine);
+            // 联锁⑤⑥：合闸盖上的闭锁提示（接地闭合→"接地闭锁"；检修位→"检修闭锁"）
+            if (key === 'close') {
+                this._closeCoverLockText = new Konva.Text({
+                    x: 0, y: box.h / 2 - 6, width: box.w, align: 'center',
+                    text: '', fontSize: 10, fontStyle: 'bold',
+                    fill: '#c0392b', listening: false,
+                });
+                g.add(this._closeCoverLockText);
+            }
+            this._dynamicGroup.add(g);
+            this._coverVisuals[key] = { group: g, rect, shine };
+        });
+    }
+
+    /** 盖子命中区：只创建一次（_interactGroup 不随配置重建，引用恒有效）。
+     *  尺寸在 _updateDynamic 中随开度同步 —— 开盖后仅剩上方小条，释放按钮区。 */
+    _createButtonCoverHits() {
+        if (this._coverHits) return;
+        const box = VacuumCircuitBreaker._COVER_BOX;
+        this._coverHits = {};
+        VacuumCircuitBreaker._COVER_DEFS.forEach(([key, bx]) => {
+            const hit = new Konva.Rect({
+                x: bx, y: box.y, width: box.w, height: box.h,
+                fill: 'rgba(0,0,0,0.01)', cursor: 'pointer',
+            });
+            hit.on('click tap', (e) => {
+                e.cancelBubble = true;
+                const cv = this._btnCovers[key];
+                // 联锁⑤：接地开关闭合 → 合闸按钮盖锁死
+                // 联锁⑥：检修位 → 合闸按钮盖锁死（合闸失效）
+                if (key === 'close' && !cv.open && (this.isGrounded() || this._workPos === 2)) return;
+                cv.open = !cv.open; // 点盖切换：关→开 / 开→关
+                this.opsCount++;
+            });
+            hit.on('mouseenter', () => { document.body.style.cursor = 'pointer'; });
+            hit.on('mouseleave', () => { document.body.style.cursor = 'default'; });
+            this._interactGroup.add(hit);
+            this._coverHits[key] = hit;
+        });
     }
 
     /** 更新接地开关状态（根据摇动次数） */
@@ -875,6 +1227,9 @@ export class VacuumCircuitBreaker extends BaseComponent {
 
     _dialTurn(dir) {
         if (this._state === 'on') return;
+        // 五防·防带地线摇车：接地开关闭合期间工作位旋钮整体闭锁，
+        // 手车不得摇回连接位（防止带地线就位后解除接地即具备送电条件）
+        if (this.isGrounded()) return;
         const nextDet = this._detent + dir;
         if (nextDet < 0 || nextDet > 2) { this._clickAcc = 0; this._dialAngle = this._detent * 90; return; }
         this._clickAcc += dir;
@@ -889,20 +1244,22 @@ export class VacuumCircuitBreaker extends BaseComponent {
     }
 
     _syncMainCircuits() {
+        // 联锁①：回到工作位（连接位）→ 接地开关电磁锁自动闭锁、摇柄拔出
+        if (this._workPos === 0 && this._emLockUnlocked) {
+            this._emLockUnlocked = false;
+            this._crankInserted = false;
+        }
         const sys = this.sys;
         if (!sys || !sys.conns || !sys.connMgr) return;
-        const mainPorts = ['l1', 'l2', 'l3', 't1', 't2', 't3'].map(p => `${this.id}_wire_${p}`);
+        // 主回路隔离由柜内一次插头（隔离连接片）承担：
+        //   试验位/检修位时连接片拉开（视觉）+ stamp 层不注入导通导纳（电气），
+        //   因此外部主回路连线保持不动，不再摘除/恢复。
+        // 此处仅清理历史遗留的主回路缓存；检修位仍断开二次线圈连线。
+        this._restoreSaved('_savedMains');
         const coilPorts = ['m1', 'm2', 'c1', 'c2', 'uv1', 'uv2', 'fla', 'flb'].map(p => `${this.id}_wire_${p}`);
-        const isMain = c => c.type === 'wire' && (mainPorts.includes(c.from) || mainPorts.includes(c.to));
         const isCoil = c => c.type === 'wire' && (coilPorts.includes(c.from) || coilPorts.includes(c.to));
-        if (this._workPos === 0) {
-            this._restoreSaved('_savedMains');
-            this._restoreSaved('_savedCoils');
-        } else {
-            this._saveRemoved('_savedMains', isMain);
-            if (this._workPos === 2) this._saveRemoved('_savedCoils', isCoil);
-            else this._restoreSaved('_savedCoils');
-        }
+        if (this._workPos === 2) this._saveRemoved('_savedCoils', isCoil);
+        else this._restoreSaved('_savedCoils');
     }
 
     _saveRemoved(key, isMatch) {
@@ -928,6 +1285,10 @@ export class VacuumCircuitBreaker extends BaseComponent {
     tryClose() {
         if (this._animating || this._state !== 'off') return;
         if (!this._charged) return;
+        // 联锁⑤：接地开关处于闭合（线路已接地）→ 禁止合闸，防止带地线合闸
+        if (this.isGrounded()) return;
+        // 联锁⑥：检修位（一、二次插头全断）→ 合闸操作失效
+        if (this._workPos === 2) return;
         this._startAnim('close');
     }
 
@@ -944,6 +1305,11 @@ export class VacuumCircuitBreaker extends BaseComponent {
         if (mode === 'close') {
             this._chargeProg = 0;
             this._charged = false;
+            // 联锁④：合闸操作（手动/遥控）→ 接地开关电磁锁立即闭锁、摇柄拔出
+            if (this._emLockUnlocked) {
+                this._emLockUnlocked = false;
+                this._crankInserted = false;
+            }
         }
         this.opsCount++;
     }
@@ -956,7 +1322,7 @@ export class VacuumCircuitBreaker extends BaseComponent {
         this._sense(dt);
         this._logic(dt);
         this._animate(dt);
-        this._updateDynamic();
+        this._updateDynamic(dt);
         if (this.sys && typeof this.sys.requestRedraw === 'function') this.sys.requestRedraw();
     }
 
@@ -1096,7 +1462,7 @@ export class VacuumCircuitBreaker extends BaseComponent {
         }
     }
 
-    _updateDynamic() {
+    _updateDynamic(dt) {
         const closed = this._state === 'on';
 
         // 动触头垂直位移：合闸三杆带动触头上移（贴合上静触头）、分闸下移（分离）
@@ -1107,6 +1473,46 @@ export class VacuumCircuitBreaker extends BaseComponent {
             blade.y(y);
             rod.points([0, 0, 0, rodLen]);
         });
+
+        // ══════ 隔离连接片（一次插头）联动工作位 ══════
+        // 连接位（workPos=0）：连接片桥接引线；试验位(1)/检修位(2)：右移 20px 断开
+        const isoTarget = (this._workPos === 0) ? 0 : 1;
+        this._isoT += (isoTarget - this._isoT) * Math.min(1, (dt || 0.05) * 8);
+        if (Math.abs(this._isoT - isoTarget) < 0.003) this._isoT = isoTarget;
+        if (this._isoGroup) this._isoGroup.x(this._isoMoveX * this._isoT);
+
+        // ══════ 手动按钮防护玻璃盖开合动画 ══════
+        // 开盖：玻璃向上收起成小条停在按钮上方（铰链在顶部），露出整个按钮
+        // 联锁⑤：接地开关闭合 → 强制关上合闸按钮防护盖（按钮闭锁）
+        // 联锁⑥：检修位 → 强制关上合闸按钮防护盖（合闸失效）
+        const closeCoverLocked = this.isGrounded() || this._workPos === 2;
+        if (closeCoverLocked && this._btnCovers.close.open) this._btnCovers.close.open = false;
+        if (this._coverVisuals) {
+            const box = VacuumCircuitBreaker._COVER_BOX;
+            VacuumCircuitBreaker._COVER_DEFS.forEach(([key]) => {
+                const cv = this._btnCovers[key];
+                const v = this._coverVisuals[key];
+                const target = cv.open ? 1 : 0;
+                cv.t += (target - cv.t) * Math.min(1, (dt || 0.05) * 10);
+                if (Math.abs(cv.t - target) < 0.003) cv.t = target;
+                const h = box.h - (box.h - box.restH) * cv.t;   // 26 → 7
+                const yOff = -box.lift * cv.t;                  // 向上翻起 19px
+                v.rect.y(yOff);
+                v.rect.height(h);
+                v.shine.visible(cv.t < 0.5);                    // 翻开后高光隐藏
+                const hit = this._coverHits && this._coverHits[key];
+                if (hit) {                                      // 命中区同步收缩，释放按钮区
+                    hit.y(box.y + yOff);
+                    hit.height(h);
+                }
+            });
+            // 合闸盖闭锁提示：按原因显示"接地闭锁"/"检修闭锁"
+            if (this._closeCoverLockText) {
+                const reason = this.isGrounded() ? '接地闭锁' : (this._workPos === 2 ? '检修闭锁' : '');
+                this._closeCoverLockText.text(reason);
+                this._closeCoverLockText.visible(!!reason);
+            }
+        }
         // 指示牌
         this._onOffText.text(closed ? '合闸 ON' : '分闸 OFF');
         this._onOffText.fill(closed ? '#1b8a1b' : '#c0392b');
@@ -1117,6 +1523,21 @@ export class VacuumCircuitBreaker extends BaseComponent {
         this._dialGroup.rotation(this._dialCur);
         this._dialGroup.opacity(closed ? 0.45 : 1);
         this._workPosText.text(this._workPosName());
+
+        // 工作位锁定指示：合闸（带负荷）或接地闭合（防带地线摇车）→ 锁定红；否则解锁绿
+        if (this._wpLockIndicator) {
+            const wpLocked = closed || this.isGrounded();
+            this._wpLockIndicator.fill(wpLocked ? '#c0392b' : '#20a030');
+            this._wpLockLabel.text(wpLocked ? '锁定' : '解锁');
+            this._wpLockLabel.fill(wpLocked ? '#c0392b' : '#20a030');
+            // 闭锁原因（解锁时不显示）
+            if (this._wpLockReasonText) {
+                let reason = '';
+                if (closed) reason = '合闸闭锁';
+                else if (this.isGrounded()) reason = '接地闭锁';
+                this._wpLockReasonText.text(reason);
+            }
+        }
 
         // 储能手柄
         this._handleGroup.rotation(this._handleRot);
@@ -1134,6 +1555,17 @@ export class VacuumCircuitBreaker extends BaseComponent {
         this._emLockIndicator.fill(this._emLockUnlocked ? '#20a030' : '#c0392b');
         this._emLockLabel.text(this._emLockUnlocked ? '解锁' : '锁定');
         this._emLockLabel.fill(this._emLockUnlocked ? '#20a030' : '#c0392b');
+        // 电磁锁闭锁原因（解锁时不显示；按优先级：工作位 > 合闸 > 开门 > 线路带电）
+        if (this._emLockReasonText) {
+            let reason = '';
+            if (!this._emLockUnlocked) {
+                if (this._workPos === 0) reason = '工作位闭锁';
+                else if (this._state === 'on') reason = '合闸闭锁';
+                else if (this._doorOpen) reason = '开门闭锁';
+                else if (this._tSideEnergized()) reason = '线路带电';
+            }
+            this._emLockReasonText.text(reason);
+        }
         
         // 接地开关状态
         const progress = this._crankTurnCount / this._crankTargetTurns;
@@ -1154,6 +1586,44 @@ export class VacuumCircuitBreaker extends BaseComponent {
         
         // 摇动次数显示
         this._crankCountText.text(progress >= 1 ? '' : `${this._crankTurnCount}/${this._crankTargetTurns}`);
+
+        // ═══════════════════════════════════════════
+        // 柜门开合动画（向右滑出 + 渐隐）
+        // ═══════════════════════════════════════════
+        const dTarget = this._doorOpen ? 1 : 0;
+        this._doorSlide += (dTarget - this._doorSlide) * Math.min(1, (dt || 0.05) * 6);
+        if (Math.abs(this._doorSlide - dTarget) < 0.003) this._doorSlide = dTarget;
+        const doorOff = this._door.w * this._doorSlide;
+        if (this._doorGroup) {
+            this._doorGroup.x(doorOff);
+            this._doorGroup.opacity(Math.max(0.08, 1 - this._doorSlide * 1.15));
+        }
+        if (this._doorHit) {
+            // 命中区基准在分隔线 d.x（150），随门开度向右平移；
+            // 若误以 0 为基准，门关闭时会盖住整个左侧操作面板
+            this._doorHit.x(this._door.x + doorOff);
+            // 互斥启用：门基本关闭 → 整门可点（开门）；门基本打开 → 把手可点（关门）
+            const doorListening = this._doorSlide < 0.9;
+            if (this._doorHit.listening() !== doorListening) {
+                this._doorHit.listening(doorListening);
+                document.body.style.cursor = 'default';
+            }
+        }
+        if (this._doorHandleHit) {
+            const handleListening = this._doorSlide > 0.9;
+            if (this._doorHandleHit.listening() !== handleListening) {
+                this._doorHandleHit.listening(handleListening);
+                document.body.style.cursor = 'default';
+            }
+        }
+        // "点击关门"提示：门基本打开后显示
+        if (this._doorCloseHint) this._doorCloseHint.visible(this._doorSlide > 0.6);
+        // 联锁②提示：接地开关未闭合 → 门中央显示红色闭锁原因；接地后显示"点击开门"
+        if (this._doorHintText) {
+            const blocked = !this.isGrounded();
+            this._doorHintText.text(blocked ? '柜门闭锁 · 请先合上接地开关' : '点击开门');
+            this._doorHintText.fill(blocked ? '#c0392b' : '#5a6470');
+        }
     }
 
     // ═══════════════════════════════════════════
@@ -1189,6 +1659,7 @@ export class VacuumCircuitBreaker extends BaseComponent {
             { label: '控制线圈电阻 (Ω)',           key: 'coilResistance',     type: 'number' },
             { label: '电磁锁初始状态 locked/unlocked', key: 'emLockUnlocked', type: 'text' },
             { label: '摇柄初始状态 inserted/removed', key: 'crankInserted', type: 'text' },
+            { label: '柜门初始状态 open/closed', key: 'initDoor', type: 'text' },
         ];
     }
 
@@ -1215,6 +1686,7 @@ export class VacuumCircuitBreaker extends BaseComponent {
             this._detent = this._workPos;
             this._dialAngle = this._detent * 90;
             this._dialCur = this._dialAngle;
+            this._isoT = (this._workPos === 0) ? 0 : 1; // 连接片位置同步到位
             this._syncMainCircuits();
         }
         // 接地开关栏配置
@@ -1223,6 +1695,11 @@ export class VacuumCircuitBreaker extends BaseComponent {
         }
         if (cfg.crankInserted !== undefined) {
             this._crankInserted = String(cfg.crankInserted).toLowerCase() === 'inserted';
+        }
+        // 柜门初始状态（直接到位，不做动画）
+        if (cfg.initDoor !== undefined) {
+            this._doorOpen = String(cfg.initDoor).toLowerCase() === 'open';
+            this._doorSlide = this._doorOpen ? 1 : 0;
         }
         this.config = { ...this.config, ...cfg };
         this._recalcGeometry();

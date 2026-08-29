@@ -73,6 +73,28 @@ export class CircuitTopology {
             // PT100 传感器：在三线制等特定配置下，补偿端(t)与信号端(r)通常在根部短接
             if (dev.special === 'pt100')
                 internalUnion(`${id}_wire_r`, `${id}_wire_t`);
+            // 高压放电棒：接地线引出点(r) 与 接地线末端(gnd) 内部短接，并强制登记
+            // 两端口（连接处端口通常无外部连线），保证 钩端(l) → 10MΩ → 地 的通路
+            // 始终成立：l—r 由 DeviceStamps 按 resistor 填充，r—gnd 零电阻短接；
+            // 若 gnd 未接 Ground 组件，则 r+gnd 构成悬空簇，行为等同普通未接地电阻，无害。
+            if (dev.type === 'resistor' && dev.special === 'hv_discharge') {
+                activePorts.add(`${id}_wire_r`);
+                activePorts.add(`${id}_wire_gnd`);
+                internalUnion(`${id}_wire_r`, `${id}_wire_gnd`);
+            }
+            // 高压接地线（三相短路接地线）：三个相接线夹(p1/p2/p3)与接地夹(gnd)
+            // 内部短接（三根接地软线 + 短接连片零电阻），强制登记四端口：
+            // 只夹一相时该相即经 接地夹 对地短接（与实物一致）；全部未接线时
+            // 四端口构成悬空簇，不影响求解。
+            if (dev.type === 'hv_grounding_lead') {
+                const gid = `${id}_wire_gnd`;
+                activePorts.add(gid);
+                ['p1', 'p2', 'p3'].forEach(p => {
+                    const pid = `${id}_wire_${p}`;
+                    activePorts.add(pid);
+                    internalUnion(gid, pid);
+                });
+            }
             // UPS：输出中性线与输入中性线内部共地（避免输出浮动子网导致 MNA 奇异）
             if (dev.type === 'ups') {
                 internalUnion(`${id}_wire_in_n`, `${id}_wire_out1_n`);
@@ -86,7 +108,9 @@ export class CircuitTopology {
             // 发电机组遥控面板：START/STOP 按住时短接对应端口对
             if (dev.type === 'gen_remote_panel') {
                 if (dev._startPressed) internalUnion(`${id}_wire_start_a`, `${id}_wire_start_b`);
-                if (dev._stopPressed)  internalUnion(`${id}_wire_stop_a`, `${id}_wire_stop_b`);
+                if (dev._stopPressed)  internalUnion(`${id}_wire_stop_a`,  `${id}_wire_stop_b`);
+                // 高压发电机遥控面板（HvGenRemotePanel）：停机后灭磁触点闭合
+                if (dev._demagClosed)  internalUnion(`${id}_wire_demag_a`, `${id}_wire_demag_b`);
             }
 
             // 应急配电板：起动/停止信号短接对应端口对

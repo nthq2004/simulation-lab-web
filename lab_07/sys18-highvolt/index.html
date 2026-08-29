@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>船舶高压发电机和真空断路器</title>
+    <title>船舶高压系统故障处理和断路器隔离</title>
 
     <!-- 外部CSS -->
     <link rel="stylesheet" href="./style.css">
@@ -34,6 +34,14 @@
 
         <button id="btnGateway" title="硬件网关配置">硬件网关</button>
         <span style="width:1px;height:24px;background:#555;margin:0 8px;display:inline-block;"></span>
+        <label id="oneLineLabel" title="显示/隐藏电力系统单线图" style="cursor:pointer;user-select:none;">
+            <input type="checkbox" id="btnOneLine" style="width:14px;height:14px;vertical-align:middle;cursor:pointer;" />
+            <span style="vertical-align:middle;">单线图</span>
+        </label>
+        <label id="switchPanelLabel" title="显示/隐藏高压配电柜组件图" style="cursor:pointer;user-select:none;">
+            <input type="checkbox" id="btnSwitchPanel" style="width:14px;height:14px;vertical-align:middle;cursor:pointer;" />
+            <span style="vertical-align:middle;">高压配电柜</span>
+        </label>
     </div>
 
     <!-- 故障设置弹窗 -->

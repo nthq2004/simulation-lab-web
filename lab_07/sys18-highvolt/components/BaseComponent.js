@@ -472,6 +472,7 @@ export class BaseComponent {
         group.add(bg);
         group.add(hit);
         this._interactGroup.add(group);
+        return hit;   // 返回命中区，调用方可追加自定义点击行为
     }
 
     hide() {

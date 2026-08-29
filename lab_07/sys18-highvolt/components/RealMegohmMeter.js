@@ -715,13 +715,8 @@ export class RealMegohmMeter extends BaseComponent {
                 // 依 L 端口所在簇映射到绝缘指示灯数据（MΩ）
                 this._targetR = this._resolveInsulSyncR();
             } else {
-                // 从电路求解器获取 L-E 间等效电阻（Ω → MΩ）
-                try {
-                    const rOhm = this.sys.voltageSolver._getEquivalentResistanceFromPorts(this.id, 'l', 'e');
-                    this._targetR = (isFinite(rOhm) && rOhm >= 0) ? rOhm / 1e6 : Infinity;
-                } catch (_) {
-                    this._targetR = Infinity;
-                }
+                // 从电路求解器获取 L-E 间等效电阻（Ω → MΩ），含发电机机端绕组直流通道补偿
+                this._targetR = this._measureLE() / 1e6;
             }
         } else {
             // 停止摇动：随机停留阻值
@@ -750,6 +745,75 @@ export class RealMegohmMeter extends BaseComponent {
         this._updateDynamic(dt);
         this.markDirty();
         this._refreshIfDirty();
+    }
+
+    // ═══════════════════════════════════════════════════
+    // L-E 测量（含发电机机端绕组直流通道补偿）
+    // ═══════════════════════════════════════════════════
+
+    /**
+     * 测量 L-E 等效电阻（Ω）。
+     * 基础：求解器电压源之外的电阻网络（绝缘支路、母线等）。
+     * 补偿：发电机定子绕组是理想电压源（source_3p），等效电阻网络按开路处理，
+     *       使机端出线对地摇不到"绕组 → 中性点 → 500Ω 接地电阻"的实机直流回路（显示 ∞）。
+     *       此处按实机物理在读数层补一条虚拟支路：机端相 —[rOn]→ 中性点 n —[rn]→ 地，
+     *       与基础绝缘网络并联（单相绕组 rOn + 中性点对地等效电阻）。
+     * 仅当 L 所在簇命中【未并入主回路】的发电机机端相岛时补偿；
+     * 母线 / 已上网测量仍走绝缘网络，教学摇绝缘读数不变。
+     */
+    _measureLE() {
+        const sol = this.sys && this.sys.voltageSolver;
+        const lP = `${this.id}_wire_l`, eP = `${this.id}_wire_e`;
+        try {
+            if (!sol || !sol.portToCluster || typeof sol.getResistanceBetweenPorts !== 'function') {
+                const r = sol && sol._getEquivalentResistanceFromPorts(this.id, 'l', 'e');
+                return (isFinite(r) && r >= 0) ? r : Infinity;
+            }
+            const base = _safeR(sol.getResistanceBetweenPorts(lP, eP));
+            // 机端补偿：L 簇命中某台发电机【孤立机端相岛】
+            let winding = Infinity;
+            const lC = sol.portToCluster.get(lP);
+            if (lC !== undefined) {
+                const comps = (this.sys && this.sys.comps) || {};
+                for (const g of Object.values(comps)) {
+                    if (!g || g.type !== 'source_3p') continue;
+                    for (const ph of ['u', 'v', 'w']) {
+                        const phP = `${g.id}_wire_${ph}`;
+                        const c = sol.portToCluster.get(phP);
+                        if (c === undefined || c !== lC) continue;      // L 不在该相簇
+                        if (this._phaseOnline(sol, g.id, c)) continue;  // 已并入主回路 → 不补偿
+                        const nP = `${g.id}_wire_n`;
+                        const eC = sol.portToCluster.get(eP);
+                        const nC = sol.portToCluster.get(nP);
+                        let rN = Infinity;
+                        if (nC !== undefined && eC !== undefined) {
+                            rN = (nC === eC)
+                                ? 0                                            // 中性点与地同簇
+                                : _safeR(sol.getResistanceBetweenPorts(nP, eP));
+                        }
+                        if (isFinite(rN)) {
+                            const rW = (g.rOn || 2) + rN;              // 单相绕组 + 中性点对地
+                            if (rW < winding) winding = rW;
+                        }
+                    }
+                }
+            }
+            if (isFinite(winding)) {
+                return isFinite(base) ? 1 / (1 / base + 1 / winding) : winding;
+            }
+            return base;
+        } catch (_) {
+            return Infinity;
+        }
+    }
+
+    /** 机端相簇是否已并入主回路（簇内含非本机的相线/母线端口，如 qf1_wire_l1、bus1_wire_l1_1） */
+    _phaseOnline(sol, gid, c) {
+        for (const [p, ci] of sol.portToCluster) {
+            if (ci !== c || p.startsWith(gid)) continue;
+            if (/^[^\s]+_wire_l[123](?:_\d+)?$/.test(p)) return true;
+        }
+        return false;
     }
 
     // ═══════════════════════════════════════════════════
@@ -823,4 +887,9 @@ export class RealMegohmMeter extends BaseComponent {
     destroy() {
         super.destroy?.();
     }
+}
+
+/** 规范化电阻读数：非负有限值原样返回，其余视为开路 */
+function _safeR(v) {
+    return (isFinite(v) && v >= 0) ? v : Infinity;
 }

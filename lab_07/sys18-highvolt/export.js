@@ -117,6 +117,7 @@ import { SingleLeadAcidBattery } from './components/SingleLeadAcidBattery.js';
 import { ChargeBoard } from './components/ChargeBoard.js';
 import { Busbar3P } from './components/Busbar3P.js';
 import { SyncGenerator3P } from './components/SyncGenerator3P.js';
+import { MarineHVGenerator } from './components/MarineHVGenerator.js';
 import { EmergencyGenerator3P } from './components/EmergencyGenerator3P.js';
 import { EmergencyMainsSwitch } from './components/EmergencyMainsSwitch.js';
 import { TieSwitch } from './components/TieSwitch.js';
@@ -124,9 +125,21 @@ import { MarineMainsSwitch } from './components/MarineMainsSwitch.js';
 import { VacuumCircuitBreaker } from './components/VacuumCircuitBreaker.js';
 import { MarineElectronicTrip } from './components/MarineElectronicTrip.js';
 import { GeneratorRemotePanel } from './components/GeneratorRemotePanel.js';
+import { HvGenRemotePanel } from './components/HvGenRemotePanel.js';
+import { HvGenProtection } from './components/HvGenProtection.js';
 import { EmergencyPanel } from './components/EmergencyPanel.js';
 import { ShipAutoControl } from './components/ShipAutoControl.js';
 import { ThreePhaseLoad } from './components/ThreePhaseLoad.js';
+import { HvThreePhaseLoad } from './components/HvThreePhaseLoad.js';
+import { SimpleVCB } from './components/SimpleVCB.js';
+import { SimpleHVGenerator } from './components/SimpleHVGenerator.js';
+import { HvTransformer } from './components/HvTransformer.js';
+import { HvPowerOneLine } from './components/HvPowerOneLine.js';
+import { HvSwitchPanel } from './components/HvSwitchPanel.js';
+import { HvTester } from './components/HvTester.js';
+import { HvGroundMonitor } from './components/HvGroundMonitor.js';
+import { HvDischargeRod } from './components/HvDischargeRod.js';
+import { HvGroundingCable } from './components/HvGroundingCable.js';
 import { HeavyLoadInquiry } from './components/HeavyLoadInquiry.js';
 import { SmallLamp } from './components/SmallLamp.js';
 import { Hydrometer } from './components/Hydrometer.js';
@@ -295,8 +308,8 @@ export {
     IC7805,TsCurveDisplay,ThreePhaseContactor,DiscElectromagneticBrake,FeelerGauge,ContactCurveDisplay,ThermalOverloadRelay,ThreePhaseACB,ThreePhaseACB2,DiagramThreePhaseACB,JSZ3,JSZ3N,
     FluorescentLamp,Ballast,Starter,DiagramStartButton,DiagramStopButton,DiagramSPDT,
     SingleLeadAcidBattery, SmallLamp, LeadAcidBattery, ChargeBoard, Hydrometer,
-    Busbar3P, SyncGenerator3P, EmergencyGenerator3P, MarineMainsSwitch, VacuumCircuitBreaker, EmergencyMainsSwitch, TieSwitch, MarineElectronicTrip, GeneratorRemotePanel,
-    ShipAutoControl, ThreePhaseLoad,
+    Busbar3P, SyncGenerator3P, MarineHVGenerator, EmergencyGenerator3P, MarineMainsSwitch, VacuumCircuitBreaker, EmergencyMainsSwitch, TieSwitch, MarineElectronicTrip, GeneratorRemotePanel, HvGenRemotePanel, HvGenProtection,
+    ShipAutoControl, ThreePhaseLoad, HvThreePhaseLoad, SimpleVCB, SimpleHVGenerator, HvTransformer, HvPowerOneLine, HvSwitchPanel, HvTester, HvGroundMonitor, HvDischargeRod, HvGroundingCable,
     HeavyLoadInquiry,
     ReversePowerRelay, Syncroscope, SP4TSwitch,
     UPS, MotorStarterPanel, ElectronicsPanel,

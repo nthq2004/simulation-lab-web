@@ -80,6 +80,55 @@ const actionMap = {
     'btnInstrument':()=>sys.showInstrument(),
 
 };
+// 单线图勾选框：勾选显示（置于其它组件之上），取消隐藏
+(function bindOneLineCheckbox() {
+    const cb = document.getElementById('btnOneLine');
+    if (!cb) return;
+    cb.addEventListener('change', () => {
+        const ol = sys && sys.comps ? sys.comps.one_line : null;
+        if (!ol) return;
+        if (cb.checked) {
+            ol.show();
+            ol.group.moveToTop();       // 置于其它组件之上
+            // 移到视口内（世界坐标 40,60，避免初始位置在视口外不可见）
+            const abs = ol.group.getAbsolutePosition();
+            ol.group.position({
+                x: ol.group.x() + (40 - abs.x),
+                y: ol.group.y() + (60 - abs.y),
+            });
+        } else {
+            ol.hide();
+        }
+        if (typeof sys.requestRedraw === 'function') sys.requestRedraw();
+    });
+})();
+// 高压配电柜勾选框：勾选显示，取消隐藏（默认勾选显示）
+(function bindSwitchPanelCheckbox() {
+    const cb = document.getElementById('btnSwitchPanel');
+    if (!cb) return;
+    cb.addEventListener('change', () => {
+        const sp = sys && sys.comps ? sys.comps.switch_panel : null;
+        if (!sp) return;
+        if (cb.checked) {
+            sp.show();
+            sp.group.moveToTop();
+            // 移到视口内（世界坐标 40,60）
+            const abs = sp.group.getAbsolutePosition();
+            sp.group.position({
+                x: sp.group.x() + (40 - abs.x),
+                y: sp.group.y() + (60 - abs.y),
+            });
+        } else {
+            sp.hide();
+        }
+        if (typeof sys.requestRedraw === 'function') sys.requestRedraw();
+    });
+    // 默认不勾选：启动时隐藏高压配电柜
+    if (!cb.checked) {
+        const sp = sys && sys.comps ? sys.comps.switch_panel : null;
+        if (sp) sp.hide();
+    }
+})();
 // 统一遍历并绑定事件
 Object.entries(actionMap).forEach(([id, action]) => {
     const btn = document.getElementById(id);

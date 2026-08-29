@@ -16,9 +16,9 @@ import {
     RealTransistor, IGBT, RealIGBT, Mosfet, RealMosfet,
     IncandescentLamp, RealIncandescentLamp, Triac, RealTriac, Inductor, UJT, RealUJT,
     IC7805, ThreePhaseContactor, DiscElectromagneticBrake, FeelerGauge, ThreePhaseACB, DiagramThreePhaseACB,
-    MarineMainsSwitch, VacuumCircuitBreaker, MarineElectronicTrip, GeneratorRemotePanel, DiagramStartButton, DiagramStopButton,
+    MarineMainsSwitch, VacuumCircuitBreaker, MarineHVGenerator, MarineElectronicTrip, GeneratorRemotePanel, HvGenRemotePanel, HvGenProtection, DiagramStartButton, DiagramStopButton,
     EmergencyPanel,
-    ShipAutoControl, ThreePhaseLoad,
+    ShipAutoControl, ThreePhaseLoad, HvThreePhaseLoad, SimpleVCB, SimpleHVGenerator, HvTransformer, HvPowerOneLine, HvSwitchPanel, HvTester, HvGroundMonitor, HvDischargeRod, HvGroundingCable,
     Syncroscope, SP4TSwitch,
     UPS
 } from './export.js';
@@ -30,7 +30,7 @@ import { HistoryManager, ConnectionManager, Renderer, UIManager, WorkflowManager
 import {
     WaterBath, RealPT100, RealTC, ThreeValve, StrainCylinderSensor, PneumaticValve,
     AirCompressor, NTCThermistor, NTCtempTransmitter, DigitClampMeter, HallClampMeter,
-    DigitMegohmMeter, RealMegohmMeter, ThreePhaseMotor, MotorTerminalBox, TsCurveDisplay, InductionMotor,
+    DigitMegohmMeter, RealMegohmMeter, Megohmmeter, ThreePhaseMotor, MotorTerminalBox, TsCurveDisplay, InductionMotor,
 } from './export.js';
 
 import { AND, OR, NOT, NAND, NOR, XOR, DFlipFlop, JKFlipFlop, ClockGen, 

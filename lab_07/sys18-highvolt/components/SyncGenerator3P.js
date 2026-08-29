@@ -574,6 +574,12 @@ export class SyncGenerator3P extends BaseComponent {
         this.addPort(p.v, 0, 'v', 'wire', 'p');
         this.addPort(p.w, 0, 'w', 'wire', 'p');
         this.addPort(p.n, 0, 'n', 'wire');
+        // 绕组中点抽头端口（物理上位于每相绕组首端↔中性点的中点）：
+        // 生成器差动保护演示用——内部（绕组中点）相间短路时故障口位于此处，
+        // 可通过故障配置强制短接 u_mid↔v_mid 等；正常运行时无需接线。
+        this.addPort(p.u, 18, 'u_mid', 'wire');
+        this.addPort(p.v, 18, 'v_mid', 'wire');
+        this.addPort(p.w, 18, 'w_mid', 'wire');
         this.addPort(r.x, r.startA, 'rm_start_a', 'wire');
         this.addPort(r.x, r.startB, 'rm_start_b', 'wire');
         this.addPort(r.x, r.stopA,  'rm_stop_a',  'wire');

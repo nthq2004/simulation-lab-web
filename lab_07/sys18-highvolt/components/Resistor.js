@@ -62,8 +62,10 @@ export class Resistor extends BaseComponent {
         // 4. 添加电气端口（左端 l，右端 r）
         this.addPort(-40 * this.scale, 0, 'l', 'wire');
         this.addPort(40 * this.scale, 0, 'r', 'wire');
-        let resText = '';
-        if (this.currentResistance > 1000) {
+let resText = '';
+        if (this.currentResistance >= 1e6) {
+            resText = (this.currentResistance / 1e6).toFixed(1) + ' MΩ';
+        } else if (this.currentResistance > 1000) {
             resText = (this.currentResistance / 1000).toFixed(1) + ' kΩ';
         } else {
             resText = this.currentResistance + ' Ω';
@@ -108,7 +110,9 @@ export class Resistor extends BaseComponent {
         this.id = newConfig.id; // 更新 ID
         this.currentResistance = parseFloat(newConfig.currentResistance);
         let resText = '';
-        if (this.currentResistance > 1000) {
+        if (this.currentResistance >= 1e6) {
+            resText = (this.currentResistance / 1e6).toFixed(1) + ' MΩ';
+        } else if (this.currentResistance > 1000) {
             resText = (this.currentResistance / 1000).toFixed(1) + ' kΩ';
         } else {
             resText = this.currentResistance + ' Ω';

@@ -80,6 +80,8 @@ export class CircuitSolver {
             diacDevs:         raw.filter(d => d.type === 'diac'),
             resistorDevs:     raw.filter(d => d.type === 'resistor'),
             load3Devs:        raw.filter(d => d.type === 'load_3p'),
+            hvLoad3Devs:      raw.filter(d => d.type === 'hv_load_3p'),
+            hvTransformerDevs: raw.filter(d => d.type === 'hv_transformer'),
             pressDevs:        raw.filter(d => d.type === 'pressure_sensor'),
             transmitterDevs:  raw.filter(d => d.type === 'transmitter_2wire'),
             capacitorDevs:    raw.filter(d => d.type === 'capacitor'),
@@ -177,6 +179,65 @@ export class CircuitSolver {
         this.portToCluster = result.portToCluster;  //每个簇有都有编号，pordID 与编号的对应映射关系。
         this.clusterCount = result.clusterCount;
         this.clusters = result.clusters;//这是端口ID簇，每个簇里面是导线连接在一起的，或通过union方式连到一起
+        this._computeSourceClusters();
+    }
+
+    // ── 计算"经导通路径可达电源端子"的簇集合 ─────────────────────────
+    // 高压变压器原边回馈（I_p = k·I_s）只允许注入"仍可通过导线+闭合断路器
+    // 到达电源端子"的原边簇。否则高压断路器跳闸瞬间，上一帧副边电流会被
+    // 注入仅挂励磁阻抗(2MΩ)的浮空原边簇，把原边电压抬到兆伏级 → 副边
+    // Vx=k·Vh 越级放大 → 下级主开关过流误脱扣、白炽灯过压烧毁。
+    // 注：ACB 主触头在拓扑中不合并端口簇（靠 0.01Ω stamp 电导导通），
+    // 故这里用"种子簇 + 沿闭合 ACB 传播"的 BFS 判断可达性；断路器跳闸后
+    // 传播路径断开 → 回馈门控自动关闭 → 原边浮空电压自然归零。
+    _computeSourceClusters() {
+        if (!this._sourceClusters) this._sourceClusters = new Set();
+        const S = this._sourceClusters;
+        S.clear();
+        const seed = (pid) => {
+            const c = this.portToCluster.get(pid);
+            if (c !== undefined) S.add(c);
+        };
+        // 1) 种子：投入中的三相电源输出端 u/v/w，及直流电源正端
+        for (const d of this.rawDevices) {
+            switch (d.type) {
+                case 'source_3p':
+                    if (d.isOn) { seed(`${d.id}_wire_u`); seed(`${d.id}_wire_v`); seed(`${d.id}_wire_w`); }
+                    break;
+                case 'power':
+                case 'dc':
+                case 'nimh_battery':
+                case 'leadacid_battery':
+                case 'single_leadacid_battery':
+                    seed(`${d.id}_wire_p`);
+                    break;
+                default:
+                    break;
+            }
+        }
+        // 2) 传播边：闭合 ACB 主触头 L1-L3 ↔ T1-T3（真空断路器/空气开关/联络开关均为此型）
+        const edges = [];
+        for (const d of this.rawDevices) {
+            if (d.type === 'ACB' && d._state === 'on') {
+                for (let i = 1; i <= 3; i++) edges.push([`${d.id}_wire_l${i}`, `${d.id}_wire_t${i}`]);
+            }
+            // 其它导通器件（PDB/接触器主触点/熔断器）可按需扩展
+        }
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const [a, b] of edges) {
+                const ca = this.portToCluster.get(a);
+                const cb = this.portToCluster.get(b);
+                if (ca === undefined || cb === undefined) continue;
+                if (S.has(ca) !== S.has(cb)) {
+                    S.add(ca); S.add(cb);
+                    changed = true;
+                }
+            }
+        }
+        // 此集合只用于"是否存在可行源路径"的宽泛判断：多标记无碍（仅放开回馈），
+        // 漏标记才可能在电源断开瞬间引发浮空过压，故优先覆盖常见源与开关类型。
     }
 
     _invalidateCacheIfNeeded() {
@@ -300,7 +361,7 @@ export class CircuitSolver {
                     resistSigs.push(`${d.id}:trip=${d._tripped ? 1 : 0}:R=${d._Rshunt || 0.01}`);
                 }
                 if (d.type === 'gen_remote_panel') {
-                    resistSigs.push(`${d.id}:sl=${d._startPressed ? 1 : 0}:tl=${d._stopPressed ? 1 : 0}`);
+                    resistSigs.push(`${d.id}:sl=${d._startPressed ? 1 : 0}:tl=${d._stopPressed ? 1 : 0}:dm=${d._demagClosed ? 1 : 0}`);
                 }
             }
             resistSigs.sort();
@@ -328,7 +389,7 @@ export class CircuitSolver {
         // 使用预缓存的分组（避免每帧 24 次 filter）
         const {
             gndDevs, powerDevs, power3Devs, tcDevs, pidDevs, bjtDevs, opAmps,
-            oscDevs, osc3Devs, diodeDevs, zenerDevs, ledDevs, photodiodeDevs, ptDevs, diacDevs, resistorDevs, load3Devs, pressDevs, transmitterDevs,
+            oscDevs, osc3Devs, diodeDevs, zenerDevs, ledDevs, photodiodeDevs, ptDevs, diacDevs, resistorDevs, load3Devs, hvLoad3Devs, hvTransformerDevs, pressDevs, transmitterDevs,
             capacitorDevs, inductorDevs, lvdtDevs, sgDevs,             jfetDevs, relayDevs, aiDevs,
             pcDevs, aoDevs, diDevs, doDevs, dcDevs, mf47Devs, multimeterDevs, ammeterDevs, ne555Devs, ccDevs,
             motorDevs, scrDevs, triacDevs, igbtDevs, mosfetDevs, ujtDevs,
@@ -382,10 +443,17 @@ export class CircuitSolver {
             const nIdx = this.portToCluster.get(`${p.id}_wire_n`);
             if (nIdx !== undefined) this.gndClusterIndices.add(nIdx);
         });
-        // ---默认将三相电源的中性点视为接地点---
+        // ---三相电源中性点：悬空时才视为接地点（钳位参考）。
+        //    若 n 端口有连线（如中性点经阻抗/电阻接地），则保持自由节点，
+        //    使接地阻抗参与单相接地零序回路（否则中性点被强制 0V、接地阻抗被旁路，
+        //    单相接地电流将被算成故障相大电流而非受限值）。---
         power3Devs.forEach(p => {
             const nIdx = this.portToCluster.get(`${p.id}_wire_n`);
-            if (nIdx !== undefined) this.gndClusterIndices.add(nIdx);
+            if (nIdx === undefined) return;
+            const nPort = `${p.id}_wire_n`;
+            const hasConn = (this.sys && this.sys.conns)
+                ? this.sys.conns.some(c => c.from === nPort || c.to === nPort) : false;
+            if (!hasConn) this.gndClusterIndices.add(nIdx);
         });
         // ---没有任何接地参考时，找一个非 vPos 簇钳位到地（防止矩阵奇异）
         if (this.gndClusterIndices.size === 0 && this.clusterCount > 0) {
@@ -566,6 +634,18 @@ export class CircuitSolver {
             if (cS1 !== undefined && cS2 !== undefined) ptEqCount++;
         });
 
+        // ── 高压三相变压器：副边受控电压源方程（每相 1 个，仅接线相）──
+        //    与 stampHvTransformers 同步：原边失源（断路器跳闸断开电源路径）的
+        //    相不再 stamp 电压源（改为副边开路高阻），故只统计"电源可达"的相。
+        let transformerEqCount = 0;
+        (this._deviceCache.hvTransformerDevs || []).forEach(dev => {
+            for (let i = 0; i < 3; i++) {
+                const ch = this.portToCluster.get(`${dev.id}_wire_h${i + 1}`);
+                const cx = this.portToCluster.get(`${dev.id}_wire_x${i + 1}`);
+                if (ch !== undefined && cx !== undefined && this._sourceClusters.has(ch)) transformerEqCount++;
+            }
+        });
+
         // ── 控制变压器：互感耦合电感伴随模型，每台 2 个电流变量（i_p, i_s）──
         let ctInternalCount = 0;
         const ctCtrlDevs = this._deviceCache.controlTransformerDevs || [];
@@ -607,7 +687,7 @@ upsDevs.forEach(dev => {
 });
 
 const nodeVarCount = mSize + ctInternalCount;
-const totalSize = nodeVarCount + pidEqCount + opAmps.length + oscDevs.length + lvdtDevs.length + aiEqCount + pcEqCount + dcEqCount + aoEqCount + doEqCount + acAmmEqCount + wattmeterEqCount + tripRelayEqCount + genRemotePanelEqCount + emergencyPanelEqCount + ctEqCount + ptEqCount + ammEqCount + mmResEqCount + ctVcvsEqCount + mwEqCount + imEqCount + rlEqCount + upsEqCount;
+const totalSize = nodeVarCount + pidEqCount + opAmps.length + oscDevs.length + lvdtDevs.length + aiEqCount + pcEqCount + dcEqCount + aoEqCount + doEqCount + acAmmEqCount + wattmeterEqCount + tripRelayEqCount + genRemotePanelEqCount + emergencyPanelEqCount + ctEqCount + ptEqCount + ammEqCount + mmResEqCount + ctVcvsEqCount + mwEqCount + imEqCount + rlEqCount + upsEqCount + transformerEqCount;
 
         // G是矩阵，B是结果相量，results是解相量，都是64位浮点数
         // ── 矩阵池化（复用上次分配的 G/B/results，避免重复 alloc）──
@@ -635,6 +715,7 @@ const totalSize = nodeVarCount + pidEqCount + opAmps.length + oscDevs.length + l
             deltaTime: this.deltaTime,
             nodeVoltages: this.nodeVoltages,
             systemFreq: this._systemFreq,
+            sourceClusters: this._sourceClusters,   // 电源端子可达簇集（变压器回馈门控用）
         };
 
         // ── 预求解：更新感应电机机械状态（每帧执行一次） ──────────────
@@ -655,6 +736,7 @@ const totalSize = nodeVarCount + pidEqCount + opAmps.length + oscDevs.length + l
             DeviceStamps.stampResistors(ctx, G, B, resistorDevs);
             // ─ 1c. 三相可调负载 ──────────────────────────────────────────────
             DeviceStamps.stampLoad3p(ctx, G, B, load3Devs, this.deltaTime);
+            DeviceStamps.stampHvLoad3p(ctx, G, B, hvLoad3Devs, this.deltaTime);
             // ─ 1b. 单相熔断器（电阻模型） ─────────────────────────────────
             DeviceStamps.stampFuses(ctx, G, B, fuseDevs);
             // ─ 2. 压力传感器 ──────────────────────────────────────────────
@@ -786,6 +868,10 @@ const totalSize = nodeVarCount + pidEqCount + opAmps.length + oscDevs.length + l
             // 反向索引基准（totalSize 减去 RL/UPS 方程数 = 旧 totalSize）
             const adjustedSize = totalSize - rlEqCount - upsEqCount;
 
+            // - 22b 高压三相变压器（副边受控电压源，索引在反向区最前 = genRemote 之前，避免方程重叠）
+            const transformerVIdx = adjustedSize - transformerEqCount - genRemotePanelEqCount - emergencyPanelEqCount - tripRelayEqCount - acAmmEqCount - wattmeterEqCount - ctEqCount - ptEqCount - ammEqCount - mmResEqCount - ctVcvsEqCount - mwEqCount;
+            DeviceStamps.stampHvTransformers(ctx, G, B, hvTransformerDevs, transformerVIdx);
+
             // - 23 发电机组遥控面板（调速/合闸/分闸电压源，索引最前）
             const genRemoteVIdx = adjustedSize - genRemotePanelEqCount - emergencyPanelEqCount - tripRelayEqCount - acAmmEqCount - wattmeterEqCount - ctEqCount - ptEqCount - ammEqCount - ctVcvsEqCount - mwEqCount;
             DeviceStamps.stampGenRemotePanels(ctx, G, B, genRemotePanelDevs, genRemoteVIdx);
@@ -913,6 +999,7 @@ inductionMotorDevs, contactorDevs, thermalRelayDevs, rlSeriesDevs,
             acbDevs,
             pdbDevs,
             upsDevs,
+            hvTransformerDevs,
         } = devices;
         // --- 内部辅助：安全获取端口电压 ---
         const getV = (devId, portName) => {
@@ -1295,6 +1382,15 @@ inductionMotorDevs, contactorDevs, thermalRelayDevs, rlSeriesDevs,
                 if (!dev._upsCurrent) dev._upsCurrent = { out1: 0, out2: 0 };
                 dev._upsCurrent[ch] = iCh;
             });
+        });
+
+        // ─ 高压三相变压器副边电流（对应 stampHvTransformers，从电压源支路电流读取）──
+        (hvTransformerDevs || []).forEach(dev => {
+            if (!dev._iSec) dev._iSec = [];
+            for (let i = 0; i < 3; i++) {
+                const idx = dev._secVIdx ? dev._secVIdx[i] : -1;
+                dev._iSec[i] = (idx >= 0 && idx < results.length) ? (results[idx] || 0) : 0;
+            }
         });
 
         // ─ 荧光灯管电流（对应 stampFluorescentLamps）

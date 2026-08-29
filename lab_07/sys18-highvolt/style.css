@@ -43,6 +43,13 @@ body {
     opacity: 0.6;
 }
 
+#toolbar label {
+    color: #fff;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
 #toolbar select {
     padding: 5px;
     border-radius: 6px;

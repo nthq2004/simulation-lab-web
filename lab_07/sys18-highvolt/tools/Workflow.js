@@ -446,8 +446,9 @@ export class Workflow {
      * 模拟自动填空效果（演示模式）
      */
     async _simulateAutoFill(step) {
+        const fa = f => (Array.isArray(f.answer) ? f.answer.join('或') : f.answer);
         const ans = (step.fields || [step])
-            .map(f => (f.unit ? f.answer + f.unit : f.answer))
+            .map(f => fa(f) + (f.unit ? f.unit : ''))
             .join('、');
         this.sys.showFloatingTip(`【演示】请填写：${ans}`, 8000);
         await new Promise(r => setTimeout(r, 8000));
@@ -581,6 +582,12 @@ export class Workflow {
             // 4. 校验单个字段
             const checkField = (f, val) => {
                 const inputVal = String(val == null ? '' : val).trim().replace(/[，,、]+/g, '');
+                if (Array.isArray(f.answer)) {
+                    // 多答案（如 ['电流互感器','ct']）：任一匹配即正确
+                    if (!inputVal) return false;
+                    const list = f.answer.map(a => String(a).toLowerCase().replace(/[，,、]+/g, ''));
+                    return list.includes(inputVal.toLowerCase());
+                }
                 if (typeof f.answer === 'number') {
                     const parsed = parseFloat(inputVal);
                     if (isNaN(parsed)) return false;

@@ -81,6 +81,82 @@ export const DeviceStamps = {
         });
     },
 
+    // ─── 1d. 高压三相可调负载（三角联接，无中性点，对地绝缘）────────────────
+    // Δ 联接：每相跨线电压 U_L=6600V，恒阻抗 RΔ=U_L²/(P/3)；
+    // 无功支路跨线并联电感/电容伴随模型（后向欧拉）。
+    stampHvLoad3p(ctx, G, B, devs, deltaTime) {
+        devs.forEach(dev => {
+            const loaded = !!dev._loaded;
+            const R = (loaded && dev._Rd > 0) ? dev._Rd : 1e9;
+            const pairs = [['l1', 'l2'], ['l2', 'l3'], ['l3', 'l1']];
+            pairs.forEach(([a, b], i) => {
+                const c1 = ctx.portToCluster.get(`${dev.id}_wire_${a}`);
+                const c2 = ctx.portToCluster.get(`${dev.id}_wire_${b}`);
+                if (c1 === undefined || c2 === undefined) return;
+                // 有功支路：每相恒阻抗电阻导纳
+                this._fill(ctx, G, B, c1, c2, 1 / Math.max(R, 0.001));
+                if (!loaded || deltaTime <= 0) return;
+                if (dev.reactive === 'ind' && dev._Ld > 0) {
+                    const gEq = deltaTime / dev._Ld;
+                    const iEq = dev._iLast[i] || 0;
+                    this._fill(ctx, G, B, c1, c2, gEq);
+                    this._addI(ctx, B, c1, c2, -iEq);
+                } else if (dev._Cd > 0) {
+                    const gEq = dev._Cd / deltaTime;
+                    const iEq = gEq * (dev._vLast[i] || 0);
+                    this._fill(ctx, G, B, c1, c2, gEq);
+                    this._addI(ctx, B, c1, c2, iEq);
+                }
+            });
+        });
+    },
+
+    // ─── 1e. 高压三相变压器（6600V→440V，星形-星形，中性点接地）─────────
+    // 每相：副边受控电压源 V_x = k·V_h（k = 副边/原边变比，读原边对地电压）；
+    //      原边励磁阻抗（对地）+ 原边电流回馈 I_p = k·I_s（上一帧副边电流，功率平衡）。
+    // 原边/副边中性点均视为接地（星形），相电压 = 端口对地电压。
+    stampHvTransformers(ctx, G, B, devs, startIdx) {
+        let acc = 0;
+        devs.forEach(dev => {
+            const k = dev._ratio || 1 / 15;
+            const Rmag = dev._magR || 2e6;   // 励磁阻抗 Ω
+            // 副边额定相电压（线-地），作为受控源限幅基准（留 2.2 倍裕量，仅防浮空放大）
+            const vSecRated = (dev.vSecondary || 440) / 1.732;
+            const vSecMax = 2.2 * vSecRated;
+            if (!dev._secVIdx) dev._secVIdx = [];
+            for (let i = 0; i < 3; i++) {
+                const ch = ctx.portToCluster.get(`${dev.id}_wire_h${i + 1}`);
+                const cx = ctx.portToCluster.get(`${dev.id}_wire_x${i + 1}`);
+                if (ch === undefined || cx === undefined) continue;
+                // 原边励磁阻抗（对地）
+                this._fill(ctx, G, B, ch, null, 1 / Rmag);
+                // 原边是否仍可经"导线+闭合断路器"达到电源端子（跳闸后断开）
+                const srcReach = !ctx.sourceClusters || ctx.sourceClusters.has(ch);
+                if (srcReach) {
+                    // ★ 原边由电源驱动（正常运行）
+                    // 原边电流回馈：I_p = k·I_s（上一帧副边电流，功率平衡）
+                    let iSec = (dev._iSec && dev._iSec[i]) || 0;
+                    this._addI(ctx, B, ch, null, k * iSec);
+                    // 副边受控电压源：V_x = k·V_h（相对地；限幅兜底防浮空过压放大）
+                    const vP = ctx.nodeVoltages.get(ch) || 0;
+                    let vs = k * vP;
+                    const vsA = Math.abs(vs);
+                    if (vsA > vSecMax) vs = vSecMax * Math.sign(vs);
+                    const vIdxN = startIdx + acc++;
+                    this._addV(ctx, G, B, cx, null, vs, vIdxN);
+                    dev._secVIdx[i] = vIdxN;
+                } else {
+                    // ★ 原边失源（上级高压断路器跳闸）：副边视为开路（贴地高阻），
+                    // 不注入回馈、不钳位 0V —— 否则理想 0V 受控源会吸收下级经
+                    // 母联(联络开关)返送来的电能，形成上千安培环流 → 下级主开关
+                    // 过流误脱扣。真实失电变压器副边不传递功率，表现为开路。
+                    this._fill(ctx, G, B, cx, null, 1 / 1e8);
+                    dev._secVIdx[i] = -1;
+                }
+            }
+        });
+    },
+
     // ─── 2. 压力传感器（双路电阻） ────────────────────────────────────────
     stampPressureSensors(ctx, G, B, pressDevs) {
         pressDevs.forEach(dev => {
@@ -258,8 +334,10 @@ export const DeviceStamps = {
             ['u', 'v', 'w'].forEach((phase, phaseIdx) => {
                 const pId = `${dev.id}_wire_${phase}`;
                 const nId = `${dev.id}_wire_n`;
+                const mId = `${dev.id}_wire_${phase}_mid`;
                 const cP = ctx.portToCluster.get(pId);
                 const cN = ctx.portToCluster.get(nId);
+                const cM = ctx.portToCluster.get(mId);
 
                 if (cP !== undefined && cN !== undefined) {
                     const voltage = dev.getPhaseVoltage(phase, currentTime);
@@ -268,13 +346,24 @@ export const DeviceStamps = {
                         ? dev._rOnEff || dev.rOn || 0.01
                         : 10e6;
 
-                    // 诺顿等效：
-                    // 1. 填充内阻导纳到 G 矩阵（phase 到 n 之间）
-                    this._fill(ctx, G, B, cP, cN, 1 / rOn);
-
-                    // 2. 在 B 向量中注入等效电流源：I = V / rOn
-                    const iSource = voltage / rOn;
-                    this._addI(ctx, B, cP, cN, iSource);
+                    // 绕组中点抽头是否参与电路（故障短接 u_mid↔v_mid 等内部短路会使其入簇）
+                    const hasMid = (cM !== undefined) && cM !== cP && cM !== cN;
+                    if (!hasMid) {
+                        // ── 单段模型：u↔n（诺顿：rOn 并联 I=E/rOn）──
+                        this._fill(ctx, G, B, cP, cN, 1 / rOn);
+                        this._addI(ctx, B, cP, cN, voltage / rOn);
+                    } else {
+                        // ── 两段绕组模型：u↔mid（首端段）+ mid↔n（中性段），各 E/2、rOn/2 ──
+                        // 两段串联等效 = 原单段（无外部中点回路时电学等价，不破坏既有网络）；
+                        // 绕组中点被短接（内部短路）时，内部环流只流经首端段（不过中性段），
+                        // 机端侧 CT（首端段）电流 >> 中性点侧 CT（中性段）电流 → 差动保护动作。
+                        const rH = rOn / 2;
+                        const vH = voltage / 2;
+                        this._fill(ctx, G, B, cP, cM, 1 / rH);
+                        this._addI(ctx, B, cP, cM, vH / rH);
+                        this._fill(ctx, G, B, cM, cN, 1 / rH);
+                        this._addI(ctx, B, cM, cN, vH / rH);
+                    }
                 }
             });
         });
@@ -2385,10 +2474,15 @@ export const DeviceStamps = {
     // ─── 三相空气断路器（接触电阻 + 分励脱扣器线圈）─────────────────
     stampACBs(ctx, G, B, acbDevs) {
         acbDevs.forEach(dev => {
-            // 船用发电机主开关（MarineMainsSwitch）：合闸注入 0.0001Ω，分闸不注入导纳（真正隔离，
+            // 船用发电机主开关（MarineMainsSwitch）/ 真空断路器（VacuumCircuitBreaker）：
+            // 合闸注入 0.0001Ω，分闸不注入导纳（真正隔离，
             // 避免高阻把悬空汇流排网络拖到电源电位，导致"分闸仍带电"）
             if (dev.special === 'MainsSwitch') {
-                if (dev._state === 'on') {
+                // 导通条件：合闸 且 处于连接位（一次插头接通）。
+                // 试验位/检修位时柜内隔离连接片拉开 —— 即使外部连线保留也不导通。
+                const conducting = dev._state === 'on'
+                    && (dev._workPos === undefined || dev._workPos === 0);
+                if (conducting) {
                     const R = 0.0001;
                     [['l1','t1'],['l2','t2'],['l3','t3']].forEach(([a, b]) => {
                         const c1 = ctx.portToCluster.get(`${dev.id}_wire_${a}`);
