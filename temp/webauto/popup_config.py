@@ -37,35 +37,30 @@ CONFIRM_BUTTON_SELECTORS = [
     'button:has-text("明白了")',
     'button:has-text("关闭")',
     'button:has-text("下一步")',
-
     # 英文按钮
     'button:has-text("OK")',
     'button:has-text("Confirm")',
     'button:has-text("Continue")',
     'button:has-text("Yes")',
-
     # class/id 选择器
-    '.btn-confirm',
-    '.btn-ok',
-    '.btn-continue',
-    '#confirmBtn',
-    '#continueBtn',
-    '#okBtn',
-    '.confirm-btn',
-    '.ok-button',
-
+    ".btn-confirm",
+    ".btn-ok",
+    ".btn-continue",
+    "#confirmBtn",
+    "#continueBtn",
+    "#okBtn",
+    ".confirm-btn",
+    ".ok-button",
     # input 类型按钮
     'input[type="button"][value="确定"]',
     'input[type="button"][value="确认"]',
     'input[type="submit"][value="确定"]',
     'input[type="submit"][value="确认"]',
-
     # a 标签按钮
     'a:has-text("确定")',
     'a:has-text("确认")',
     'a:has-text("继续学习")',
     'a:has-text("继续")',
-
     # span/div 点击
     'span:has-text("确定")',
     'span:has-text("确认")',
@@ -78,9 +73,9 @@ CANCEL_BUTTON_SELECTORS = [
     'button:has-text("稍后")',
     'button:has-text("关闭")',
     'button:has-text("Cancel")',
-    '.btn-cancel',
-    '.btn-close',
-    '#cancelBtn',
+    ".btn-cancel",
+    ".btn-close",
+    "#cancelBtn",
 ]
 
 # ============================================
