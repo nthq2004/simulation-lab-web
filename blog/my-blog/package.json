@@ -1,12 +1,13 @@
 {
-  "name": "my-blog",
+  "name": "blog-my-blog",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node ../../start.js"
   },
   "dependencies": {
     "markdown-it": "^14.1.1",

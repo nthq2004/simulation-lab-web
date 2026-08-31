@@ -1,9 +1,11 @@
 {
+  "name": "lab_04-digitmeter06",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "one": "vite build --mode one",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node ../../start.js"
   },
   "dependencies": {
     "konva": "^10.2.5"

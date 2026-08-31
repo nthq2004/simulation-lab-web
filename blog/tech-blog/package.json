@@ -1,14 +1,15 @@
 {
-  "name": "tech-blog",
+  "name": "blog-tech-blog",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"vite\" \"wrangler dev\"",
     "build": "vite build",
-    "deploy":"wrangler deploy",
+    "deploy": "wrangler deploy",
     "dist": "gh-pages -d dist -b main",
-    "all": "npm run build &&npm run dist"
+    "all": "npm run build &&npm run dist",
+    "start": "node ../../start.js"
   },
   "dependencies": {
     "highlight.js": "^11.11.1",

@@ -1,8 +1,10 @@
 {
+  "name": "lab_01-canSys",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node ../../start.js"
   },
   "dependencies": {
     "konva": "^10.2.3"

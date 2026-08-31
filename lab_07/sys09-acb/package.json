@@ -1,9 +1,11 @@
 {
+  "name": "lab_07-sys09-acb",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "one": "vite build --mode one",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node ../../start.js"
   },
   "dependencies": {
     "konva": "^10.2.5"
