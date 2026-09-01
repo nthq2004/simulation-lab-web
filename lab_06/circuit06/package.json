@@ -1,5 +1,5 @@
 {
-  "name": "lab_06-circuit06",
+  "name": "circuit06",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

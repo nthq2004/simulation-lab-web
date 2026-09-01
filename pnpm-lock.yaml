@@ -115,12 +115,6 @@ importers:
         specifier: ^8.0.1
         version: 8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0)
 
-  lab-simulator-pay/workers:
-    devDependencies:
-      wrangler:
-        specifier: ^4.90.0
-        version: 4.127.1
-
   lab_01/canSys:
     dependencies:
       konva:
@@ -1627,6 +1621,19 @@ importers:
         version: 2.3.3(vite@8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0))
 
   lab_07/sys20-ground:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_07/sys21-ground:
     dependencies:
       konva:
         specifier: ^10.2.5

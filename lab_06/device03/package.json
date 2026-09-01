@@ -1,5 +1,5 @@
 {
-  "name": "lab_06-device03",
+  "name": "device03",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
