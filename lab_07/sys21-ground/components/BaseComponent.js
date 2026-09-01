@@ -422,7 +422,7 @@ export class BaseComponent {
         this._breathAnim.start();
     }
 
-    addClickablePart(partId, x, y, w, h) {
+    addClickablePart(partId, x, y, w, h, onTop = false) {
         var _this = this;
         var group = new Konva.Group({ x: x, y: y });
 
@@ -472,6 +472,7 @@ export class BaseComponent {
         group.add(bg);
         group.add(hit);
         this._interactGroup.add(group);
+        if (onTop) group.moveToTop();   // 提升到交互层最上，避免被同层较大热区（如门板 door）遮挡
         return hit;   // 返回命中区，调用方可追加自定义点击行为
     }
 

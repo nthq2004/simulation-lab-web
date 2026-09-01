@@ -19,9 +19,19 @@ export class Renderer {
     redrawAll() {
         const sys = this.sys;
         this._renderGroup(sys.conns.filter(c => c.type === 'pipe'), 'pipe');
-        this._renderGroup(sys.conns.filter(c => c.type === 'wire'), 'wire');
+        this._renderGroup(this._visWireConns(), 'wire');
         // 在主渲染循环中统一调用 batchDraw
         sys.requestRedraw();
+    }
+
+    /**
+     * 需要由系统渲染的实际 wire 连接：
+     * 带 custom 标记的（组件自绘的活动黄绿导线等）不生成系统导线。
+     * 注意：必须与 updateLinePositions 使用同一过滤结果，保证 wireNodes 索引一致。
+     */
+    _visWireConns() {
+        const sys = this.sys;
+        return (sys.conns || []).filter(c => c.type === 'wire' && !c.custom);
     }
 
     /** 增量更新现有线条节点的位置（避免销毁重建） */
@@ -55,7 +65,7 @@ export class Renderer {
         }
 
         // 更新 wireNodes：每个 conn 对应 1 个节点
-        const wireConns = sys.conns.filter(c => c.type === 'wire');
+        const wireConns = this._visWireConns();
         if (sys.wireNodes.length === wireConns.length) {
             for (let i = 0; i < wireConns.length; i++) {
                 const conn = wireConns[i];

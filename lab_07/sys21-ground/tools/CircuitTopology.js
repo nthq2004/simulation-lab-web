@@ -95,6 +95,17 @@ export class CircuitTopology {
                     internalUnion(gid, pid);
                 });
             }
+            // 低压临时接地线：与高压接地线相同的四端口（p1/p2/p3/gnd）内部零电阻短接，
+            // 三相在接地夹处短接到大地。强制登记四端口：全部未接线时构成悬空簇，不影响求解。
+            if (dev.type === 'lv_grounding_lead') {
+                const gid = `${id}_wire_gnd`;
+                activePorts.add(gid);
+                ['p1', 'p2', 'p3'].forEach(p => {
+                    const pid = `${id}_wire_${p}`;
+                    activePorts.add(pid);
+                    internalUnion(gid, pid);
+                });
+            }
             // UPS：输出中性线与输入中性线内部共地（避免输出浮动子网导致 MNA 奇异）
             if (dev.type === 'ups') {
                 internalUnion(`${id}_wire_in_n`, `${id}_wire_out1_n`);
@@ -219,30 +230,6 @@ export class CircuitTopology {
                 });
             }
 
-            // 电机控制箱（打开状态）：
-            //   · 左上下同簇：in1↔inU、in2↔inV、in3↔inW（电源进线 ↔ 空气开关入口，恒接）
-            //   · 右上下同簇：outU↔out1、outV↔out2、outW↔out3（热继电器出线 ↔ 对外引出，恒接）
-            //   · 接触器吸合 且 空气开关闭合：左入口与右上出线一一对应同簇（inU↔outU 等）
-            if (dev.type === 'motor_control_box') {
-                for (let i = 0; i < 3; i++) {
-                    internalUnion(`${id}_wire_in${i + 1}`, `${id}_wire_in${['U', 'V', 'W'][i]}`);
-                    internalUnion(`${id}_wire_out${['U', 'V', 'W'][i]}`, `${id}_wire_out${i + 1}`);
-                }
-                const acbOn = dev._dualStates && dev._dualStates[1] === 'close';
-                const isContactorOn = dev._dualStates && dev._dualStates[4] === 'close';
-                if (acbOn && isContactorOn) {
-                    for (let i = 0; i < 3; i++) {
-                        internalUnion(`${id}_wire_in${['U', 'V', 'W'][i]}`, `${id}_wire_out${['U', 'V', 'W'][i]}`);
-                    }
-                }
-                // PE 保护接地网络同簇：PE 端子组 4 端口 + 箱体 PE 点 + 门 PE 点
-                const pePorts = ['pe1', 'pe2', 'pe3', 'pe4', 'pe_body', 'pe_door'];
-                let peRoot = pePorts[0];
-                pePorts.forEach((p, i) => {
-                    activePorts.add(`${id}_wire_${p}`);
-                    if (i > 0) internalUnion(`${id}_wire_${peRoot}`, `${id}_wire_${p}`);
-                });
-            }
 
         });
 
@@ -296,7 +283,55 @@ export class CircuitTopology {
                 ['pe1','pe2','pe3','pe4','pe_body','pe_door']
                     .forEach(p => activePorts.add(`${dev.id}_wire_${p}`));
             }
+            if (dev.type === 'ground_bus') {
+                // 接地母排：所有接线柱端口一律纳入拓扑（即使未接线），保证同簇恒成立
+                const n = (typeof dev.getTermCount === 'function') ? dev.getTermCount() : 4;
+                for (let i = 1; i <= n; i++) activePorts.add(`${dev.id}_wire_pe${i}`);
+            }
         });
+
+        // 4b. 【内置器件内部同簇】对"端口须始终纳入拓扑并内部导通"的器件，
+        // 在其端口全部登记为 activePorts（第 4 步）之后再做内部短接 union。
+        // 关键：internalUnion 依赖 activePorts.has 守卫，必须等端口登记完毕才有效；
+        // 否则未连线端口不会参与同簇合并（电机控制箱上下排/左右排即会各自孤立成簇）。
+        rawDevices.forEach(dev => {
+            const id = dev.id;
+            const rawUnion = (p1, p2) => {
+                if (activePorts.has(p1) && activePorts.has(p2)) union(p1, p2);
+            };
+            if (dev.type === 'motor_control_box') {
+                // 左上下同簇：in1↔inU、in2↔inV、in3↔inW（电源进线 ↔ 空气开关入口，恒接）
+                for (let i = 0; i < 3; i++) {
+                    rawUnion(`${id}_wire_in${i + 1}`, `${id}_wire_in${['U', 'V', 'W'][i]}`);
+                }
+                // 右上下同簇：outU↔out1、outV↔out2、outW↔out3（热继电器出线 ↔ 对外引出，恒接）
+                for (let i = 0; i < 3; i++) {
+                    rawUnion(`${id}_wire_out${['U', 'V', 'W'][i]}`, `${id}_wire_out${i + 1}`);
+                }
+                // 接触器吸合 且 空气开关闭合：左入口与右上出线一一对应同簇（inU↔outU 等）
+                const acbOn = dev._dualStates && dev._dualStates[1] === 'close';
+                const isContactorOn = dev._dualStates && dev._dualStates[4] === 'close';
+                if (acbOn && isContactorOn) {
+                    for (let i = 0; i < 3; i++) {
+                        rawUnion(`${id}_wire_in${['U', 'V', 'W'][i]}`, `${id}_wire_out${['U', 'V', 'W'][i]}`);
+                    }
+                }
+                // PE 保护接地网络同簇：PE 端子组 4 端口 + 箱体 PE 点 + 门 PE 点
+                const pePorts = ['pe1', 'pe2', 'pe3', 'pe4', 'pe_body', 'pe_door'];
+                let peRoot = pePorts[0];
+                pePorts.forEach((p, i) => {
+                    if (i > 0) rawUnion(`${id}_wire_${peRoot}`, `${id}_wire_${p}`);
+                });
+            }
+            if (dev.type === 'ground_bus') {
+                // 接地母排：所有接线柱内部短接为同一节点（同簇），代表整条母排等电位
+                const n = (typeof dev.getTermCount === 'function') ? dev.getTermCount() : 4;
+                for (let i = 2; i <= n; i++) {
+                    rawUnion(`${id}_wire_pe1`, `${id}_wire_pe${i}`);
+                }
+            }
+        });
+
         // 数字万用表电阻/二极管档：V 和 COM 始终纳入拓扑（即使未接线），
         // 以便恒流源注入和顺从电压输出
         rawDevices.forEach(dev => {

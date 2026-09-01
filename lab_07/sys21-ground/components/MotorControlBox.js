@@ -96,8 +96,8 @@ const DOOR_PROJ_W = 203;
 const DOOR_TY = 48;
 const DOOR_BY = 561;
 
-// 断路器手柄槽/位置
-const QF_HANDLE_OFF = { on: -30, off: 30 };
+// 断路器手柄槽/位置（on 上 / off 下 / trip 中间脱扣位）
+const QF_HANDLE_OFF = { on: -30, off: 30, trip: 0 };
 
 export class MotorControlBox extends BaseComponent {
     constructor(config, sys) {
@@ -336,14 +336,14 @@ export class MotorControlBox extends BaseComponent {
         });
         // 铭牌
         s.add(new Konva.Text({
-            x: x + 4, y: y + h - 24, width: w - 8, align: 'center',
-            text: 'QF 电源开关', fontSize: 10, fontStyle: 'bold', fill: '#fff',
+            x: x + 4, y: y + h - 29, width: w - 8, align: 'center',
+            text: 'QF 电源开关', fontSize: 12, fontStyle: 'bold', fill: '#fff',
         }));
     }
 
     _drawBreakerTerminal(tx, ty, dir, label, color) {
         const s = this._staticGroup;
-        const R = 4.5;
+        const R = 6.5;
         s.add(new Konva.Circle({
             x: tx, y: ty, radius: R,
             fillLinearGradientStartPoint: { x: -R, y: -R },
@@ -482,19 +482,16 @@ export class MotorControlBox extends BaseComponent {
         }));
         // 分区标题与左右组名
         s.add(new Konva.Text({
-            x: zx + 6, y: zy + 2, text: '接线端子排', fontSize: 9, fontStyle: 'bold', fill: '#6a7478',
+            x: TERM_L_XS[0], y: zy -12, width: TERM_L_XS[2] - TERM_L_XS[0] + 22, align: 'center',
+            text: '电源进线', fontSize: 12, fontStyle: 'bold', fill: '#3a6a8a',
         }));
         s.add(new Konva.Text({
-            x: TERM_L_XS[0], y: zy + 2, width: TERM_L_XS[2] - TERM_L_XS[0] + 22, align: 'center',
-            text: '电源进线', fontSize: 9, fontStyle: 'bold', fill: '#3a6a8a',
+            x: TERM_R_XS[0]-5, y: zy -12, width: TERM_R_XS[2] - TERM_R_XS[0] + 22, align: 'center',
+            text: '出线', fontSize: 12, fontStyle: 'bold', fill: '#8a5a3a',
         }));
         s.add(new Konva.Text({
-            x: TERM_R_XS[0], y: zy + 2, width: TERM_R_XS[2] - TERM_R_XS[0] + 22, align: 'center',
-            text: '出线', fontSize: 9, fontStyle: 'bold', fill: '#8a5a3a',
-        }));
-        s.add(new Konva.Text({
-            x: TERM_PE_XS[0], y: zy + 2, width: TERM_PE_XS[3] - TERM_PE_XS[0] + 22, align: 'center',
-            text: 'PE', fontSize: 9, fontStyle: 'bold', fill: '#4a7a2a',
+            x: TERM_PE_XS[0]-15, y: zy -12, width: TERM_PE_XS[3] - TERM_PE_XS[0] + 22, align: 'center',
+            text: 'PE', fontSize: 12, fontStyle: 'bold', fill: '#4a7a2a',
         }));
 
         // 走线：左组上排经槽接空气开关（格1），右组上排经槽接热继电器（格5）
@@ -572,9 +569,9 @@ export class MotorControlBox extends BaseComponent {
             stroke: '#6a7076', strokeWidth: 1, cornerRadius: 2,
         }));
         // 顶部螺丝
-        const R = 4;
+        const R = 8.5;
         s.add(new Konva.Circle({
-            x: tx, y: ty - h / 2 + 4, radius: R,
+            x: tx, y: ty , radius: R,
             fillLinearGradientStartPoint: { x: -R, y: -R },
             fillLinearGradientEndPoint: { x: R, y: R },
             fillLinearGradientColorStops: [0, '#8a7a30', 0.4, '#d4aa52', 0.7, '#e8c86a', 1, '#8a7030'],
@@ -582,12 +579,11 @@ export class MotorControlBox extends BaseComponent {
         }));
         // 接线孔
         s.add(new Konva.Circle({ x: tx, y: ty + 2, radius: 3.4, fill: '#5c656c', stroke: '#333c44', strokeWidth: 0.8 }));
-        // 内竖线（导电条）
-        s.add(new Konva.Line({ points: [tx, ty + 5, tx, ty + h / 2 - 2], stroke: '#8a7a30', strokeWidth: 1.6 }));
+       
         // 标签
         s.add(new Konva.Text({
-            x: tx - 14, y: dir === 'up' ? y - 15 : y + h - 1, width: 28, align: 'center',
-            text: label, fontSize: 9, fontStyle: 'bold', fill: color,
+            x: tx - 24, y: dir === 'up' ? y - 15 : y + h - 1, width: 28, align: 'center',
+            text: label, fontSize: 12, fontStyle: 'bold', fill: color,
         }));
         // 底部出线脚
         s.add(new Konva.Line({
@@ -603,20 +599,20 @@ export class MotorControlBox extends BaseComponent {
         const w = 16, h = 26;
         const x = tx - w / 2, y = ty - h / 2;
         // 黄绿相间外壳
-        for (let i = 0; i < 4; i++) {
-            s.add(new Konva.Rect({
-                x: x, y: y + (i * h) / 4, width: w, height: h / 4,
-                fill: i % 2 === 0 ? '#f4c542' : '#20a030',
-                listening: false,
-            }));
-        }
+        // for (let i = 0; i < 4; i++) {
+        //     s.add(new Konva.Rect({
+        //         x: x, y: y + (i * h) / 4, width: w, height: h / 4,
+        //         fill: i % 2 === 0 ? '#f4c542' : '#20a030',
+        //         listening: false,
+        //     }));
+        // }
         s.add(new Konva.Rect({
             x, y, width: w, height: h, fill: 'rgba(0,0,0,0)', stroke: '#4a7a2a', strokeWidth: 1, cornerRadius: 2,
         }));
         // 顶部螺丝
-        const R = 4;
+        const R = 9;
         s.add(new Konva.Circle({
-            x: tx, y: ty - h / 2 + 4, radius: R,
+            x: tx, y: ty , radius: R,
             fillLinearGradientStartPoint: { x: -R, y: -R },
             fillLinearGradientEndPoint: { x: R, y: R },
             fillLinearGradientColorStops: [0, '#8a7a30', 0.4, '#d4aa52', 0.7, '#e8c86a', 1, '#8a7030'],
@@ -626,8 +622,8 @@ export class MotorControlBox extends BaseComponent {
         s.add(new Konva.Circle({ x: tx, y: ty + 2, radius: 3.4, fill: '#3c4a30', stroke: '#2c3820', strokeWidth: 0.8 }));
         // 标签
         s.add(new Konva.Text({
-            x: tx - 14, y: y + h - 1, width: 28, align: 'center',
-            text: label, fontSize: 8, fontStyle: 'bold', fill: '#4a7a2a',
+            x: tx - 14, y: y + h +10, width: 28, align: 'center',
+            text: label, fontSize: 12, fontStyle: 'bold', fill: '#4a7a2a',
         }));
     }
 
@@ -635,12 +631,12 @@ export class MotorControlBox extends BaseComponent {
      * PE 端子组内部黄绿导线条（4 端子紧密连接，下方横贯）
      */
     _drawPETerminalBar(s, x0, x1) {
-        const y = TERM_PE_Y + 14;
+        const y = TERM_PE_Y- 3.5 ;
         const steps = 8;
         const segW = (x1 - x0) / steps;
         for (let i = 0; i < steps; i++) {
             s.add(new Konva.Rect({
-                x: x0 + i * segW, y, width: segW, height: 3.5,
+                x: x0 + i * segW, y, width: segW, height: 7,
                 fill: i % 2 === 0 ? '#f4c542' : '#20a030',
                 listening: false,
             }));
@@ -650,7 +646,7 @@ export class MotorControlBox extends BaseComponent {
     /**
      * 黄绿相间导线（PE 连接线）
      */
-    _drawGreenYellowWire(s, pts, width = 3) {
+    _drawGreenYellowWire(s, pts, width = 6) {
         const dist = Math.abs(pts[pts.length - 2] - pts[0]) + Math.abs(pts[pts.length - 1] - pts[1]);
         const steps = Math.max(8, Math.round(dist / 6));
         for (let i = 0; i < steps; i++) {
@@ -673,23 +669,27 @@ export class MotorControlBox extends BaseComponent {
         const s = this._staticGroup;
         const cableBottomY = COMP_H - 30;
         const colrs = ['#e03030', '#20a030', '#2050e0'];
-        const mergeY = QF_Y + QF_H + 20;
+        const cx = this._qfCx;               // 黑电缆起始点（QF 正下方中间）
+        const startY = QF_Y + QF_H - 8;      // 出线柱底部
+        const mergeY = QF_Y + QF_H + 18;     // 三相汇入点（黑电缆顶端）
 
-        // QF 下端 3 个接线柱各自向下引线，在 mergeY 处汇合成黑色电缆（3合1）
+        // QF 下端 3 个接线柱各自引线，在中间汇入黑色电缆（3合1）：
+        // 红(A)、绿(B) 各自斜向，蓝(C) 斜向，全部汇到黑电缆起点 cx 处，
+        // 避免两侧相线（红/蓝）垂直引下后悬空不接黑电缆。
         this._qfOutXs.forEach((tx, i) => {
             s.add(new Konva.Line({
-                points: [tx, QF_Y + QF_H - 8, tx, mergeY],
+                points: [tx, startY, cx, mergeY],
                 stroke: colrs[i], strokeWidth: 2, listening: false,
             }));
         });
-        // 主电缆：自 QF 下端汇流点向下到底部，水平横走到左组下排接线柱下方
+        // 主电缆：自三相汇入点向下到底部，水平横走到左组下排接线柱下方
         s.add(new Konva.Line({
-            points: [this._qfCx, QF_Y + QF_H, this._qfCx, mergeY, this._qfCx, cableBottomY, TERM_L_XS[2], cableBottomY],
+            points: [cx, mergeY, cx, cableBottomY, TERM_L_XS[2], cableBottomY],
             stroke: '#101010', strokeWidth: 10, lineCap: 'round', listening: false,
         }));
         // 电缆高光
         s.add(new Konva.Line({
-            points: [this._qfCx, QF_Y + QF_H + 4, this._qfCx, cableBottomY - 2, TERM_L_XS[2], cableBottomY - 2],
+            points: [cx, mergeY + 4, cx, cableBottomY - 2, TERM_L_XS[2], cableBottomY - 2],
             stroke: 'rgba(255,255,255,0.35)', strokeWidth: 2, listening: false,
         }));
         // 三相引线（红绿蓝）从电缆分接至左组下排端子底部
@@ -701,7 +701,7 @@ export class MotorControlBox extends BaseComponent {
         });
         // 电缆进入面板的护套口
         s.add(new Konva.Ellipse({
-            x: this._qfCx, y: cableBottomY, radiusX: 8, radiusY: 4, fill: '#333a40',
+            x: cx, y: cableBottomY, radiusX: 8, radiusY: 4, fill: '#333a40',
         }));
     }
 
@@ -791,17 +791,17 @@ export class MotorControlBox extends BaseComponent {
         }));
 
         // 保护接地接线柱（PE，门板靠近下方）
-        this._pe = { x: xh + DOOR_PROJ_W / 2 + 8, y: DOOR_BY - 42 };
+        this._pe = { x: xh + DOOR_PROJ_W / 2 + 8, y: DOOR_BY - 230 };
         const peR = 11;
         // 接线柱
         s.add(new Konva.Circle({
             x: this._pe.x, y: this._pe.y, radius: peR, fill: '#d8dbde', stroke: '#4a5258', strokeWidth: 1.4,
         }));
         // 黄绿接地标志
-        s.add(new Konva.Line({
-            points: [this._pe.x - peR, this._pe.y - peR, this._pe.x + peR, this._pe.y + peR],
-            stroke: '#f4c542', strokeWidth: 4, listening: false,
-        }));
+        // s.add(new Konva.Line({
+        //     points: [this._pe.x - peR, this._pe.y - peR, this._pe.x + peR, this._pe.y + peR],
+        //     stroke: '#f4c542', strokeWidth: 4, listening: false,
+        // }));
         s.add(new Konva.Line({
             points: [this._pe.x - peR, this._pe.y, this._pe.x + peR, this._pe.y],
             stroke: '#20a030', strokeWidth: 4, listening: false,
@@ -825,9 +825,9 @@ export class MotorControlBox extends BaseComponent {
         this._peBody = { x: bx, y: by };
         const r = 9;
         s.add(new Konva.Circle({ x: bx, y: by, radius: r, fill: '#d8dbde', stroke: '#4a5258', strokeWidth: 1.4 }));
-        s.add(new Konva.Line({
-            points: [bx - r, by - r, bx + r, by + r], stroke: '#f4c542', strokeWidth: 3.5, listening: false,
-        }));
+        // s.add(new Konva.Line({
+        //     points: [bx - r, by - r, bx + r, by + r], stroke: '#f4c542', strokeWidth: 3.5, listening: false,
+        // }));
         s.add(new Konva.Line({
             points: [bx - r, by, bx + r, by], stroke: '#20a030', strokeWidth: 3.5, listening: false,
         }));
@@ -837,10 +837,10 @@ export class MotorControlBox extends BaseComponent {
             text: '箱体PE', fontSize: 9, fontStyle: 'bold', fill: '#4a5258',
         }));
         // PE2 → 箱体 PE 设备点
-        this._drawGreenYellowWire(s, [TERM_PE_XS[1], TERM_PE_Y, bx, by - 10], 2.5);
+        this._drawGreenYellowWire(s, [TERM_PE_XS[1], TERM_PE_Y, bx, by - 10], 5);
         // PE3 → 门上 PE 接线柱（水平向门延伸）
         if (this._pe) {
-            this._drawGreenYellowWire(s, [TERM_PE_XS[2], TERM_PE_Y, this._pe.x, this._pe.y], 2.5);
+            this._drawGreenYellowWire(s, [TERM_PE_XS[2], TERM_PE_Y, this._pe.x, this._pe.y], 5);
         }
     }
 
@@ -1022,16 +1022,76 @@ export class MotorControlBox extends BaseComponent {
     }
 
     _toggleQf() {
-        // 塑壳断路器：切换合/分闸
+        // 塑壳断路器：合/分闸 + 短路速断保护
         if (this._animating) return;
         const prev = this._qfState;
-        this._qfState = this._qfState === 'on' ? 'off' : 'on';
+
+        // 1) 脱扣态点击 → 复位分闸；否则正常合/分闸切换
+        if (prev === 'trip') {
+            this._setQfState('off', QF_Y + 64 + 48 + QF_HANDLE_OFF['trip'], QF_Y + 64 + 48 + QF_HANDLE_OFF['off']);
+            this._tip('断路器已复位（分闸），请检查入口短路情况后再合闸。');
+            return;
+        }
+        const next = prev === 'on' ? 'off' : 'on';
+
+        // 2) 合闸瞬间检测：入口电源进线任意两相及以上同簇（相间/接地短路）→ 脱扣
+        if (next === 'on' && this._isInputPhaseShorted()) {
+            this._tripQf('入口电源进线存在两相及以上短接（未拆临时接地线合闸），一合闸即短路，断路器瞬时脱扣（跳闸）！请先拆除接地线再合闸。');
+            return;
+        }
+
+        // 3) 正常合/分闸
+        let tip = '';
+        if (prev === 'on' && next === 'off') {
+            // 正常分闸：若接触器已吸合则释放
+            if (this._dualStates && this._dualStates[4] === 'close') {
+                this._setContactor('open', '供电开关断开，接触器释放');
+            }
+        }
+        this._setQfState(next, QF_Y + 64 + 48 + QF_HANDLE_OFF[prev], QF_Y + 64 + 48 + QF_HANDLE_OFF[next]);
+        if (tip) this._tip(tip);
+    }
+
+    /** 执行脱扣（短路速断）：任意状态 → trip，触点释放 + 提示 */
+    _tripQf(tip) {
+        const prev = this._qfState;
+        if (this._dualStates && this._dualStates[4] === 'close') {
+            this._setContactor('open', '');
+        }
+        this._setQfState('trip', QF_Y + 64 + 48 + QF_HANDLE_OFF[prev], QF_Y + 64 + 48 + QF_HANDLE_OFF['trip']);
+        if (tip) this._tip(tip);
+    }
+
+    /** 设置 QF 状态并启动手柄动画（from → to，相对手柄槽原点的 y 偏移） */
+    _setQfState(state, fromY, toY) {
+        this._qfState = state;
+        this._animFrom = fromY;
+        this._animTo   = toY;
         this._animating = true;
         this._animT = 0;
-        // 供电开关断开 → 若接触器已吸合则释放
-        if (prev === 'on' && this._qfState === 'off' && this._dualStates && this._dualStates[4] === 'close') {
-            this._setContactor('open', '供电开关断开，接触器释放');
+    }
+
+    /**
+     * 检测入口电源进线是否存在相间/接地短路：
+     * in1/in2/in3 中任意两相及以上并入同一簇（被临时接地线/导线短接）即视为短路。
+     * 低压临时接地线（lv_grounding_lead）内部 p1/p2/p3/gnd 四端口零电阻同簇，
+     * 故只要挂线夹住两相及以上即构成相间短路，无需接地端实际接地。
+     * 依赖 CircuitSolver 每帧重建的 portToCluster 拓扑结果。
+     */
+    _isInputPhaseShorted() {
+        const solver = this.sys && this.sys.voltageSolver;
+        if (!solver || !solver.portToCluster) return false;
+        const cs = ['in1', 'in2', 'in3'].map(p => solver.portToCluster.get(`${this.id}_wire_${p}`));
+        // 未接线的端口簇为 undefined 或孤立簇，均不构成短路；统计已布线端口的簇
+        const present = cs.filter(c => c !== undefined);
+        if (present.length < 2) return false;
+        // 任意两相同簇 → 相间短路
+        const seen = new Set();
+        for (const c of present) {
+            if (seen.has(c)) return true;
+            seen.add(c);
         }
+        return false;
     }
 
     tick(dt) {
@@ -1039,9 +1099,13 @@ export class MotorControlBox extends BaseComponent {
             this._animT += dt / 0.15;
             if (this._animT >= 1) { this._animT = 1; this._animating = false; }
             const ease = 0.5 - 0.5 * Math.cos(this._animT * Math.PI);
-            const from = QF_Y + 64 + 48 + QF_HANDLE_OFF[this._qfState === 'on' ? 'off' : 'on'];
-            const to   = QF_Y + 64 + 48 + QF_HANDLE_OFF[this._qfState];
-            this._handle.y(from + (to - from) * ease);
+            this._handle.y(this._animFrom + (this._animTo - this._animFrom) * ease);
+            return;
+        }
+        // 已合闸运行中：持续监测入口电源进线，一旦出现两相及以上短接（如带电挂临时
+        // 接地线）立即短路速断脱扣跳闸
+        if (this._qfState === 'on' && this._isInputPhaseShorted()) {
+            this._tripQf('电源进线两相及以上已被临时接地线短接，短路保护动作，断路器立即脱扣（跳闸）！请先拆除接地线再合闸。');
         }
     }
 
@@ -1079,7 +1143,9 @@ export class MotorControlBox extends BaseComponent {
             this._toggleQf();
         });
         if (this._pe) {
-            this.addClickablePart('pe-terminal', this._pe.x - 14, this._pe.y - 14, 28, 28);
+            // 柜门 PE 端子：电气端口点击会拦截热区，放大范围并置顶（门板 door 热区较大）
+            const peTermHit = this.addClickablePart('pe-terminal', this._pe.x - 24, this._pe.y - 24, 48, 48, true);
+            this._peTermGroup = peTermHit.parent;   // 保存所属 group，便于末尾统一置顶
         }
         // 接线端子排识别区（左组=电源进线，右组=出线，各上下两排）
         this.addClickablePart('term-l-up', TERM_L_XS[0] - 14, TERM_UP_Y - 20, TERM_L_XS[2] - TERM_L_XS[0] + 28, 40);
@@ -1088,11 +1154,15 @@ export class MotorControlBox extends BaseComponent {
         this.addClickablePart('term-r-low', TERM_R_XS[0] - 14, TERM_LOW_Y - 20, TERM_R_XS[2] - TERM_R_XS[0] + 28, 40);
         // PE 端子组（4 个紧密端子）
         this.addClickablePart('term-pe', TERM_PE_XS[0] - 10, TERM_PE_Y - 16, TERM_PE_XS[3] - TERM_PE_XS[0] + 20, 32);
-        // 箱体 PE 设备点
+        // PE 接地排（端子下方的黄绿导铜排）
+        this.addClickablePart('pe-bar', TERM_PE_XS[0] - 10, TERM_PE_Y - 12, TERM_PE_XS[3] - TERM_PE_XS[0] + 20, 26);
+        // 箱体 PE 设备点（电气端口点击会拦截热区，放大范围）——需居上避免被同轴 pe-body 端口旁热区遮挡
         if (this._peBody) {
-            this.addClickablePart('pe-body', this._peBody.x - 12, this._peBody.y - 12, 24, 24);
+            this.addClickablePart('pe-body', this._peBody.x - 24, this._peBody.y - 24, 48, 48, true);
         }
         this.addClickablePart('door', DOOR_HINGE_X, DOOR_TY, DOOR_PROJ_W + 10, DOOR_BY - DOOR_TY);
+        // 柜门 PE 端子热区置顶（door 热区最后注册、覆盖 PE 端子区域，需再置顶一次）
+        if (this._peTermGroup) this._peTermGroup.moveToTop();
     }
 
     getClickablePartCenter(partId) {
@@ -1112,6 +1182,7 @@ export class MotorControlBox extends BaseComponent {
             'term-r-up': { x: (TERM_R_XS[0] + TERM_R_XS[2]) / 2, y: TERM_UP_Y },
             'term-r-low': { x: (TERM_R_XS[0] + TERM_R_XS[2]) / 2, y: TERM_LOW_Y },
             'term-pe': { x: (TERM_PE_XS[0] + TERM_PE_XS[3]) / 2, y: TERM_PE_Y },
+            'pe-bar': { x: (TERM_PE_XS[0] + TERM_PE_XS[3]) / 2, y: TERM_PE_Y + 2 },
             'pe-body': this._peBody || { x: 0, y: 0 },
             'door': { x: DOOR_HINGE_X + DOOR_PROJ_W / 2, y: (DOOR_TY + DOOR_BY) / 2 },
         };

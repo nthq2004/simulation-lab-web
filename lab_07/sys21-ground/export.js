@@ -229,6 +229,9 @@ import { SP4TSwitch } from './components/SP4TSwitch.js';
 import { UPS } from './components/UPS.js';
 import { JSZ3N } from './components/JSZ3N.js';
 import { MotorControlBox } from './components/MotorControlBox.js';
+import { GroundBusBar } from './components/GroundBusBar.js';
+import { ThreePhaseMotor3D } from './components/ThreePhaseMotor3D.js';
+import { LowVoltageGroundCable } from './components/LowVoltageGroundCable.js';
 import { FluorescentLamp } from './components/FluorescentLamp.js';
 import { Ballast } from './components/Ballast.js';
 import { Starter } from './components/Starter.js';
@@ -316,6 +319,9 @@ export {
     ReversePowerRelay, Syncroscope, SP4TSwitch,
     UPS, MotorStarterPanel, ElectronicsPanel, PPEPanel,
     MotorControlBox,
+    GroundBusBar,
+    ThreePhaseMotor3D,
+    LowVoltageGroundCable,
     DistributionBox, ShorePowerMainSwitch, ShorePowerBox, NegativeSeqRelay, InsulationIndicator, InsulationMonitor,
     EmergencyPanel
 };

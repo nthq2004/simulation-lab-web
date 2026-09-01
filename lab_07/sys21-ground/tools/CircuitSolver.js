@@ -146,6 +146,7 @@ export class CircuitSolver {
             starterDevs:   raw.filter(d => d.type === 'starter'),
             upsDevs:       raw.filter(d => d.type === 'ups'),
             mcBoxDevs:     raw.filter(d => d.type === 'motor_control_box'),
+            groundBusDevs: raw.filter(d => d.type === 'ground_bus'),
         };
     }
 
@@ -411,6 +412,7 @@ export class CircuitSolver {
             emergencyPanelDevs,
             upsDevs,
             mcBoxDevs,
+            groundBusDevs,
         } = this._deviceCache;
 
         this._cachedDevs = this._deviceCache;
@@ -468,6 +470,13 @@ export class CircuitSolver {
             const hasConn = (this.sys && this.sys.conns)
                 ? this.sys.conns.some(c => c.from === nPort || c.to === nPort) : false;
             if (!hasConn) this.gndClusterIndices.add(nIdx);
+        });
+        // ---接地母排：整条母排视为接地参考（其同簇集群钳位到 0V）---
+        groundBusDevs.forEach(b => {
+            const gId = (typeof b.getGroundPortId === 'function')
+                ? b.getGroundPortId() : `${b.id}_wire_pe1`;
+            const cIdx = this.portToCluster.get(gId);
+            if (cIdx !== undefined) this.gndClusterIndices.add(cIdx);
         });
         // ---没有任何接地参考时，找一个非 vPos 簇钳位到地（防止矩阵奇异）
         if (this.gndClusterIndices.size === 0 && this.clusterCount > 0) {

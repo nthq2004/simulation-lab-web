@@ -40,9 +40,9 @@ import { CurrentTransformer, ACVoltmeter, PotentialTransformer, SinglePhaseFuse,
 
 import { DistributionBox, ShorePowerMainSwitch, ShorePowerBox, NegativeSeqRelay } from './export.js';
 
-import { MotorControlBox } from './export.js';
+import { MotorControlBox, GroundBusBar, ThreePhaseMotor3D, LowVoltageGroundCable } from './export.js';
 
-import { componentConfigs, initSlider } from './project/sys_cddz1-2.js';
+import { componentConfigs, initSlider, applyPrewired } from './project/sys_cddz1-2.js';
     
 /**
  * ControlSystem - 控制系统仿真引擎
@@ -151,6 +151,9 @@ export class ControlSystem {
             g.on('dragmove', () => this._onDragMove(cfg.id));
             g.on('dragend', () => this._onDragEnd());
         });
+
+        // 建立固定预接线（PE 保护接地黄绿线，开机即接好，不依赖自动接线）
+        applyPrewired(this);
 
         // 绘制一次以激活事件系统和完成初始化
         this._applyStaticCaching();
