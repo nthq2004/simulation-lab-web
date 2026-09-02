@@ -397,7 +397,14 @@ export class BaseComponent {
                 duration: 0.3,
                 shadowBlur: 0,
                 onFinish: () => {
-                    this.group.cache();
+                    // 高亮结束后不要缓存组件快照：
+                    // 若在此 cache()，会把“当前状态”（如 QF 断开）冻结为位图，
+                    // 之后刀闸等动态节点再变化（合闸/按压）也不会反映在画布上，
+                    // 导致“内部已闭合、外观仍断开”的渲染脱节问题。
+                    // 改为清除缓存，恢复动态节点的实时渲染。
+                    if (this.group.isCached()) {
+                        try { this.group.clearCache(); } catch (e) { /* ignore */ }
+                    }
                 }
             });
         }

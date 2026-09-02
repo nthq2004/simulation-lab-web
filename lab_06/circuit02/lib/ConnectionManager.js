@@ -246,4 +246,83 @@ export class ConnectionManager {
             requestAnimationFrame(animate);
         });
     }
+
+    /**
+     * 动画方式移除连线：连线从两端向中点收缩消失（用于演示）
+     * 结束后把连线从 conns 中移除并重绘
+     */
+    removeConnectionAnimated(conn) {
+        const sys = this.sys;
+        const self = this;
+        return new Promise((resolve) => {
+            const getPosByPort = (portId) => {
+                const did = portId.split('_wire_')[0] || portId.split('_')[0];
+                return sys.comps[did]?.getAbsPortPos(portId);
+            };
+
+            const fromPos = getPosByPort(conn.from);
+            const toPos = getPosByPort(conn.to);
+            const idx = sys.conns.findIndex(c =>
+                self.connKeyCanonical(c) === self.connKeyCanonical(conn) && c.type === conn.type);
+
+            if (!fromPos || !toPos || idx === -1) {
+                if (idx !== -1) sys.conns.splice(idx, 1);
+                sys.redrawAll();
+                if (conn.type === 'pipe') self._notifyPipeChange();
+                return resolve();
+            }
+
+            // 先移出连接并重绘（连线从渲染中消失），再用动画线演示“断开”
+            sys.conns.splice(idx, 1);
+            sys.redrawAll();
+
+            const animLine = new Konva.Line({
+                points: [fromPos.x, fromPos.y, toPos.x, toPos.y],
+                stroke: conn.type === 'wire' ? '#e41c1c' : '#78e4c9',
+                strokeWidth: conn.type === 'wire' ? 6 : 10,
+                lineCap: 'round',
+                lineJoin: 'round',
+                listening: false
+            });
+
+            sys.lineLayer.add(animLine);
+
+            const duration = 3000;
+            const start = performance.now();
+            let lastDrawTime = start;
+
+            const animate = (now) => {
+                const elapsed = now - start;
+                const t = Math.min(1, elapsed / duration);
+                const easeOut = 1 - Math.pow(1 - t, 3);
+
+                // 两端向中点收缩，模拟“断开”
+                const cx = (fromPos.x + toPos.x) / 2;
+                const cy = (fromPos.y + toPos.y) / 2;
+                const x1 = fromPos.x + (cx - fromPos.x) * easeOut;
+                const y1 = fromPos.y + (cy - fromPos.y) * easeOut;
+                const x2 = toPos.x + (cx - toPos.x) * easeOut;
+                const y2 = toPos.y + (cy - toPos.y) * easeOut;
+
+                animLine.points([x1, y1, x2, y2]);
+
+                // 优化：每 16ms 才绘制一次（60fps）
+                if (now - lastDrawTime >= 16) {
+                    sys.lineLayer.batchDraw();
+                    lastDrawTime = now;
+                }
+
+                if (t < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    animLine.destroy();
+                    sys.redrawAll();
+                    if (conn.type === 'pipe') self._notifyPipeChange();
+                    resolve();
+                }
+            };
+
+            requestAnimationFrame(animate);
+        });
+    }
 }

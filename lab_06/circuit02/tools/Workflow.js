@@ -66,6 +66,13 @@ export class Workflow {
         const wfList = this._workflowPanelEl.querySelector('#wfList');
         wfList.innerHTML = '';
 
+        // 未选择任务时 _workflow 可能为 null，直接显示提示，避免 forEach 崩溃
+        if (!this._workflow || !Array.isArray(this._workflow)) {
+            wfList.innerHTML = '<div style="padding:10px;color:#888">请先在顶部下拉框选择操作项目，再开始演示/演练。</div>';
+            this._updateFooter();
+            return;
+        }
+
         this._workflow.forEach((step, idx) => {
             // 评估模式下，不显示当前Idx之后的步骤
             if (this._wfMode === 'eval' && idx >= this._workflowIdx) return;
@@ -117,6 +124,11 @@ export class Workflow {
     // 全自动演示：循环调用单步演示
     async _runAutoDemo() {
         this._isAutoPlaying = true; // 标记正在全自动运行
+        // 未选择任务时直接退出（面板已显示提示）
+        if (!this._workflow || !Array.isArray(this._workflow) || this._workflow.length === 0) {
+            this._isAutoPlaying = false;
+            return;
+        }
         for (let i = this._workflowIdx; i < this._workflow.length; i++) {
             if (!this._workflowPanelEl || !this._isAutoPlaying) break;
 
@@ -233,6 +245,11 @@ export class Workflow {
         }
 
         this.sys.redrawAll();
+        // 强制同步重绘，确保演示动作后的外观立即更新（不依赖物理循环消费延迟标记）
+        try {
+            if (this.sys.layer) this.sys.layer.draw();
+            if (this.sys.lineLayer) this.sys.lineLayer.draw();
+        } catch (e) { /* ignore */ }
     }
     resetWorkflow() {
         this._workflowIdx = 0;
@@ -351,7 +368,11 @@ export class Workflow {
     }
 
     /**
-     * 模拟自动点击效果
+     * 模拟自动点击效果（展示 → 延时 → 动作 节奏）
+     * 采用“闪烁箭头 + 延时动作”模式：
+     *  1. 在目标部件上叠加红色系闪烁箭头（外层半透明光晕箭头 + 内层实心箭头 + 虚线圆圈标记）
+     *  2. 约 500ms 间隔切换显隐，产生闪烁效果
+     *  3. 持续约 3000ms 后移除箭头，再延时 1~2s 给学员观察时间
      */
     async _simulateAutoClick(targetId, subTarget) {
         const comp = this.sys.comps[targetId];
@@ -360,28 +381,227 @@ export class Workflow {
         // 1. 视觉高亮 (给学员看点的是哪儿)
         comp.highlight && comp.highlight(true);
 
-        if (subTarget) {
-            var partNames = { 'pos-plate': '正极板（PbO₂）', 'neg-plate': '负极板（Pb）', 'separator': '隔板' };
-            var tip = partNames[subTarget] || subTarget;
-            this.sys.showFloatingTip('【演示】请点击：' + tip, 3000);
+        // 浮动提示：说明“请点击 xxx”
+        const partNames = { 'pos-plate': '正极板（PbO₂）', 'neg-plate': '负极板（Pb）', 'separator': '隔板' };
+        const tipText = subTarget
+            ? (partNames[subTarget] || subTarget)
+            : (comp.config?.label || comp.label || targetId);
+        this.sys.showFloatingTip('【演示】请点击：' + tipText, 3500);
+
+        // 2. 闪烁箭头 + 虚线圆圈标记（红色系 #e74c3c）
+        const sys = this.sys;
+        const layer = sys.layer;
+        const box = comp.group ? comp.group.getClientRect({ relativeTo: sys.stage }) : null;
+        let arrow, arrowHalo, dashCircle, timer = null;
+        if (box) {
+            const cx = box.x + box.width / 2;
+            const cy = box.y + box.height / 2;
+            const dist = box.height / 2 + 55;
+            const headIn = box.height / 2 + 10;
+
+            // 外层半透明光晕箭头
+            arrowHalo = new Konva.Arrow({
+                points: [cx, cy - dist - 10, cx, cy - headIn],
+                pointerLength: 24, pointerWidth: 22,
+                fill: 'rgba(231,76,60,0.35)', stroke: 'rgba(231,76,60,0.35)', strokeWidth: 10,
+                listening: false
+            });
+            // 内层实心箭头
+            arrow = new Konva.Arrow({
+                points: [cx, cy - dist, cx, cy - headIn],
+                pointerLength: 16, pointerWidth: 13,
+                fill: '#e74c3c', stroke: '#e74c3c', strokeWidth: 4,
+                listening: false
+            });
+            // 顶部虚线圆圈标记
+            dashCircle = new Konva.Circle({
+                x: cx, y: cy,
+                radius: Math.max(box.width, box.height) / 2 + 16,
+                stroke: '#e74c3c', strokeWidth: 3, dash: [8, 6],
+                listening: false
+            });
+            layer.add(arrowHalo);
+            layer.add(arrow);
+            layer.add(dashCircle);
+            sys.requestRedraw ? sys.requestRedraw() : layer.draw();
+
+            // 约 500ms 间隔切换箭头显隐
+            let visible = true;
+            timer = setInterval(() => {
+                visible = !visible;
+                arrow && arrow.visible(visible);
+                arrowHalo && arrowHalo.visible(visible);
+                dashCircle && dashCircle.visible(visible);
+                sys.requestRedraw ? sys.requestRedraw() : layer.draw();
+            }, 500);
         }
 
-        // 2. 停留 1.5 秒让学员看清楚
-        await new Promise(r => setTimeout(r, 1500));
-
+        // 3. 持续约 3000ms 后移除箭头
+        await new Promise(r => setTimeout(r, 3000));
+        if (timer) { clearInterval(timer); timer = null; }
+        if (arrowHalo) arrowHalo.destroy();
+        if (arrow) arrow.destroy();
+        if (dashCircle) dashCircle.destroy();
         comp.highlight && comp.highlight(false);
+        sys.requestRedraw ? sys.requestRedraw() : layer.draw();
+
+        // 4. 再延时 1~2s，给学员观察时间
+        await new Promise(r => setTimeout(r, 1500));
     }
 
     /**
-     * 模拟自动答题效果
+     * 模拟自动点击【DOM 按钮】（如工具栏的“自动接线”）
+     * 用红色系闪烁箭头 + 虚线圆圈 + 浮动提示，指出应点击的界面按钮
+     * @param {string} btnId - DOM 元素 id（如 'btnAutoWire'）
+     * @param {string} tipText - 浮动提示文字（可选，默认用按钮文本）
+     */
+    async _simulateAutoClickDom(btnId, tipText) {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+
+        const label = tipText || (btn.innerText || btnId);
+        this.sys.showFloatingTip(`【演示】请点击：${label}`, 3500);
+
+        // 闪烁箭头（指向按钮上方）
+        const arrowEl = document.createElement('div');
+        arrowEl.innerHTML = '▼';
+        Object.assign(arrowEl.style, {
+            position: 'fixed', zIndex: '10002', pointerEvents: 'none',
+            color: '#e74c3c', fontWeight: 'bold', fontSize: '34px',
+            lineHeight: '1', textShadow: '0 0 12px rgba(231,76,60,0.8)',
+            transition: 'opacity 0.3s'
+        });
+        const dashedEl = document.createElement('div');
+        Object.assign(dashedEl.style, {
+            position: 'fixed', zIndex: '10001', pointerEvents: 'none',
+            border: '3px dashed #e74c3c', borderRadius: '6px'
+        });
+        const position = () => {
+            const r = btn.getBoundingClientRect();
+            const cx = r.left + r.width / 2;
+            arrowEl.style.left = (cx - 17) + 'px';
+            arrowEl.style.top = (r.top - 46) + 'px';
+            dashedEl.style.left = (r.left - 4) + 'px';
+            dashedEl.style.top = (r.top - 4) + 'px';
+            dashedEl.style.width = (r.width + 8) + 'px';
+            dashedEl.style.height = (r.height + 8) + 'px';
+        };
+        position();
+        document.body.appendChild(arrowEl);
+        document.body.appendChild(dashedEl);
+
+        // 约 500ms 间隔闪烁
+        let visible = true;
+        const timer = setInterval(() => {
+            visible = !visible;
+            arrowEl.style.opacity = visible ? '1' : '0.15';
+            dashedEl.style.opacity = visible ? '1' : '0.2';
+        }, 500);
+
+        // 持续约 3000ms 后移除
+        await new Promise(r => setTimeout(r, 3000));
+        clearInterval(timer);
+        arrowEl.remove();
+        dashedEl.remove();
+
+        // 再延时 1s
+        await new Promise(r => setTimeout(r, 1000));
+    }
+
+    /**
+     * 模拟自动答题效果（题目展示 → 延时指出正确答案 → 停留后自动关闭）
+     *  1. 弹出遮罩 + 题目卡片，展示题目、选项
+     *  2. 停顿约 2s 让学员阅读题目
+     *  3. 高亮标出全部正确选项（绿色背景/边框），并用箭头（👉）指向首个正确选项
+     *  4. 展示 ✅ 正确答案 与 💡 解析文字（analysis 字段）
+     *  5. 停留约 6s 后自动关闭弹窗
      */
     async _simulateAutoQuiz(quizConfig) {
-        const rightAnswer = quizConfig.options[quizConfig.answer];
+        if (!quizConfig || !quizConfig.options) return;
+        const sys = this.sys;
+        const parent = sys.container;
+        const isMultiple = quizConfig.isMultiple || Array.isArray(quizConfig.answer);
+        const answers = Array.isArray(quizConfig.answer)
+            ? quizConfig.answer
+            : [quizConfig.answer];
+        const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-        // 在消息框或悬浮气泡中显示正确答案，而不是弹出阻塞式窗口
-        this.sys.showFloatingTip(`【演示】正确答案是：${rightAnswer}`, 10000);
+        if (getComputedStyle(parent).position === 'static') {
+            parent.style.position = 'relative';
+        }
 
-        await new Promise(r => setTimeout(r, 10000));
+        // 1. 遮罩 + 题目卡片
+        const mask = document.createElement('div');
+        Object.assign(mask.style, {
+            position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
+            background: 'rgba(0,0,0,0.6)', zIndex: '100',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+        });
+
+        const box = document.createElement('div');
+        Object.assign(box.style, {
+            background: '#fff', width: '85%', maxWidth: '540px',
+            borderRadius: '12px', padding: '20px',
+            boxShadow: '0 8px 20px rgba(0,0,0,0.3)', fontFamily: 'sans-serif'
+        });
+        const typeTag = isMultiple ? '[多选题]' : '[单选题]';
+        box.innerHTML = `
+            <div style="color:#1395eb; font-size:16px; margin-bottom:5px; font-weight:bold;">${typeTag} · 自动演示</div>
+            <div style="font-weight:bold; margin-bottom:15px; line-height:1.4;">${quizConfig.question}</div>
+            <div id="qabox-options"></div>
+            <div id="qabox-result" style="margin-top:12px; min-height:0;"></div>
+        `;
+
+        const wrapper = box.querySelector('#qabox-options');
+        const optionNodes = [];
+        quizConfig.options.forEach((text, index) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex; align-items:center; padding:10px 12px; margin:6px 0; border:1px solid #ddd; border-radius:8px; background:#fcfcfc; transition:all .3s;';
+            row.dataset.correct = answers.includes(index) ? '1' : '0';
+            row.innerHTML = `
+                <span style="width:24px;height:24px;line-height:24px;text-align:center;border:1px solid #1395eb;color:#1395eb;border-radius:4px;margin-right:10px;font-weight:bold;flex-shrink:0;">${letters[index]}</span>
+                <span style="flex:1;font-size:16px;">${text}</span>
+                <span class="qabox-mark" style="font-size:20px; margin-left:8px;"></span>
+            `;
+            wrapper.appendChild(row);
+            optionNodes.push(row);
+        });
+        mask.appendChild(box);
+        parent.appendChild(mask);
+        sys.requestRedraw && sys.requestRedraw();
+
+        // 2. 停顿约 2s 让学员阅读题目
+        await new Promise(r => setTimeout(r, 2000));
+
+        // 3. 高亮全部正确选项（绿色），并用箭头指向首个正确选项
+        optionNodes.forEach((row, i) => {
+            if (row.dataset.correct === '1') {
+                row.style.borderColor = '#2ecc71';
+                row.style.background = '#e9f9ee';
+                row.querySelector('.qabox-mark').textContent = '✅';
+            }
+        });
+        const firstCorrect = answers[0];
+        const arrowMark = optionNodes[firstCorrect] && optionNodes[firstCorrect].querySelector('.qabox-mark');
+        if (arrowMark) arrowMark.textContent = '👉 ✅';
+
+        // 4. 展示正确答案与解析
+        const resultEl = box.querySelector('#qabox-result');
+        const answerText = answers.map(i => `${letters[i]}. ${quizConfig.options[i]}`).join('、');
+        resultEl.innerHTML = `
+            <div style="padding:10px 12px; border-radius:8px; background:#e9f9ee; border:1px solid #2ecc71;">
+                <div style="font-weight:bold; color:#27ae60; font-size:15px;">✅ 正确答案：${answerText}</div>
+                ${quizConfig.analysis
+                    ? `<div style="margin-top:8px; color:#555; font-size:14px; line-height:1.5;">💡 ${quizConfig.analysis}</div>`
+                    : ''}
+            </div>
+        `;
+        sys.requestRedraw && sys.requestRedraw();
+
+        // 5. 停留约 6s 后自动关闭
+        await new Promise(r => setTimeout(r, 6000));
+        try { parent.removeChild(mask); } catch (e) { }
+        sys.requestRedraw && sys.requestRedraw();
     }
     /**
      * 弹出选择题考核对话框 (兼容单选与多选，限制在容器内)

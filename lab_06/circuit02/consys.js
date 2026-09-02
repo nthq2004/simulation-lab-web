@@ -680,7 +680,8 @@ export class ControlSystem {
 
             if (!shouldSkip) {
                 const startCircuit = performance.now();
-                this.voltageSolver.update();
+                try { this.voltageSolver.update(); }
+                catch (e) { console.warn('[consys] circuit solve error:', e); }
                 perfMonitor.recordMetric('circuitSolve', performance.now() - startCircuit);
 
                 // 根据迭代次数更新稳定性计数
@@ -700,17 +701,20 @@ export class ControlSystem {
         const hasPipes = this.conns.some(c => c.type === 'pipe');
         if (hasPipes) {
             const startPneumatic = performance.now();
-            this.pressSolver.solve();
+            try { this.pressSolver.solve(); }
+            catch (e) { console.warn('[consys] pneumatic solve error:', e); }
             perfMonitor.recordMetric('pneumaticSolve', performance.now() - startPneumatic);
         }
 
         // ── 数字逻辑仿真（同样按需） ──
         if (this._hasDigital) {
             const startDigital = performance.now();
-            if (this.digitalSolver) this.digitalSolver.update(1 / 20);
-            if (this.mcuSolver) this.mcuSolver.update(1 / 20, 5);
-            if (this.mcs51Solver) this.mcs51Solver.update(1 / 20);
-            this._updateDigitalLEDs();
+            try {
+                if (this.digitalSolver) this.digitalSolver.update(1 / 20);
+                if (this.mcuSolver) this.mcuSolver.update(1 / 20, 5);
+                if (this.mcs51Solver) this.mcs51Solver.update(1 / 20);
+                this._updateDigitalLEDs();
+            } catch (e) { console.warn('[consys] digital solve error:', e); }
             perfMonitor.recordMetric('digitalSolve', performance.now() - startDigital);
         }
 
@@ -723,13 +727,15 @@ export class ControlSystem {
         // ── 热力求解 ──
         {
             const start = performance.now();
-            if (this.thermalSolver) this.thermalSolver.solve(1 / 20);
+            try { if (this.thermalSolver) this.thermalSolver.solve(1 / 20); }
+            catch (e) { console.warn('[consys] thermal solve error:', e); }
             perfMonitor.recordMetric('thermalSolve', performance.now() - start);
         }
 
         // ── 复合设备更新（preUpdate + commit） ──
         if (this.deviceManager) {
-            this.deviceManager.tick(1 / 20);
+            try { this.deviceManager.tick(1 / 20); }
+            catch (e) { console.warn('[consys] deviceManager error:', e); }
         }
 
         // ── 集中化组件动画 tick（20fps，替代各组件独立 rAF 循环） ──
@@ -763,7 +769,13 @@ export class ControlSystem {
         for (let i = 0; i < this._animCompIds.length; i++) {
             const comp = this.comps[this._animCompIds[i]];
             if (comp && comp.tick) {
-                comp.tick(dt);
+                // 单个组件 tick 异常不应杀死整个渲染循环
+                // （否则 _updatePhysics 末尾的 setTimeout 不再调度 → 画面永久冻结）
+                try {
+                    comp.tick(dt);
+                } catch (e) {
+                    console.warn('[consys] comp.tick error:', comp.id, e);
+                }
             }
         }
         if (this._needsRedraw) {

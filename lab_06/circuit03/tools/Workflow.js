@@ -351,37 +351,188 @@ export class Workflow {
     }
 
     /**
-     * 模拟自动点击效果
+     * 模拟自动点击效果：闪烁箭头 + 圆圈标记，闪烁3次后再执行
      */
     async _simulateAutoClick(targetId, subTarget) {
         const comp = this.sys.comps[targetId];
         if (!comp) return;
 
-        // 1. 视觉高亮 (给学员看点的是哪儿)
+        const box = comp.group.getClientRect({ relativeTo: this.sys.stage });
+        const cx = box.x + box.width / 2;
+        const cy = box.y + box.height / 2;
+
+        // 1. 创建闪烁箭头（从上方指向组件中心）
+        const arrow = new Konva.Arrow({
+            points: [cx, cy - 80, cx, cy - 10],
+            pointerLength: 14,
+            pointerWidth: 12,
+            fill: '#e74c3c',
+            stroke: '#e74c3c',
+            strokeWidth: 3,
+            opacity: 1,
+            listening: false
+        });
+        this.sys.layer.add(arrow);
+
+        // 2. 创建圆圈标记（围绕组件中心）
+        const circle = new Konva.Circle({
+            x: cx,
+            y: cy,
+            radius: Math.max(box.width, box.height) / 2 + 8,
+            stroke: '#e74c3c',
+            strokeWidth: 2.5,
+            dash: [8, 4],
+            opacity: 1,
+            listening: false
+        });
+        this.sys.layer.add(circle);
+
+        // 3. 高亮组件
         comp.highlight && comp.highlight(true);
 
-        if (subTarget) {
-            var partNames = { 'pos-plate': '正极板（PbO₂）', 'neg-plate': '负极板（Pb）', 'separator': '隔板' };
-            var tip = partNames[subTarget] || subTarget;
-            this.sys.showFloatingTip('【演示】请点击：' + tip, 3000);
+        // 4. 闪烁3次（每次500ms亮 + 500ms暗）
+        for (let i = 0; i < 3; i++) {
+            arrow.opacity(1);
+            circle.opacity(1);
+            if (this.sys.requestRedraw) this.sys.requestRedraw(); else this.sys.layer.draw();
+            await new Promise(r => setTimeout(r, 500));
+            arrow.opacity(0.15);
+            circle.opacity(0.15);
+            if (this.sys.requestRedraw) this.sys.requestRedraw(); else this.sys.layer.draw();
+            await new Promise(r => setTimeout(r, 500));
         }
 
-        // 2. 停留 1.5 秒让学员看清楚
-        await new Promise(r => setTimeout(r, 1500));
+        // 5. 停留 1 秒让学员看清楚最终位置
+        arrow.opacity(1);
+        circle.opacity(1);
+        if (this.sys.requestRedraw) this.sys.requestRedraw(); else this.sys.layer.draw();
+        await new Promise(r => setTimeout(r, 1000));
 
+        // 6. 清理效果
+        arrow.destroy();
+        circle.destroy();
         comp.highlight && comp.highlight(false);
+        if (this.sys.requestRedraw) this.sys.requestRedraw(); else this.sys.layer.draw();
     }
 
     /**
-     * 模拟自动答题效果
+     * 模拟自动答题效果：展示题目卡片 → 突出正确答案 → 停顿5s → 显示解析
      */
     async _simulateAutoQuiz(quizConfig) {
-        const rightAnswer = quizConfig.options[quizConfig.answer];
+        const parent = this.sys.container;
+        const isMultiple = quizConfig.isMultiple || Array.isArray(quizConfig.answer);
+        const letters = ['A', 'B', 'C', 'D'];
 
-        // 在消息框或悬浮气泡中显示正确答案，而不是弹出阻塞式窗口
-        this.sys.showFloatingTip(`【演示】正确答案是：${rightAnswer}`, 10000);
+        // 如果已有弹窗先清理
+        if (this._quizMask) { this._quizMask.destroy(); this._quizMask = null; }
 
-        await new Promise(r => setTimeout(r, 10000));
+        if (getComputedStyle(parent).position === 'static') {
+            parent.style.position = 'relative';
+        }
+
+        // 1. 创建遮罩
+        const mask = document.createElement('div');
+        Object.assign(mask.style, {
+            position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
+            background: 'rgba(0,0,0,0.6)', zIndex: '100',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: '0', transition: 'opacity 0.3s'
+        });
+
+        const box = document.createElement('div');
+        Object.assign(box.style, {
+            background: '#fff', width: '85%', maxWidth: '520px',
+            borderRadius: '12px', padding: '22px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.35)', fontFamily: 'sans-serif',
+            transform: 'scale(0.9)', transition: 'transform 0.3s'
+        });
+
+        // 2. 构建题目卡片
+        const typeTag = isMultiple ? '[多选题]' : '[单选题]';
+        box.innerHTML = `
+            <div style="color:#1395eb; font-size:15px; margin-bottom:4px; font-weight:bold;">${typeTag}</div>
+            <div style="font-weight:bold; margin-bottom:16px; line-height:1.5; font-size:15px;">${quizConfig.question}</div>
+            <div id="quiz-options"></div>
+            <div id="quiz-result" style="display:none; margin-top:14px; padding:12px; background:#f1f8e9; border-left:4px solid #4caf50; border-radius:4px; font-size:13px; line-height:1.6; color:#555;"></div>
+        `;
+
+        const wrapper = box.querySelector('#quiz-options');
+        const resultDiv = box.querySelector('#quiz-result');
+        const optionNodes = [];
+
+        // 3. 生成选项（初始全部显示）
+        quizConfig.options.forEach((text, index) => {
+            const btn = document.createElement('button');
+            Object.assign(btn.style, {
+                width: '100%', padding: '12px', margin: '5px 0',
+                border: '1px solid #ddd', borderRadius: '8px',
+                background: '#fcfcfc', textAlign: 'left', cursor: 'default',
+                display: 'flex', alignItems: 'center', transition: 'all 0.3s',
+                fontSize: '14px'
+            });
+            btn.innerHTML = `
+                <span style="width:26px; height:26px; line-height:26px; text-align:center;
+                    border:1px solid #1395eb; color:#1398db; border-radius:4px; margin-right:10px; font-weight:bold; flex-shrink:0;">
+                    ${letters[index]}
+                </span>
+                <span style="flex:1;">${text}</span>
+            `;
+            wrapper.appendChild(btn);
+            optionNodes.push(btn);
+        });
+
+        mask.appendChild(box);
+        parent.appendChild(mask);
+        this._quizMask = mask;
+
+        // 4. 淡入动画
+        await new Promise(r => setTimeout(r, 50));
+        mask.style.opacity = '1';
+        box.style.transform = 'scale(1)';
+        await new Promise(r => setTimeout(r, 500));
+
+        // 5. 停顿2秒让学员阅读题目
+        await new Promise(r => setTimeout(r, 2000));
+
+        // 6. 突出正确答案：标绿 + 箭头指向
+        const correctIndices = isMultiple ? quizConfig.answer : [quizConfig.answer];
+        optionNodes.forEach((node, idx) => {
+            if (correctIndices.includes(idx)) {
+                node.style.borderColor = '#4caf50';
+                node.style.background = '#e8f5e9';
+                node.style.boxShadow = '0 0 8px rgba(76,175,80,0.4)';
+                node.style.fontWeight = 'bold';
+                // 在正确选项前加箭头
+                const arrowSpan = document.createElement('span');
+                arrowSpan.textContent = '👉 ';
+                node.querySelector('span:last-child').prepend(arrowSpan);
+            } else {
+                node.style.opacity = '0.4';
+            }
+        });
+
+        // 7. 显示答案文字
+        const correctText = correctIndices.map(i => `${letters[i]}. ${quizConfig.options[i]}`).join('、');
+        const answerLine = document.createElement('div');
+        answerLine.style.cssText = 'margin-top:12px; font-size:15px; font-weight:bold; color:#2e7d32;';
+        answerLine.innerHTML = `✅ 正确答案：${correctText}`;
+        box.insertBefore(answerLine, resultDiv);
+
+        // 8. 显示解析
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `💡 <strong>解析：</strong>${quizConfig.analysis || '请参考设备操作规程。'}`;
+
+        if (this.sys.requestRedraw) this.sys.requestRedraw();
+
+        // 9. 停顿5秒让学员阅读答案和解析
+        await new Promise(r => setTimeout(r, 5000));
+
+        // 10. 关闭弹窗
+        mask.style.opacity = '0';
+        box.style.transform = 'scale(0.9)';
+        await new Promise(r => setTimeout(r, 300));
+        mask.remove();
+        this._quizMask = null;
     }
     /**
      * 弹出选择题考核对话框 (兼容单选与多选，限制在容器内)

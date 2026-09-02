@@ -45,81 +45,141 @@ export const PROJECT_WORKFLOWS = {
         id: 'two-location-control-analysis', name: '1. 两地控制电路分析',
         steps: [
             {
-                msg: '第 1 步：接线并合上电源开关。观察电动机是否自行起动.', mode: 'check',
+msg: '第 1 步：点击自动接线，合上电源开关。按下SB2，起动电动机。', mode: 'check',
                 async act() {
-                    await new Promise(r => setTimeout(r, 300));
                     const sys = this.sys;
+                    await new Promise(r => setTimeout(r, 300));
+                    // 1. 高亮“自动接线”按钮（闪烁箭头指出），再执行自动接线
+                    await this._simulateAutoClickDom('btnAutoWire', '自动接线');
                     sys.conns.length = 0;
                     _autoWire(sys);
-                    await new Promise(r => setTimeout(r, 200));
+                    await new Promise(r => setTimeout(r, 300));
+                    sys.showFloatingTip('【演示】完成自动接线', 2000);
+                    // 2. 高亮电源开关 QF，合闸（放慢动画约 1s，清晰显示开关闭合动作）
+                    await this._simulateAutoClick('acb');
                     const acb = sys.comps['acb'];
-                    if (acb) { acb.close(); }
-                    await new Promise(r => setTimeout(r, 500));
+                    if (acb) {
+                        const origDur = acb.config.animDur;
+                        acb.config.animDur = (origDur || 0.1) + 0.9;   // 延长合闸动画
+                        acb.close();
+                        // 等待合闸动画完成（约 0.5s）
+                        const t0 = Date.now();
+                        while (acb.isAnimating && acb.isAnimating() && Date.now() - t0 < 2000) {
+                            await new Promise(r => setTimeout(r, 100));
+                        }
+                        acb.config.animDur = origDur;                    // 恢复
+                    }
+                    await new Promise(r => setTimeout(r, 800));
+                    // 3. 高亮起动按钮 SB2，按下保持直到 KM1 吸合且电机起动（最长 10s）才松开
+                    await this._simulateAutoClick('ss');
+                    await _pressButton(sys.comps['ss'], 'start', {
+                        holdMs: 10000,
+                        until: () => _km1Energized(sys) && (sys.comps['im01']?.rpm || 0) > 300,
+                    });
                 },
                 check() {
-                    const c = (a, b) => this.sys.isPortConnected(a, b);
+                    const sys = this.sys;
+                    const c = (a, b) => sys.isPortConnected(a, b);
+                    const acb = sys.comps['acb'];
+                    const motor = sys.comps['im01'];
+                    // 要求：主回路已接通、电源开关已合上、电动机已起动
                     return c('ac_wire_u', 'acb_wire_l1')
                         && c('acb_wire_t1', 'km1-mc_wire_l1')
-                        && c('km1-mc_wire_t1', 'im01_wire_u1');
+                        && c('km1-mc_wire_t1', 'im01_wire_u1')
+                        && !!acb && acb.isClosed()
+                        && !!(motor && motor.rpm > 300);
                 },
             },
             {
-                msg: '第 2 步：将按钮SB3与按钮SB1串联（先断开控制变压器副边与SB1的连线，再串入SB3）', mode: 'check',
+                msg: '第 2 步：按下SB1，停止电动机。', mode: 'check',
                 async act() {
                     const sys = this.sys;
-                    sys.connMgr.removeConn({ from: 'tc_wire_s2', to: 'sb_wire_nc3', type: 'wire' });
-                    sys.connMgr.addConn({ from: 'tc_wire_s2', to: 'sb3_wire_nc3', type: 'wire' });
-                    sys.connMgr.addConn({ from: 'sb3_wire_nc4', to: 'sb_wire_nc3', type: 'wire' });
-                    await new Promise(r => setTimeout(r, 200));
+                    // 高亮停止按钮 SB1
+                    await this._simulateAutoClick('sb');
+                    // 按下 SB1 保持 5s：期间接触器失电、电动机停转，5s 后才松开
+                    await _pressStopHold(sys);
+                },
+                check() {
+                    // 要求：电动机已停止（转速降至 500rpm 以下）
+                    const motor = this.sys.comps['im01'];
+                    return !!(motor && motor.rpm < 500);
+                },
+            },
+            {
+                msg: '第 3 步：将按钮SB3与按钮SB1串联（先断开控制变压器副边与SB1的连线，再串入SB3）', mode: 'check',
+                async act() {
+                    const sys = this.sys;
+                    await this._simulateAutoClick('sb3');
+                    sys.showFloatingTip('【演示】动画断开旧线，串联接入 SB3', 2500);
+                    // 动画断开：控制变压器副边 → SB1
+                    await sys.connMgr.removeConnectionAnimated({ from: 'tc_wire_s2', to: 'sb_wire_nc3', type: 'wire' });
+                    // 动画连接：控制变压器副边 → SB3 → SB1
+                    await sys.connMgr.addConnectionAnimated({ from: 'tc_wire_s2', to: 'sb3_wire_nc3', type: 'wire' });
+                    await sys.connMgr.addConnectionAnimated({ from: 'sb3_wire_nc4', to: 'sb_wire_nc3', type: 'wire' });
                 },
                 check() {
                     const sys = this.sys;
                     const has = (a, b) => sys.conns.some(c =>
                         c.type === 'wire' && ((c.from === a && c.to === b) || (c.from === b && c.to === a)));
+                    // 要求：旧连线已断开，SB3 已串联在变压器副边与 SB1 之间
                     return !has('tc_wire_s2', 'sb_wire_nc3')
                         && has('tc_wire_s2', 'sb3_wire_nc3')
                         && has('sb3_wire_nc4', 'sb_wire_nc3');
                 },
             },
             {
-                msg: '第 3 步：将SB4与SB2并联', mode: 'check',
+                msg: '第 4 步：将SB4与SB2并联', mode: 'check',
                 async act() {
                     const sys = this.sys;
-                    sys.connMgr.addConn({ from: 'sb_wire_nc4', to: 'sb4_wire_no1', type: 'wire' });
-                    sys.connMgr.addConn({ from: 'sb4_wire_no2', to: 'ss_wire_no2', type: 'wire' });
-                    await new Promise(r => setTimeout(r, 200));
+                    await this._simulateAutoClick('sb4');
+                    sys.showFloatingTip('【演示】动画连接 SB4 与 SB2 并联支路', 2500);
+                    // 动画连接：SB1 输出 → SB4 → SB2 输出（并联）
+                    await sys.connMgr.addConnectionAnimated({ from: 'sb_wire_nc4', to: 'sb4_wire_no1', type: 'wire' });
+                    await sys.connMgr.addConnectionAnimated({ from: 'sb4_wire_no2', to: 'ss_wire_no2', type: 'wire' });
                 },
                 check() {
                     const sys = this.sys;
                     const c = (a, b) => sys.isPortConnected(a, b);
                     const inNode  = 'ss_wire_no1';   // SB2 输入端节点
                     const outNode = 'ss_wire_no2';   // SB2 输出端节点
+                    // 要求：SB4 与 SB2 并联（同一电气簇）
                     return (c('sb4_wire_no1', inNode) && c('sb4_wire_no2', outNode))
                         || (c('sb4_wire_no1', outNode) && c('sb4_wire_no2', inNode));
                 },
             },
             {
-                msg: '第 4 步：用SB4起动电动机', mode: 'check',
+                msg: '第 5 步：用SB4起动电动机', mode: 'check',
                 async act() {
-                    await new Promise(r => setTimeout(r, 200));
+                    const sys = this.sys;
+                    await this._simulateAutoClick('sb4');
+                    // 按下 SB4：保持按下，直到 KM1 吸合且电动机起动（最长 10s）才松开
+                    await _pressButton(sys.comps['sb4'], 'start', {
+                        holdMs: 10000,
+                        until: () => _km1Energized(sys) && (sys.comps['im01']?.rpm || 0) > 300,
+                    });
                 },
                 check() {
+                    // 要求：用 SB4 起动，电动机转速升至 300rpm 以上
                     const motor = this.sys.comps['im01'];
-                    return motor && motor.rpm > 1000;
+                    return !!(motor && motor.rpm > 300);
                 },
             },
             {
-                msg: '第 5 步：用SB1停止电动机', mode: 'check',
+                msg: '第 6 步：用SB3停止电动机', mode: 'check',
                 async act() {
-                    await new Promise(r => setTimeout(r, 200));
+                    const sys = this.sys;
+                    await this._simulateAutoClick('sb3');
+                    // 按下 SB3 保持 5s：期间接触器失电、电动机停转，5s 后才松开
+                    await _pressStopHold(sys, 'sb3');
                 },
                 check() {
+                    // 要求：电动机已停止（转速降至 500rpm 以下）
                     const motor = this.sys.comps['im01'];
-                    return motor && motor.rpm < 500;
+                    return !!(motor && motor.rpm < 500);
                 },
             },
             {
-                msg: '第 6 步：测试题——两地控制实现方法', mode: 'quiz',
+                msg: '第 7 步：测试题——两地控制实现方法', mode: 'quiz',
                 quizConfig: {
                     question: '在两（异）地控制电路中，两个停止按钮（SB1、SB3）与两个起动按钮（SB2、SB4）应如何连接，才能在任意一处都可起动和停止电动机？',
                     options: [
@@ -218,6 +278,77 @@ function _powerOn(sys) {
     if (acb) {
         acb.close();
     }
+}
+
+// KM1 接触器是否吸合（得电）
+function _km1Energized(sys) {
+    const coil = sys.comps['km1-coil'];
+    return !!(coil && coil.deviceRef && coil.deviceRef.getContactClosed());
+}
+
+// 平滑旋转按钮触点臂：easeInOut 过渡，逐步重绘组件层，使按压/松开动作清晰可见
+function _animateButtonBlade(comp, targetAng, durMs = 400) {
+    return new Promise(resolve => {
+        const sys = comp.sys;
+        const fromAng = typeof comp._curBladeAng === 'number' ? comp._curBladeAng
+            : (comp.special === 'START-BTN' ? -22.5 : 5);
+        const start = performance.now();
+        const tick = (now) => {
+            const t = Math.min(1, (now - start) / durMs);
+            const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // easeInOutQuad
+            const ang = fromAng + (targetAng - fromAng) * ease;
+            comp._curBladeAng = ang;
+            comp._bladeGroup.rotation(ang);
+            comp._updatePlunger();
+            if (sys.layer) sys.layer.draw();   // 直接重绘组件层，保证平滑
+            if (t < 1) requestAnimationFrame(tick);
+            else resolve();
+        };
+        requestAnimationFrame(tick);
+    });
+}
+
+// 程序化模拟按下按钮并保持（按压/松开均平滑动画，清晰可见）：
+//   kind    — 'start'(常开·起动) 或 'stop'(常闭·停止)
+//   opts.holdMs — 最长保持时长（默认 600ms）
+//   opts.until  — 可选条件函数，满足即提前松开（不超过 holdMs）
+//   opts.settleMs — 松开后稳定等待时间
+async function _pressButton(comp, kind, opts = {}) {
+    if (!comp) return;
+    const sys = comp.sys;
+    const { holdMs = 600, until = null, settleMs = 800 } = opts;
+    const isStart = kind === 'start';
+    const pressAng = isStart ? -5 : 22.5;
+    const releaseAng = isStart ? -22.5 : 5;
+
+    await new Promise(r => setTimeout(r, 200));
+    // 按下：电学状态立即闭合，触点臂平滑旋转至按压位（约 700ms，清晰可见）
+    comp._isPressed = true;
+    await _animateButtonBlade(comp, pressAng, 700);
+    if (sys.layer) sys.layer.draw();
+
+    // 保持按下：直到条件满足或超时
+    const t0 = Date.now();
+    while (Date.now() - t0 < holdMs) {
+        if (until && until()) break;
+        await new Promise(r => setTimeout(r, 100));
+    }
+    if (until && until()) {
+        // 条件已满足，再短暂保持片刻便于学员观察
+        await new Promise(r => setTimeout(r, 400));
+    }
+
+    // 松开：电学状态断开，触点臂平滑旋转回原位（约 700ms，清晰可见）
+    comp._isPressed = false;
+    await _animateButtonBlade(comp, releaseAng, 700);
+    if (sys.layer) sys.layer.draw();
+    await new Promise(r => setTimeout(r, settleMs));
+}
+
+// 停止按钮演示：按下 SB1/SB3 保持 5s（期间接触器失电、电动机停转），然后松开
+// compId 指定实际按下的停止按钮（'sb'=SB1，'sb3'=SB3），默认 SB1
+async function _pressStopHold(sys, compId = 'sb') {
+    await _pressButton(sys.comps[compId], 'stop', { holdMs: 5000 });
 }
 
 export function initSlider(_sys) { }

@@ -1067,6 +1067,19 @@ importers:
         specifier: ^2.3.3
         version: 2.3.3(vite@8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0))
 
+  lab_06/circuit03:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0))
+
   lab_06/circuit04:
     dependencies:
       konva:
@@ -1120,19 +1133,6 @@ importers:
         version: 2.3.3(vite@8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0))
 
   lab_06/circuit08:
-    dependencies:
-      konva:
-        specifier: ^10.2.5
-        version: 10.3.2
-    devDependencies:
-      vite:
-        specifier: ^8.0.9
-        version: 8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0)
-      vite-plugin-singlefile:
-        specifier: ^2.3.3
-        version: 2.3.3(vite@8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0))
-
-  lab_06/ciucuit03:
     dependencies:
       konva:
         specifier: ^10.2.5
