@@ -1054,15 +1054,145 @@ export class Workflow {
     }
 
     /**
-     * 模拟自动填空效果（演示模式）
+     * 模拟自动填空效果（演示模式）：弹出填空题卡片，逐字段高亮并自动填入正确答案
      */
     async _simulateAutoFill(step) {
+        const parent = this.sys.container;
+        const fields = step.fields || [step];
         const fa = f => (Array.isArray(f.answer) ? f.answer.join('或') : f.answer);
-        const ans = (step.fields || [step])
-            .map(f => fa(f) + (f.unit ? f.unit : ''))
-            .join('、');
-        this.sys.showFloatingTip(`【演示】请填写：${ans}`, 8000);
+
+        if (getComputedStyle(parent).position === 'static') {
+            parent.style.position = 'relative';
+        }
+
+        // ── 遮罩层 ──
+        const mask = document.createElement('div');
+        Object.assign(mask.style, {
+            position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
+            background: 'rgba(0,0,0,0.5)', zIndex: '100',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+        });
+        parent.appendChild(mask);
+
+        // ── 题目卡片 ──
+        const box = document.createElement('div');
+        Object.assign(box.style, {
+            background: '#fff', width: '85%', maxWidth: '540px',
+            borderRadius: '12px', padding: '20px',
+            boxShadow: '0 8px 20px rgba(0,0,0,0.3)', fontFamily: 'sans-serif',
+            position: 'relative',
+        });
+        const title = (step.msg || '请完成填空').replace(/^\d+\.\s*/, '');
+        box.innerHTML = `
+            <div style="color:#1395eb; font-size:16px; margin-bottom:5px; font-weight:bold;">[填空题]</div>
+            <div style="font-weight:bold; margin-bottom:15px; line-height:1.4;">${title}</div>
+            <div id="fill-rows-wrapper"></div>
+        `;
+
+        const wrapper = box.querySelector('#fill-rows-wrapper');
+        const rows = [];
+
+        // ── 生成字段行（标签 + 输入框 + 单位） ──
+        fields.forEach((f) => {
+            const row = document.createElement('div');
+            Object.assign(row.style, {
+                display: 'flex', alignItems: 'center', marginBottom: '10px',
+            });
+
+            const label = document.createElement('span');
+            Object.assign(label.style, {
+                fontSize: '14px', color: '#333', whiteSpace: 'nowrap',
+                transition: 'color .3s',
+            });
+            label.innerText = (f.label || '') + '：';
+            row.appendChild(label);
+
+            const input = document.createElement('input');
+            Object.assign(input.style, {
+                flex: '1', minWidth: '0', padding: '8px 10px', border: '1px solid #ccc',
+                borderRadius: '6px', fontSize: '15px', outline: 'none', boxSizing: 'border-box',
+                background: '#fafafa', color: '#555', fontWeight: 'bold',
+                transition: 'border-color .3s, background .3s',
+            });
+            input.readOnly = true;      // 演示模式：由脚本自动逐字填入
+            input.placeholder = f.placeholder || '待填写';
+            row.appendChild(input);
+
+            if (f.unit) {
+                const unit = document.createElement('span');
+                Object.assign(unit.style, {
+                    fontSize: '14px', color: '#555', marginLeft: '6px', whiteSpace: 'nowrap',
+                });
+                unit.innerText = f.unit;
+                row.appendChild(unit);
+            }
+
+            wrapper.appendChild(row);
+            rows.push({ f, input, label });
+        });
+
+        // ── 提示文字 ──
+        const tip = document.createElement('div');
+        tip.textContent = '👆 演示模式：各空答案将逐项自动填入';
+        Object.assign(tip.style, {
+            marginTop: '8px', textAlign: 'center', fontSize: '13px',
+            color: '#888', minHeight: '18px',
+        });
+        box.appendChild(tip);
+        mask.appendChild(box);
+
+        // ── 停 2.5s 让学员阅读题目与各空 ──
+        await new Promise(r => setTimeout(r, 2500));
+
+        // ── 逐个字段：高亮 → 逐字(打字效果)填入 → 标绿确认 ──
+        for (let i = 0; i < rows.length; i++) {
+            const { f, input, label } = rows[i];
+            const ansText = fa(f);                 // 可接受答案（或多个答案以"或"连接）
+            const firstAns = Array.isArray(f.answer) ? f.answer[0] : f.answer;
+            const text = String(firstAns ?? '');
+
+            // 1. 高亮当前待填空（蓝色边框 + 淡蓝底）
+            input.style.borderColor = '#1395eb';
+            input.style.background = '#eaf6ff';
+            input.focus();
+            await new Promise(r => setTimeout(r, 1200));
+
+            // 2. 逐字填入正确答案（打字效果，体会"一个个填空"）
+            for (let j = 0; j < text.length; j++) {
+                input.value += text[j];
+                await new Promise(r => setTimeout(r, 60));
+            }
+
+            // 3. 标绿确认 + 提示可接受答案，停 1.5s 再进入下一空
+            input.style.borderColor = '#4caf50';
+            input.style.background = '#e8f5e9';
+            input.style.color = '#2e7d32';
+            label.style.color = '#2e7d32';
+            label.innerText = (f.label || '') + '：';
+            label.innerHTML = (f.label || '') + '：<span style="color:#2e7d32;font-weight:bold;">✅</span>';
+            tip.textContent = `✅ 第 ${i + 1}/${rows.length} 空：${f.label || ''} 为 ${ansText}${f.unit || ''}`;
+            await new Promise(r => setTimeout(r, 1500));
+        }
+
+        // ── 全部填入完成：展示答案汇总与解析 ──
+        const ansSummary = rows.map(({ f }) => `${f.label || ''} ${fa(f)}${f.unit || ''}`).join('，');
+        const analysisHtml = step.analysis
+            ? `<div style="margin-top:10px;padding:10px;background:#fff8e1;border-left:4px solid #ff9800;border-radius:4px;font-size:13px;color:#555;line-height:1.5;">💡 ${step.analysis}</div>`
+            : '';
+        const summary = document.createElement('div');
+        summary.innerHTML = `
+            <div style="margin-top:12px;padding:10px;background:#f1f8e9;border-left:4px solid #4caf50;
+                border-radius:4px;font-size:13px;color:#2e7d32;font-weight:bold;">
+                ✅ 正确答案：${ansSummary}
+            </div>
+            ${analysisHtml}
+        `;
+        box.appendChild(summary);
+        tip.textContent = '✅ 全部填写完成';
+
+        // ── 停 8s 阅读答案与解析后关闭 ──
         await new Promise(r => setTimeout(r, 8000));
+        if (mask.parentNode) mask.remove();
     }
 
     /**

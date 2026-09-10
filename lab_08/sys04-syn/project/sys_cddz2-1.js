@@ -122,18 +122,22 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 4 步：电网无电，直接按遥控面板"合闸"，1 号主开关合闸，将频率调至 50Hz', mode: 'check',
                 op: [
-                    { type: 'btn', target: 'genpanel', part: 'btn-close',
+                    {
+                        type: 'btn', target: 'genpanel', part: 'btn-close',
                         async act() {
                             const sys = this.sys;
                             await _pressPanelBtn(sys, 'genpanel', '_userClosePressed', 700);
                             await _sleep(1800);
-                        } },
-                    { type: 'knob', target: 'genpanel', part: 'knob',
+                        }
+                    },
+                    {
+                        type: 'knob', target: 'genpanel', part: 'knob',
                         async act() {
                             const sys = this.sys;
                             // 合闸后 1 号机带照明负载，输出频率下垂；转动调速开关将频率调回 50Hz
                             await _tuneFreqTo(sys, 'genpanel', 'gen1', 50.0);
-                        } },
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -193,7 +197,8 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 9 步：将 2 号机频率调至与汇流排一致，同步表转"2"档，同步表指针指到11点时，按 2 号面板"合闸"并车', mode: 'check',
                 op: [
-                    { type: 'knob', target: 'genpanel2', part: 'knob',
+                    {
+                        type: 'knob', target: 'genpanel2', part: 'knob',
                         async act() {
                             const sys = this.sys;
                             const g1 = sys.comps.gen1, g2 = sys.comps.gen2;
@@ -201,8 +206,10 @@ export const PROJECT_WORKFLOWS = {
                             const target = (g1._freqOut ?? g1.freq) + 0.3;
                             await _tuneFreqTo(sys, 'genpanel2', 'gen2', target);
                             await _sleep(300);
-                        } },
-                    { type: 'switch', target: 'sync_sel', part: 'sel-knob',
+                        }
+                    },
+                    {
+                        type: 'switch', target: 'sync_sel', part: 'sel-knob',
                         async act() {
                             const sys = this.sys;
                             const sel = sys.comps.sync_sel;
@@ -210,8 +217,10 @@ export const PROJECT_WORKFLOWS = {
                             if (sel.getPosition() !== 3) sel.switchTo(3);
                             await _waitSwitchAnim(sel);
                             await _sleep(300);
-                        } },
-                    { type: 'btn', target: 'genpanel2', part: 'btn-close',
+                        }
+                    },
+                    {
+                        type: 'btn', target: 'genpanel2', part: 'btn-close',
                         async act() {
                             const sys = this.sys;
                             const sc = sys.comps.sync1;
@@ -227,7 +236,8 @@ export const PROJECT_WORKFLOWS = {
                             }
                             await _pressPanelBtn(sys, 'genpanel2', '_userClosePressed', 700);
                             await _sleep(2000);
-                        } },
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -249,7 +259,7 @@ export const PROJECT_WORKFLOWS = {
                     analysis: '并车（并联投入）必须满足电压相等、频率接近、相位一致三个条件。选择开关转到本机档位后，操作者通过数字同步表确认待并机与汇流排的同步情况，同步后合闸，避免不同步合闸产生巨大的冲击电流损坏发电机与主开关。',
                 },
             },
-            ],
+        ],
     },
     'sync-protect': {
         id: 'sync-protect', name: '3.并车保护（非同期与频差跳闸）',
@@ -281,25 +291,31 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 2 步：起动 1 号发电机并合闸 1 号主开关，调频至 50Hz', mode: 'check',
                 op: [
-                    { type: 'btn', target: 'genpanel', part: 'btn-start',
+                    {
+                        type: 'btn', target: 'genpanel', part: 'btn-start',
                         async act() {
                             const sys = this.sys;
                             await _pressPanelBtn(sys, 'genpanel', '_userStartPressed', 1200);
                             await _sleep(2500);
-                        } },
-                    { type: 'btn', target: 'genpanel', part: 'btn-close',
+                        }
+                    },
+                    {
+                        type: 'btn', target: 'genpanel', part: 'btn-close',
                         async act() {
                             const sys = this.sys;
                             await _pressPanelBtn(sys, 'genpanel', '_userClosePressed', 800);
                             await _sleep(1800);
-                        } },
-                    { type: 'knob', target: 'genpanel', part: 'knob',
+                        }
+                    },
+                    {
+                        type: 'knob', target: 'genpanel', part: 'knob',
                         async act() {
                             const sys = this.sys;
                             // 最后按住 1 号机调速旋钮，将输出频率调至 50Hz（后续频差演示的基准）
                             await _tuneFreqTo(sys, 'genpanel', 'gen1', 50.0);
                             await _sleep(300);
-                        } },
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -384,7 +400,7 @@ export const PROJECT_WORKFLOWS = {
                 check() {
                     const sys = this.sys;
                     return sys.comps.qf1.getState() === 'off' && sys.comps.qf2.getState() === 'off'
-                    ;
+                        ;
                 },
             },
             {
@@ -404,28 +420,34 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 9 步：同步表选择开关打到 OFF，1#发电机组合闸恢复供电，调频至 50Hz', mode: 'check',
                 op: [
-                    { type: 'switch', target: 'sync_sel', part: 'sel-knob',
+                    {
+                        type: 'switch', target: 'sync_sel', part: 'sel-knob',
                         async act() {
                             const sys = this.sys;
                             // 同步表选择开关打到 OFF 档（退出同步监视，返回待并状态）
                             const sel = sys.comps.sync_sel;
                             if (sel.getPosition() !== 1) sel.switchTo(1);
                             await _sleep(500);
-                        } },
-                    { type: 'btn', target: 'genpanel', part: 'btn-close',
+                        }
+                    },
+                    {
+                        type: 'btn', target: 'genpanel', part: 'btn-close',
                         async act() {
                             const sys = this.sys;
                             // 1#主开关合闸，恢复汇流排供电
                             await _pressPanelBtn(sys, 'genpanel', '_userClosePressed', 800);
                             await _sleep(1800);
-                        } },
-                    { type: 'knob', target: 'genpanel', part: 'knob',
+                        }
+                    },
+                    {
+                        type: 'knob', target: 'genpanel', part: 'knob',
                         async act() {
                             const sys = this.sys;
                             // 最后按住 1 号机调速旋钮，将输出频率调至 50Hz（演示二小频差基准）
                             await _tuneFreqTo(sys, 'genpanel', 'gen1', 50.0);
                             await _sleep(300);
-                        } },
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -446,7 +468,7 @@ export const PROJECT_WORKFLOWS = {
                 check() {
                     const sys = this.sys;
                     const sc = sys.comps.sync1;
-                    return Math.abs(sc._fGen - sc._fBus) < 0.5&& sys.comps.sync_sel.getPosition() === 3;
+                    return Math.abs(sc._fGen - sc._fBus) < 0.5 && sys.comps.sync_sel.getPosition() === 3;
                 },
             },
             {
@@ -513,7 +535,8 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 1 步：自动接线，起动 1 号发电机、合闸 1 号主开关，频率调到 50Hz左右', mode: 'check',
                 op: [
-                    { type: 'wire',
+                    {
+                        type: 'wire',
                         async act() {
                             const sys = this.sys;
                             _autoWire(sys);
@@ -527,26 +550,33 @@ export const PROJECT_WORKFLOWS = {
                             if (q2.getState() === 'on' && q2.tryTrip) { q2.tryTrip(); await _sleep(600); }
                             if (sys.comps.sync_sel.getPosition() !== 1) sys.comps.sync_sel.switchTo(1);
                             await _sleep(300);
-                        } },
-                    { type: 'btn', target: 'genpanel', part: 'btn-start',
+                        }
+                    },
+                    {
+                        type: 'btn', target: 'genpanel', part: 'btn-start',
                         async act() {
                             const sys = this.sys;
                             await _pressPanelBtn(sys, 'genpanel', '_userStartPressed', 1200);
                             await _sleep(3000); // 等待储能电机将合闸弹簧储能到位
-                        } },
-                    { type: 'btn', target: 'genpanel', part: 'btn-close',
+                        }
+                    },
+                    {
+                        type: 'btn', target: 'genpanel', part: 'btn-close',
                         async act() {
                             const sys = this.sys;
                             await _pressPanelBtn(sys, 'genpanel', '_userClosePressed', 800);
                             await _sleep(2000);
-                        } },
-                    { type: 'knob', target: 'genpanel', part: 'knob',
+                        }
+                    },
+                    {
+                        type: 'knob', target: 'genpanel', part: 'knob',
                         async act() {
                             const sys = this.sys;
                             // 最后按住 1 号机调速旋钮，将输出频率调至 50Hz（后续频差演示的基准）
                             await _tuneFreqTo(sys, 'genpanel', 'gen1', 50.0);
                             await _sleep(300);
-                        } },                        
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -557,27 +587,33 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 2 步：起动 2 号发电机，同步表选择开关转"2"档，将 2 号机频率调至比 1 号机低 0.1Hz', mode: 'check',
                 op: [
-                    { type: 'btn', target: 'genpanel2', part: 'btn-start',
+                    {
+                        type: 'btn', target: 'genpanel2', part: 'btn-start',
                         async act() {
                             const sys = this.sys;
                             await _pressPanelBtn(sys, 'genpanel2', '_userStartPressed', 1200);
                             await _sleep(1800);
-                        } },
-                    { type: 'switch', target: 'sync_sel', part: 'sel-knob',
+                        }
+                    },
+                    {
+                        type: 'switch', target: 'sync_sel', part: 'sel-knob',
                         async act() {
                             const sys = this.sys;
                             const sel = sys.comps.sync_sel;
                             if (sel.getPosition() !== 3) sel.switchTo(3);
                             await _sleep(300);
-                        } },
-                    { type: 'knob', target: 'genpanel2', part: 'knob',
+                        }
+                    },
+                    {
+                        type: 'knob', target: 'genpanel2', part: 'knob',
                         async act() {
                             const sys = this.sys;
                             const g1 = sys.comps.gen1, g2 = sys.comps.gen2;
                             g2.freq = (g1._freqOut ?? g1.freq) - 0.1;
                             g2._baseFreq = (g1._freqOut ?? g1.freq); // 基准快照（防 1 号机频率微漂）
                             await _sleep(2500);
-                        } },
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -612,12 +648,15 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 4 步：分闸 2 号主开关，将 2 号机频率调至比 1 号机高 0.2Hz', mode: 'check',
                 op: [
-                    { type: 'btn', target: 'genpanel2', part: 'btn-open',
+                    {
+                        type: 'btn', target: 'genpanel2', part: 'btn-open',
                         async act() {
                             const sys = this.sys;
                             await _pressPanelBtn(sys, 'genpanel2', '_userOpenPressed', 500);
-                        } },
-                    { type: 'knob', target: 'genpanel2', part: 'knob',
+                        }
+                    },
+                    {
+                        type: 'knob', target: 'genpanel2', part: 'knob',
                         async act() {
                             const sys = this.sys;
                             const g1 = sys.comps.gen1, g2 = sys.comps.gen2;
@@ -632,7 +671,8 @@ export const PROJECT_WORKFLOWS = {
                             g2.freq = last + 0.2;
                             g2._baseFreq = last; // 基准快照（防 1 号机频率微漂）
                             await _sleep(2500);
-                        } },
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -684,14 +724,17 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 7 步：投入三相可调负载 20kW，微调 2 号机调速器使其输出功率接近 5kW', mode: 'check',
                 op: [
-                    { type: 'load', target: 'load3',
+                    {
+                        type: 'load', target: 'load3',
                         async act() {
                             const sys = this.sys;
                             const load = sys.comps.load3;
                             load.powerKw = 20; load._loaded = true;
                             await _sleep(800);
-                        } },
-                    { type: 'knob', target: 'genpanel2', part: 'knob',
+                        }
+                    },
+                    {
+                        type: 'knob', target: 'genpanel2', part: 'knob',
                         async act() {
                             const sys = this.sys;
                             const g2 = sys.comps.gen2;
@@ -701,7 +744,8 @@ export const PROJECT_WORKFLOWS = {
                                 g2.freq += (p < 5 ? 1 : -1) * 0.01;
                                 await _sleep(150);
                             }
-                        } },
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -712,14 +756,17 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 8 步：卸载三相负载并继续下调 2 号机调速器，使 2 号机再次呈现逆功率', mode: 'check',
                 op: [
-                    { type: 'load', target: 'load3',
+                    {
+                        type: 'load', target: 'load3',
                         async act() {
                             const sys = this.sys;
                             const load = sys.comps.load3;
                             load._loaded = false;
                             await _sleep(800);
-                        } },
-                    { type: 'knob', target: 'genpanel2', part: 'knob',
+                        }
+                    },
+                    {
+                        type: 'knob', target: 'genpanel2', part: 'knob',
                         async act() {
                             const sys = this.sys;
                             const g2 = sys.comps.gen2;
@@ -728,7 +775,8 @@ export const PROJECT_WORKFLOWS = {
                                 g2.freq -= 0.02;
                                 await _sleep(250);
                             }
-                        } },
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -778,7 +826,8 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 1 步：自动接线，起动 1 号发电机，合闸供电，调频至 50Hz', mode: 'check',
                 op: [
-                    { type: 'wire',
+                    {
+                        type: 'wire',
                         async act() {
                             const sys = this.sys;
                             _autoWire(sys);
@@ -791,26 +840,33 @@ export const PROJECT_WORKFLOWS = {
                             if (q2.getState() === 'on' && q2.tryTrip) { q2.tryTrip(); await _sleep(600); }
                             if (sys.comps.sync_sel.getPosition() !== 1) sys.comps.sync_sel.switchTo(1);
                             await _sleep(300);
-                        } },
-                    { type: 'btn', target: 'genpanel', part: 'btn-start',
+                        }
+                    },
+                    {
+                        type: 'btn', target: 'genpanel', part: 'btn-start',
                         async act() {
                             const sys = this.sys;
                             await _pressPanelBtn(sys, 'genpanel', '_userStartPressed', 1200);
                             await _sleep(3000); // 等待储能电机将合闸弹簧储能到位
-                        } },
-                    { type: 'btn', target: 'genpanel', part: 'btn-close',
+                        }
+                    },
+                    {
+                        type: 'btn', target: 'genpanel', part: 'btn-close',
                         async act() {
                             const sys = this.sys;
                             await _pressPanelBtn(sys, 'genpanel', '_userClosePressed', 800);
                             await _sleep(2000);
-                        } },
-                    { type: 'knob', target: 'genpanel', part: 'knob',
+                        }
+                    },
+                    {
+                        type: 'knob', target: 'genpanel', part: 'knob',
                         async act() {
                             const sys = this.sys;
                             // 最后按住 1 号机调速旋钮，将输出频率调至 50Hz（后续频差演示的基准）
                             await _tuneFreqTo(sys, 'genpanel', 'gen1', 50.0);
                             await _sleep(300);
-                        } },                           
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -826,6 +882,7 @@ export const PROJECT_WORKFLOWS = {
                     { label: '频率差不超过', unit: 'Hz', placeholder: '', answer: 0.5 },
                     { label: '相位差不超过', unit: '°', placeholder: '', answer: 15 },
                 ],
+                analysis: '准同步并车三条件：电压幅值接近（差不超过 10%Un）、频率接近（差不超过 0.5Hz，待并机略快为宜）、相位接近（差不超过 15°）。三条件同时满足时合闸冲击电流最小，实现安全平稳并联。',
             },
             {
                 msg: '第 3 步：检查 2 号发电机遥控面板 READY FOR START 指示灯（点击该灯即可跳过）', mode: 'find',
@@ -834,20 +891,17 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 4 步：起动 2 号发电机组，调频到 50.2Hz', mode: 'check',
                 op: [
-                    { type: 'btn', target: 'genpanel2', part: 'btn-start',
+                    {
+                        type: 'btn', target: 'genpanel2', part: 'btn-start',
                         async act() {
                             const sys = this.sys;
                             await _pressPanelBtn(sys, 'genpanel2', '_userStartPressed', 1200);
                             await _sleep(1800);
-                        } },
-                    { type: 'switch', target: 'sync_sel', part: 'sel-knob',
-                        async act() {
-                            const sys = this.sys;
-                            const sel = sys.comps.sync_sel;
-                            if (sel.getPosition() !== 3) sel.switchTo(3);
-                            await _sleep(300);
-                        } },
-                    { type: 'knob', target: 'genpanel2', part: 'knob',
+                        }
+                    },
+
+                    {
+                        type: 'knob', target: 'genpanel2', part: 'knob',
                         async act() {
                             const sys = this.sys;
                             const g1 = sys.comps.gen1, g2 = sys.comps.gen2;
@@ -862,33 +916,50 @@ export const PROJECT_WORKFLOWS = {
                             g2.freq = last + 0.25;      // 待并机调频到比电网高 0.25Hz
                             g2._baseFreq = last;       // 基准快照（防 1 号机频率微漂）
                             await _sleep(2500);
-                        } },
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
                     const g2 = sys.comps.gen2;
-                    return !!g2.isOn 
+                    return !!g2.isOn
                         && Math.abs(g2.freq - 50.2) < 0.05;
                 },
             },
             {
-                msg: '第 5 步：观察数字同步表——正频差 0.2~0.33Hz，指针顺时针 3-5s 转一圈', mode: 'check',
-                op: { type: 'observe', target: 'sync1' },
-                async act() {
-                    // 纯观察步骤：演示模式停留几秒让学员看清同步表指针转动
-                    await _sleep(4500);
-                },
+                msg: '第 5 步：打开数字同步表——调到正频差 0.2~0.33Hz，指针顺时针 3-5s 转一圈', mode: 'check',
+                op: [
+                    {
+                        type: 'switch', target: 'sync_sel', part: 'sel-knob',
+                        async act() {
+                            const sys = this.sys;
+                            const sel = sys.comps.sync_sel;
+                            if (sel.getPosition() !== 3) sel.switchTo(3);
+                            await _sleep(300);
+                        }
+                    },
+
+                    {
+                        type: 'observe', target: 'sync1',
+                        async act() {
+                            // 纯观察步骤：演示模式停留几秒让学员看清同步表指针转动
+                            await _sleep(4500);
+                        }
+                    },
+
+                ],
                 check() {
                     const sys = this.sys;
                     const sc = sys.comps.sync1;
                     const dF = sc._fGen - sc._fBus;
-                    return sc && sys.comps.sync_sel.getPosition() === 3&& !sc._off && sc._hasVolt && dF >= 0.2 && dF <= 0.33;
+                    return sc && sys.comps.sync_sel.getPosition() === 3 && !sc._off && sc._hasVolt && dF >= 0.2 && dF <= 0.33;
                 },
             },
             {
                 msg: '第 6 步：观察同步表指针转到"11"位置左右时合闸 2 号主开关，随后关闭同步表', mode: 'check',
                 op: [
-                    { type: 'btn', target: 'genpanel2', part: 'btn-close',
+                    {
+                        type: 'btn', target: 'genpanel2', part: 'btn-close',
                         async act() {
                             const sys = this.sys;
                             const sc = sys.comps.sync1;
@@ -901,14 +972,17 @@ export const PROJECT_WORKFLOWS = {
                             }
                             await _pressPanelBtn(sys, 'genpanel2', '_userClosePressed', 700);
                             await _sleep(2000);
-                        } },
-                    { type: 'switch', target: 'sync_sel', part: 'sel-knob',
+                        }
+                    },
+                    {
+                        type: 'switch', target: 'sync_sel', part: 'sel-knob',
                         async act() {
                             const sys = this.sys;
                             const sel = sys.comps.sync_sel;
                             if (sel.getPosition() !== 1) sel.switchTo(1);
                             await _sleep(300);
-                        } },
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -998,7 +1072,8 @@ export const PROJECT_WORKFLOWS = {
             {
                 msg: '第 10 步：2 号发电机主开关分闸（解列）,2 号发电机停机，负荷全部由 1 号机承担', mode: 'check',
                 op: [
-                    { type: 'btn', target: 'genpanel2', part: 'btn-open',
+                    {
+                        type: 'btn', target: 'genpanel2', part: 'btn-open',
                         async act() {
                             const sys = this.sys;
                             // 分闸解列 2#：模型自动把两机设定软复位到解列前等效设定
@@ -1006,13 +1081,16 @@ export const PROJECT_WORKFLOWS = {
                             // 1# 承接 2# 负载频率微降（约 0.075Hz）、2# 卸载空载频率微升（特征对称）。
                             await _pressPanelBtn(sys, 'genpanel2', '_userOpenPressed', 500);
                             await _sleep(4000);  // 等两机频率过渡到新平衡
-                        } },
-                    { type: 'btn', target: 'genpanel2', part: 'btn-stop',
+                        }
+                    },
+                    {
+                        type: 'btn', target: 'genpanel2', part: 'btn-stop',
                         async act() {
                             const sys = this.sys;
                             await _pressPanelBtn(sys, 'genpanel2', '_userStopPressed', 1200);
                             await _sleep(2000);
-                        } },
+                        }
+                    },
                 ],
                 check() {
                     const sys = this.sys;
@@ -1039,7 +1117,7 @@ export const componentConfigs = [
     // ── 2号机组：2号同步发电机 → 2号主开关 → 汇流排 ──
     { Class: SyncGenerator3P, id: 'gen2', x: 850, y: 700, vRms: 230, freq: 50, isOn: false, mode: 'remote', label: '2#同步发电机', ratedPower: 80, ratedVoltage: 400, ratedCosPhi: 0.8, maxDropV: 200, avrMaxComp: 1, avrDelay: 2, avrTime: 5, autoDecoupleTrim: true, visible: true },
     { Class: MarineMainsSwitch, id: 'qf2', x: 1100, y: 180, ratedCtrlVoltage: 24, label: '主开关2', genId: 'gen2', syncScopeId: 'sync1', phaseMin: 60, phaseMax: 270, freqDiffMax: 0.5, revPowerKw: 8, revTime: 5, visible: true },
-    { Class: GeneratorRemotePanel, id: 'genpanel2', x: 1300, y: 700, genId: 'gen2', qfId: 'qf2', label: '2#发电机组遥控面板', busId: 'bus1', syncSelId: 'sync_sel', selPos: 3, visible:true },
+    { Class: GeneratorRemotePanel, id: 'genpanel2', x: 1300, y: 700, genId: 'gen2', qfId: 'qf2', label: '2#发电机组遥控面板', busId: 'bus1', syncSelId: 'sync_sel', selPos: 3, visible: true },
     { Class: DCPower, id: 'dc_uv2', x: 1580, y: 750, voltage: 24, isOn: true, label: '失压脱扣电源2', visible: true },
     { Class: Busbar3P, id: 'bus1', x: 220, y: 30, tapsPerPhase: 6, label: '汇流排', visible: true },
     // 改为同步表中性点接地
