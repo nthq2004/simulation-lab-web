@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" font-family="'Microsoft YaHei','Arial',sans-serif" font-size="14">
+  <defs>
+    <marker id="arw" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 z" fill="#4a5568"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="620" fill="#ffffff"/>
+
+  <!-- 主电网区域 -->
+  <rect x="20" y="40" width="600" height="230" rx="12" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="36" y="68" font-size="17" font-weight="bold" fill="#2b6cb0">主电网（正常电源）</text>
+
+  <!-- 应急电网区域 -->
+  <rect x="700" y="40" width="280" height="550" rx="12" fill="#fff5eb" stroke="#c05621" stroke-width="2"/>
+  <text x="716" y="68" font-size="17" font-weight="bold" fill="#c05621">应急电网（应急电源）</text>
+
+  <!-- 主电网节点 -->
+  <g text-anchor="middle">
+    <rect x="45" y="120" width="130" height="74" rx="8" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="110" y="150" font-weight="bold" fill="#1a202c">1#同步发电机</text>
+    <text x="110" y="172" fill="#4a5568">80kW · 400V · 50Hz</text>
+
+    <rect x="205" y="120" width="90" height="74" rx="8" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="250" y="150" font-weight="bold" fill="#1a202c">主开关</text>
+    <text x="250" y="172" fill="#4a5568">qf1</text>
+
+    <rect x="325" y="120" width="100" height="74" rx="8" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="375" y="150" font-weight="bold" fill="#1a202c">主汇流排</text>
+    <text x="375" y="172" fill="#4a5568">bus1</text>
+
+    <rect x="455" y="120" width="140" height="74" rx="8" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="525" y="147" font-weight="bold" fill="#1a202c">低压配电箱</text>
+    <text x="525" y="169" fill="#4a5568">pdb1（sw1/sw2/sw3）</text>
+  </g>
+
+  <!-- 联络开关（桥接） -->
+  <g text-anchor="middle">
+    <rect x="612" y="120" width="84" height="74" rx="8" fill="#f0fff4" stroke="#276749" stroke-width="2.5"/>
+    <text x="654" y="150" font-weight="bold" fill="#276749">联络开关</text>
+    <text x="654" y="172" fill="#276749">tie1</text>
+  </g>
+
+  <!-- 应急电网节点 -->
+  <g text-anchor="middle">
+    <rect x="716" y="120" width="118" height="74" rx="8" fill="#ffffff" stroke="#c05621" stroke-width="2"/>
+    <text x="775" y="150" font-weight="bold" fill="#1a202c">应急汇流排</text>
+    <text x="775" y="172" fill="#4a5568">bus2</text>
+
+    <rect x="716" y="300" width="118" height="74" rx="8" fill="#ffffff" stroke="#c05621" stroke-width="2"/>
+    <text x="775" y="330" font-weight="bold" fill="#1a202c">应急发电机主开关</text>
+    <text x="775" y="352" fill="#4a5568">eqf1</text>
+
+    <rect x="700" y="440" width="150" height="80" rx="8" fill="#ffffff" stroke="#c05621" stroke-width="2"/>
+    <text x="775" y="472" font-weight="bold" fill="#1a202c">应急发电机组</text>
+    <text x="775" y="494" fill="#4a5568">50kW · 400V · 50Hz</text>
+
+    <rect x="856" y="190" width="112" height="34" rx="6" fill="#fffbe6" stroke="#b7791f" stroke-width="1.5"/>
+    <text x="912" y="212" fill="#7b5800">应急灯 el1</text>
+    <rect x="856" y="236" width="112" height="34" rx="6" fill="#fffbe6" stroke="#b7791f" stroke-width="1.5"/>
+    <text x="912" y="258" fill="#7b5800">应急灯 el2</text>
+    <rect x="856" y="282" width="112" height="34" rx="6" fill="#fffbe6" stroke="#b7791f" stroke-width="1.5"/>
+    <text x="912" y="304" fill="#7b5800">应急灯 el3</text>
+  </g>
+
+  <!-- 主回路连线 -->
+  <g stroke="#4a5568" stroke-width="2.5" marker-end="url(#arw)" fill="none">
+    <line x1="175" y1="157" x2="203" y2="157"/>
+    <line x1="295" y1="157" x2="323" y2="157"/>
+    <line x1="425" y1="157" x2="453" y2="157"/>
+    <line x1="595" y1="157" x2="610" y2="157"/>
+    <line x1="696" y1="157" x2="714" y2="157"/>
+    <line x1="775" y1="438" x2="775" y2="376"/>
+    <line x1="775" y1="298" x2="775" y2="196"/>
+  </g>
+  <g stroke="#b7791f" stroke-width="2" marker-end="url(#arw)" fill="none">
+    <line x1="834" y1="160" x2="862" y2="198"/>
+    <line x1="834" y1="165" x2="862" y2="248"/>
+    <line x1="834" y1="170" x2="862" y2="296"/>
+  </g>
+
+  <!-- 应急配电板与虚线控制 -->
+  <rect x="300" y="430" width="190" height="96" rx="8" fill="#f0fff4" stroke="#276749" stroke-width="2"/>
+  <text x="395" y="462" text-anchor="middle" font-weight="bold" fill="#276749">应急配电板 ep1</text>
+  <text x="395" y="486" text-anchor="middle" fill="#276749">检测 · 控制模式 · 联络模式</text>
+  <text x="395" y="508" text-anchor="middle" fill="#276749">自动控制逻辑</text>
+  <g stroke="#276749" stroke-width="2" stroke-dasharray="7 5" fill="none">
+    <path d="M395 430 L395 380 L654 380 L654 196"/>
+    <path d="M490 470 L775 470 L775 376"/>
+    <path d="M490 440 L775 440 L775 298"/>
+    <path d="M300 478 L170 478 L170 540"/>
+  </g>
+  <text x="150" y="560" font-size="12" fill="#276749">检测端口 det → 配电箱 sw3 出口</text>
+
+  <!-- 说明 -->
+  <text x="36" y="96" font-size="13" fill="#4a5568">供电方向：主电网 → 主汇流排 → 配电箱 → 联络开关 → 应急汇流排</text>
+  <text x="36" y="256" font-size="13" fill="#718096">正常时联络开关闭合，由主电网向应急汇流排供电；主电网失电时联络断开，转由应急发电机供电。</text>
+</svg>

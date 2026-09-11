@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" font-family="'Microsoft YaHei','Arial',sans-serif" font-size="14">
+  <defs>
+    <marker id="a2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 z" fill="#4a5568"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="560" fill="#ffffff"/>
+
+  <!-- 输入 -->
+  <text x="30" y="40" font-size="16" font-weight="bold" fill="#2b6cb0">输入信号 / 人工操作</text>
+  <g text-anchor="middle">
+    <rect x="30" y="60" width="210" height="56" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="135" y="84" font-weight="bold">检测端口 det</text>
+    <text x="135" y="104" font-size="12" fill="#4a5568">判断主电有电 / 失电</text>
+
+    <rect x="30" y="130" width="210" height="56" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="135" y="154" font-weight="bold">控制模式开关</text>
+    <text x="135" y="174" font-size="12" fill="#4a5568">手动 / 自动</text>
+
+    <rect x="30" y="200" width="210" height="56" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="135" y="224" font-weight="bold">联络开关模式开关</text>
+    <text x="135" y="244" font-size="12" fill="#4a5568">试验 / 正常</text>
+
+    <rect x="30" y="270" width="210" height="56" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="135" y="294" font-weight="bold">应急合闸 / 分闸按钮</text>
+    <text x="135" y="314" font-size="12" fill="#4a5568">仅手动模式使用</text>
+  </g>
+
+  <!-- 状态机 -->
+  <rect x="330" y="60" width="330" height="330" rx="12" fill="#f0fff4" stroke="#276749" stroke-width="2.5"/>
+  <text x="495" y="88" text-anchor="middle" font-size="16" font-weight="bold" fill="#276749">应急配电板内部状态机</text>
+  <g text-anchor="middle" font-size="13">
+    <rect x="360" y="106" width="130" height="42" rx="6" fill="#ffffff" stroke="#38a169"/>
+    <text x="425" y="132" fill="#1a202c">待机 idle</text>
+    <rect x="510" y="106" width="130" height="42" rx="6" fill="#ffffff" stroke="#38a169"/>
+    <text x="575" y="126" fill="#1a202c">起动延时</text>
+    <text x="575" y="142" font-size="11" fill="#718096">10s</text>
+    <rect x="510" y="158" width="130" height="42" rx="6" fill="#ffffff" stroke="#38a169"/>
+    <text x="575" y="184" fill="#1a202c">起动机组</text>
+    <rect x="510" y="210" width="130" height="42" rx="6" fill="#ffffff" stroke="#38a169"/>
+    <text x="575" y="230" fill="#1a202c">合闸延时</text>
+    <text x="575" y="246" font-size="11" fill="#718096">8s</text>
+    <rect x="360" y="262" width="130" height="42" rx="6" fill="#fff5eb" stroke="#dd6b20"/>
+    <text x="425" y="288" fill="#1a202c">应急运行</text>
+    <rect x="360" y="158" width="130" height="86" rx="6" fill="#fff5eb" stroke="#dd6b20"/>
+    <text x="425" y="190" fill="#1a202c">恢复序列</text>
+    <text x="425" y="210" font-size="11" fill="#718096">分应主 3s</text>
+    <text x="425" y="226" font-size="11" fill="#718096">合联络 8s · 停机 13s</text>
+  </g>
+
+  <!-- 输出 -->
+  <text x="720" y="40" font-size="16" font-weight="bold" fill="#c05621">执行机构</text>
+  <g text-anchor="middle">
+    <rect x="720" y="70" width="250" height="70" rx="8" fill="#fff5eb" stroke="#c05621" stroke-width="2"/>
+    <text x="845" y="100" font-weight="bold">应急发电机组 egen1</text>
+    <text x="845" y="122" font-size="12" fill="#4a5568">起动 / 停止 / 调频指令</text>
+
+    <rect x="720" y="156" width="250" height="70" rx="8" fill="#fff5eb" stroke="#c05621" stroke-width="2"/>
+    <text x="845" y="186" font-weight="bold">应急发电机主开关 eqf1</text>
+    <text x="845" y="208" font-size="12" fill="#4a5568">合闸 / 分闸线圈</text>
+
+    <rect x="720" y="242" width="250" height="70" rx="8" fill="#fff5eb" stroke="#c05621" stroke-width="2"/>
+    <text x="845" y="272" font-weight="bold">联络开关 tie1</text>
+    <text x="845" y="294" font-size="12" fill="#4a5568">合闸 / 分闸线圈</text>
+  </g>
+
+  <!-- 连线 -->
+  <g stroke="#4a5568" stroke-width="2.2" marker-end="url(#a2)" fill="none">
+    <line x1="240" y1="88" x2="328" y2="150"/>
+    <line x1="240" y1="158" x2="328" y2="180"/>
+    <line x1="240" y1="228" x2="328" y2="210"/>
+    <line x1="240" y1="298" x2="328" y2="250"/>
+    <line x1="660" y1="130" x2="718" y2="105"/>
+    <line x1="660" y1="190" x2="718" y2="190"/>
+    <line x1="660" y1="250" x2="718" y2="277"/>
+  </g>
+
+  <!-- 模式说明 -->
+  <rect x="330" y="410" width="640" height="126" rx="10" fill="#fafafa" stroke="#a0aec0"/>
+  <text x="350" y="438" font-weight="bold" fill="#1a202c">控制模式与联络模式的组合</text>
+  <text x="350" y="464" font-size="13" fill="#4a5568">· 控制模式「自动」：按检测结果自动起机、合闸、切换，试验位强制联络断开并模拟主电失电。</text>
+  <text x="350" y="488" font-size="13" fill="#4a5568">· 控制模式「手动」：不自动起机，联络按检测延时动作，应急主开关仅由面板按按钮操作。</text>
+  <text x="350" y="512" font-size="13" fill="#4a5568">· 联络模式「正常」：正常位按检测逻辑工作；「试验」：隔离主电网，用于试验应急供电回路。</text>
+</svg>
