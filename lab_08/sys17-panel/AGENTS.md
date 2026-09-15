@@ -33,6 +33,7 @@ pnpm run preview  # 预览构建产物
 - **quiz（测试题）**：展示题目 → 停约 2s → 高亮全部正确选项并箭头(👉)指向 → 展示 ✅正确答案 与 💡解析 → 停约 6s 自动关闭。
 - **fill（填空题）**：展示题目 → 自动填入/展示正确答案。
 - 画布元素用 Konva 节点直接 add/remove + `requestRedraw`；不添加 `shadowColor/shadowBlur/shadowOpacity` 三件套。
+- **提示信息隔离（通用要求）**：进入自动演示（show）模式后，**必须抑制组件原有的流程信息提示**（组件 `_tip()` / `showFloatingTip()` 一律不弹出），画面只显示与自动演示相关的信息（步骤说明、箭头/圈选指示、演示专用提示），避免组件提示与演示提示相互干扰。实现：演示开始时 `sys._suppressComponentTips = true`（`UIManager.showFloatingTip` 首行据此直接 return），演示结束或关闭流程面板时恢复 `false`；演示引擎自身提示统一走 `Workflow._tipWorkflow(msg, ms)`（临时置 `sys._tipBypass = true` 绕过抑制）。演示中的组件状态变化（跳闸、报警灯、仪表读数）仍照常生效，仅**文字提示**被抑制。
 > 完整规范见全局 `AGENTS.md` 的「仿真平台工作流自动演示模式规范」章节。
 
 ## 注册新组件（3 步，易遗漏）

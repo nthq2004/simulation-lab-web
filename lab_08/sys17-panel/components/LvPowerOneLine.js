@@ -92,7 +92,7 @@ const WIRE_DEFS = [
     { id: 'mcb1a',  pts: [280, 70, 313.5, 70],   key: 'mainUp' },
     { id: 'mcb1b',  pts: [336.5, 70, 843, 70],   key: 'mcb1' },
     { id: 'shorea', pts: [280, 120, 313.5, 120], key: 'mainUp' },
-    { id: 'shoreb', pts: [336.5, 120, 830, 120], key: 'shore' },
+    { id: 'shoreb', pts: [336.5, 120, 830, 120], key: 'shoreWire' },
     { id: 'fdr2a',  pts: [280, 180, 313.5, 180], key: 'mainUp' },
     { id: 'fdr2b',  pts: [336.5, 180, 530, 180], key: 'fdr2' },
     { id: 'imp1a',  pts: [280, 300, 313.5, 300], key: 'mainUp' },
@@ -193,6 +193,8 @@ export class LvPowerOneLine extends BaseComponent {
         SW_DEFS.forEach(s => { this._sw[s.id] = false; });           // 所有开关默认断开
         DEFAULT_CLOSED.forEach(id => { if (id in this._sw) this._sw[id] = true; });  // 部分开关默认闭合
         this._shore = false;                                 // 岸电箱默认退出供电
+        // 工作模式：follow 跟随模式（默认）/ standalone 独立模式（可由工程配置或参数设置指定）
+        this._workMode = (this.config && this.config.workMode === 'standalone') ? 'standalone' : 'follow';
         this._autoPhase = null;                              // EG/EACB/ABTS 自动控制相位
         this._autoT = 0;                                     // 当前相位计时（s）
         this._live = {};
@@ -483,6 +485,10 @@ export class LvPowerOneLine extends BaseComponent {
     _interlockBlock(id, closing) {
         if (!closing) return null;                       // 分闸不受限制
         const isGen = GEN_MAIN_SW.indexOf(id) !== -1;
+        // ACB1~ACB3 失压保护：对应发电机未运行 → 无法合闸
+        if (/^ACB[123]$/.test(id) && !this._gens['G' + id.slice(3)]) {
+            return `发电机 G${id.slice(3)} 未运行（失压）：${id} 无法合闸`;
+        }
         if (id === 'SWSHORE') {
             if (!this._shore) return '岸电箱失压，岸电开关无法合闸';
             if (GEN_MAIN_SW.some(g => this._sw[g])) {
@@ -493,6 +499,20 @@ export class LvPowerOneLine extends BaseComponent {
             return '与岸电开关互锁：请先分断岸电开关，再合发电机主开关';
         }
         return null;
+    }
+
+    // 失压保护跳闸：ACB1~ACB3 对应发电机未运行（失压）时自动分断（独立模式）
+    _enforceAcbUv() {
+        if (this._isFollow()) return false;
+        let tripped = false;
+        ['1', '2', '3'].forEach(n => {
+            if (this._sw['ACB' + n] && !this._gens['G' + n]) {
+                this._sw['ACB' + n] = false;
+                this._tip(`ACB${n} 失压保护：发电机 G${n} 未运行，主开关自动跳闸`);
+                tripped = true;
+            }
+        });
+        return tripped;
     }
 
     // 失压保护跳闸：岸电箱失电时，运行中的岸电开关自动分断
@@ -511,8 +531,65 @@ export class LvPowerOneLine extends BaseComponent {
         }
     }
 
+    // ── 工作模式 ──
+    /** 是否跟随模式（默认） */
+    _isFollow() { return this._workMode !== 'standalone'; }
+    _lv() { return (this.sys && this.sys.comps) ? this.sys.comps.lv_switch_panel : null; }
+    _ip() { return (this.sys && this.sys.comps) ? this.sys.comps.important_panel : null; }
+    /** 跟随模式下不可手动操作的设备清单 */
+    _FOLLOW_LOCKED() {
+        return ['G1', 'G2', 'G3', 'ACB1', 'ACB2', 'ACB3', 'SWSHORE', 'SWEMC', 'EG', 'EACB', 'ABTS'];
+    }
+    _followBlocked(id) {
+        if (!this._isFollow()) return false;
+        if (this._FOLLOW_LOCKED().indexOf(id) === -1) return false;
+        this._tip('跟随模式：该设备不可手动操作，自动跟随主配电板 / 重要配电装置状态');
+        return true;
+    }
+    /** 跟随模式：把主配电板与重要配电装置的状态同步到单线图 */
+    _applyFollow() {
+        if (!this._isFollow()) return;
+        const lv = this._lv(), ip = this._ip();
+        if (lv) {
+            if (typeof lv.getGenState === 'function') {
+                ['G1', 'G2', 'G3'].forEach((sid, i) => {
+                    const st = lv.getGenState('gen' + (i + 1));      // gen1 ↔ G1、gen2 ↔ G2、gen3 ↔ G3
+                    if (!st) return;
+                    this._gens[sid] = !!st.run;                      // G1~G3 跟随对应机组运行状态
+                    this._sw['ACB' + (i + 1)] = !!st.cb;             // ACB1~ACB3 跟随对应机组主开关
+                });
+            }
+            if (typeof lv.getMCBState === 'function') {
+                this._sw.SWSHORE = !!lv.getMCBState('ld-loadR-4-1'); // 岸电（开关）
+                this._sw.SWEMC = !!lv.getMCBState('ld-loadR-4-0');   // EMCB
+            }
+            const sh = (typeof lv.getShoreLive === 'function') ? lv.getShoreLive() : 0;
+            this._shore = sh !== 0;                                  // 主配电板岸电开关下端有电 → 岸电箱激活
+        }
+        if (ip) {
+            if (typeof ip.getEmergencyGen === 'function') this._gens.EG = !!ip.getEmergencyGen();   // EG
+            if (typeof ip.isEGenClosed === 'function') this._sw.EACB = !!ip.isEGenClosed();          // EACB
+            if (typeof ip.isTieClosed === 'function') this._sw.ABTS = !!ip.isTieClosed();            // ABTS
+        }
+    }
+    /** 工作模式配置项 */
+    getConfigFields() {
+        return [{
+            label: '工作模式', key: 'workMode', type: 'select',
+            options: [{ value: 'follow', label: '跟随模式' }, { value: 'standalone', label: '独立模式' }],
+            get: c => c._workMode,
+        }];
+    }
+    onConfigUpdate(cfg) {
+        if (cfg && cfg.workMode) this._workMode = (cfg.workMode === 'standalone') ? 'standalone' : 'follow';
+        this.config = { ...(this.config || {}), ...(cfg || {}) };
+        this._refresh();
+        if (this.sys && this.sys.requestRedraw) this.sys.requestRedraw();
+    }
+
     toggleSwitch(id) {
         if (this._sw[id] === undefined) return;
+        if (this._followBlocked(id)) return;             // 跟随模式：受跟随设备不可手动操作
         if (AUTO_DEVICES.indexOf(id) !== -1) {
             this._tip((id === 'ABTS' ? 'ABTS 自动转换开关' : '应急发电机出口断路器 EACB') + ' 为自动模式，不可手动操作');
             return;
@@ -526,6 +603,7 @@ export class LvPowerOneLine extends BaseComponent {
 
     setSwitch(id, on) {
         if (this._sw[id] === undefined) return;
+        if (this._followBlocked(id)) return;
         if (AUTO_DEVICES.indexOf(id) !== -1) return;     // 自动设备不接受手动设置
         const closing = !!on;
         if (this._interlockBlock(id, closing)) return;   // 互锁：拒绝该合闸操作
@@ -535,6 +613,7 @@ export class LvPowerOneLine extends BaseComponent {
 
     toggleGen(id) {
         if (this._gens[id] === undefined) return;
+        if (this._followBlocked(id)) return;
         if (id === AUTO_GEN) { this._tip('应急发电机 EG 为自动模式，不可手动操作'); return; }
         this._gens[id] = !this._gens[id];
         this._refresh();
@@ -542,18 +621,21 @@ export class LvPowerOneLine extends BaseComponent {
 
     setGen(id, on) {
         if (this._gens[id] === undefined) return;
+        if (this._followBlocked(id)) return;
         if (id === AUTO_GEN) return;                     // 应急发电机不接受手动设置
         this._gens[id] = !!on;
         this._refresh();
     }
 
     toggleShore() {
+        if (this._followBlocked('shorebox')) return;
         this._shore = !this._shore;
         this._enforceShoreUv();
         this._refresh();
     }
 
     setShore(on) {
+        if (this._followBlocked('shorebox')) return;
         this._shore = !!on;
         this._enforceShoreUv();
         this._refresh();
@@ -566,6 +648,7 @@ export class LvPowerOneLine extends BaseComponent {
     // ── 带电计算 ──
     _computeLive() {
         this._enforceShoreUv();                      // 岸电箱失压 → 岸电开关自动跳闸
+        this._enforceAcbUv();                        // 独立模式：ACB1~ACB3 失压自动跳闸
         const S = this._sw, G = this._gens;
         const g1 = G.G1 && S.ACB1;
         const g2 = G.G2 && S.ACB2;
@@ -601,6 +684,7 @@ export class LvPowerOneLine extends BaseComponent {
             mainUp, mainLow, fdr, lvd, emr, batt, busTie,
             g1, g2, g3, eg,
             shore, shoreBox: this._shore,
+            shoreWire: this._shore,                  // 岸电箱激活 → 岸电箱左侧连线带电（红）
             mcb1, fdr2, imp1,
             ld1: fdr && S.SWLD1, ld2: fdr && S.SWLD2,
             m2: fdr && S.SWM2,
@@ -678,7 +762,8 @@ export class LvPowerOneLine extends BaseComponent {
     // ── 仿真主循环 ──
     tick(dt) {
         this._computeLive();
-        this._autoTick(dt);          // 自动投切 EG / EACB / ABTS
+        if (this._isFollow()) this._applyFollow();   // 跟随模式：跟随主配电板 / 重要配电装置
+        else this._autoTick(dt);                     // 独立模式：自动投切 EG / EACB / ABTS
         this._computeLive();         // 自动动作后重算带电状态
         this._refresh();
         if (this.sys && typeof this.sys.requestRedraw === 'function') this.sys.requestRedraw();

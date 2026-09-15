@@ -114,9 +114,9 @@ function initGateway() {
         if (cb.checked) {
             ip.show();
             ip.group.moveToTop();
-            // 移到主配电板下方（世界坐标 20, 90）
+            // 移到主配电板下方（世界坐标 250, 520）
             const abs = ip.group.getAbsolutePosition();
-            ip.group.position({ x: ip.group.x() + (20 - abs.x), y: ip.group.y() + (90 - abs.y) });
+            ip.group.position({ x: ip.group.x() + (250 - abs.x), y: ip.group.y() + (520 - abs.y) });
         } else {
             ip.hide();
         }

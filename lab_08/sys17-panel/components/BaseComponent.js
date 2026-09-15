@@ -428,6 +428,9 @@ export class BaseComponent {
 
     addClickablePart(partId, x, y, w, h, onTop = false) {
         var _this = this;
+        // 记录部件几何：供工作流自动演示箭头/圈选精确定位
+        if (!this._parts) this._parts = {};
+        this._parts[partId] = { x: x, y: y, w: w, h: h };
         var group = new Konva.Group({ x: x, y: y });
 
         var bg = new Konva.Rect({
@@ -475,9 +478,28 @@ export class BaseComponent {
 
         group.add(bg);
         group.add(hit);
+        if (this._parts && this._parts[partId]) this._parts[partId].node = hit;   // 记录命中节点，供演示真实触发点击
         this._interactGroup.add(group);
         if (onTop) group.moveToTop();   // 提升到交互层最上，避免被同层较大热区（如门板 door）遮挡
         return hit;   // 返回命中区，调用方可追加自定义点击行为
+    }
+
+    /**
+     * 可识别部件中心（世界坐标）：工作流 find 步骤在此处闪烁箭头并“圈住”部件后点击
+     * @param {string} partId addClickablePart 注册的部件 id
+     * @returns {{x:number,y:number}|null}
+     */
+    getClickablePartCenter(partId) {
+        const p = this._parts && this._parts[partId];
+        if (!p) return null;
+        const abs = this.group && this.group.getAbsolutePosition ? this.group.getAbsolutePosition() : { x: 0, y: 0 };
+        return { x: abs.x + p.x + p.w / 2, y: abs.y + p.y + p.h / 2 };
+    }
+
+    /** 取可识别部件的命中节点（供自动演示模拟真实点击） */
+    getClickablePartNode(partId) {
+        const p = this._parts && this._parts[partId];
+        return (p && p.node) ? p.node : null;
     }
 
     hide() {

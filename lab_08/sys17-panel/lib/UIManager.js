@@ -111,6 +111,8 @@ export class UIManager {
      * 显示一个临时的浮动提示（用于演示模式自动答题）
      */
     showFloatingTip(text, duration = 2500) {
+        // 自动演示（show）模式：抑制组件自身流程信息提示，只显示与自动演示相关的信息，避免相互干扰
+        if (this.sys && this.sys._suppressComponentTips && !this.sys._tipBypass) return;
         const sys = this.sys;
         const tip = document.createElement('div');
         Object.assign(tip.style, {

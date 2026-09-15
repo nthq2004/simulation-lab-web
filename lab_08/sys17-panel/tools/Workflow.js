@@ -133,8 +133,19 @@ export class Workflow {
     }
 
     // 全自动演示：循环调用单步演示
+    /** 演示专用提示：自动演示期间绕过组件提示抑制，只显示演示相关信息 */
+    _tipWorkflow(msg, ms) {
+        const s = this.sys;
+        if (!s || typeof s.showFloatingTip !== 'function') return;
+        const prev = s._tipBypass;
+        s._tipBypass = true;
+        s.showFloatingTip(msg, ms || 4000);
+        s._tipBypass = prev;
+    }
+
     async _runAutoDemo() {
         this._isAutoPlaying = true; // 标记正在全自动运行
+        if (this.sys) this.sys._suppressComponentTips = true;   // 演示期间抑制组件自身流程信息
         while (this._workflowIdx < this._workflow.length) {
             if (!this._workflowPanelEl || !this._isAutoPlaying) break;
 
@@ -161,6 +172,7 @@ export class Workflow {
             }
         }
         this._isAutoPlaying = false;
+        if (this.sys) this.sys._suppressComponentTips = false;   // 演示结束：恢复组件自身提示
     }
     // 假设这是“下一步”按钮的操作
     stepByStep() {
@@ -240,7 +252,7 @@ export class Workflow {
         const step = this._workflow[idx];
         if (step.mode === 'find') {
             // 自动指出部件位置（传递步骤说明文字）
-            await this._simulateAutoClick(step.target, step.subTarget, step.msg);
+            await this._simulateAutoClick(step.target, step.subTarget, step.msg, step);
         }
         else if (step.mode === 'quiz') {
             // 自动展示正确答案
@@ -274,7 +286,7 @@ export class Workflow {
             } else {
                 // 无 op 元数据：回退为文字说明 + 箭头指示目标组件（指向组件中心）
                 if (step.msg) {
-                    this.sys.showFloatingTip(step.msg, 5000);
+                    this._tipWorkflow(step.msg, 5000);
                     await new Promise(r => setTimeout(r, 2000));
                 }
                 if (step.target) {
@@ -434,6 +446,7 @@ export class Workflow {
         }
     }
     closeWorkflowPanel() {
+        if (this.sys) this.sys._suppressComponentTips = false;   // 退出演示：恢复组件自身提示
         if (!this._workflowPanelEl) return;
         this._stopWorkflowWatcher();
         try { this.container.removeChild(this._workflowPanelEl); } catch (e) { }
@@ -447,14 +460,14 @@ export class Workflow {
      * 若目标组件提供 getClickablePartCenter(partId)，则用"箭头闪烁指示"指出部件位置；
      * 否则回退为组件整体中心指示。
      */
-    async _simulateAutoClick(targetId, subTarget, msg) {
+    async _simulateAutoClick(targetId, subTarget, msg, step) {
         // 多目标时全部依次提示
         const targets = Array.isArray(targetId) ? targetId : [targetId];
         const sys = this.sys;
 
         // ── 阶段 1：展示完整步骤说明文字 ──
         if (msg) {
-            sys.showFloatingTip(msg, 5000);
+            this._tipWorkflow(msg, 5000);
             await new Promise(r => setTimeout(r, 2000));   // 留 2s 让学员阅读
         }
 
@@ -479,7 +492,12 @@ export class Workflow {
 
             // ── 阶段 3：延时 2s（观察）后模拟点击 ──
             await new Promise(r => setTimeout(r, 2000));
-            this._simulateClickOn(comp, tid, subTarget);
+            this._simulateClickOn(comp, tid, subTarget, step);
+            // 若步骤带有 act（如“转到自动模式 / 改为 231 顺序”），点击后自动执行该操作
+            if (step && typeof step.act === 'function') {
+                try { await step.act.call(this); } catch (e) { /* 演示动作失败不阻断流程 */ }
+                await new Promise(r => setTimeout(r, 800));
+            }
 
             // ── 阶段 4：动作后再延时 2s ──
             await new Promise(r => setTimeout(r, 2000));
@@ -503,7 +521,7 @@ export class Workflow {
                 'start': '机旁起动按钮', 'stop': '机旁停止按钮',
             };
             var tip = partNames[subTarget] || subTarget;
-            sys.showFloatingTip('👉 请点击：' + tip, 2500);
+            this._tipWorkflow('👉 请点击：' + tip, 2500);
         }
 
         // ── 阶段 6：停留观察时间 ──
@@ -540,10 +558,17 @@ export class Workflow {
      * @param {string} compId 组件 id
      * @param {string} [subTarget] 部件 id（可选）
      */
-    _simulateClickOn(comp, compId, subTarget) {
+    _simulateClickOn(comp, compId, subTarget, step) {
         const sys = this.sys;
         if (compId) sys.lastClickedId = compId;
         if (subTarget) sys.lastClickedPartId = compId + '/' + subTarget;
+        // 步骤声明 simClick 时，真实触发部件命中节点的点击事件，让组件自身逻辑执行
+        // （如「报警测试」按钮按下、应急切断按钮按下/弹出、开关换档等）
+        if (step && step.simClick && comp && subTarget && typeof comp.getClickablePartNode === 'function') {
+            const node = comp.getClickablePartNode(subTarget);
+            if (node) { try { node.fire('click', { evt: { cancelBubble: false } }); } catch (e) { /* 忽略 */ } }
+            if (sys.redrawAll) sys.redrawAll(); else if (sys.requestRedraw) sys.requestRedraw();
+        }
         if (comp && typeof comp.highlight === 'function') {
             comp.highlight(true);
             setTimeout(() => {
@@ -620,7 +645,7 @@ export class Workflow {
         if (btn) {
             await this._flashDomElement(btn, tip, 2600);
         } else if (tip) {
-            this.sys.showFloatingTip(tip, 3000);
+            this._tipWorkflow(tip, 3000);
             await new Promise(r => setTimeout(r, 2000));
         }
         await new Promise(r => setTimeout(r, 2000));  // 延时 2s 后由 act() 模拟点击
@@ -674,22 +699,22 @@ export class Workflow {
                 const tip = op.msg || step.msg || `👉 ${actionText}：${(comp.label || comp.type || tid)}`;
                 if (center && sys.layer) {
                     // 箭头闪烁指示部件 + 组件本身高亮闪烁 2 次（同步进行）
-                    sys.showFloatingTip(tip, 4000);
+                    this._tipWorkflow(tip, 4000);
                     await Promise.all([
                         this._flashArrow(center, { on: 500, off: 350, times: 3 }),
                         this._blinkHighlight(comp, 2, 700, 450),
                     ]);
                 } else {
                     // 回退：组件整体高亮闪烁 2 次
-                    sys.showFloatingTip(tip, 4000);
+                    this._tipWorkflow(tip, 4000);
                     await this._blinkHighlight(comp, 2, 900, 500);
                 }
             } else if (step.msg) {
-                sys.showFloatingTip(step.msg, 3000);
+                this._tipWorkflow(step.msg, 3000);
                 await new Promise(r => setTimeout(r, 1800));
             }
         } else if (step.msg) {
-            sys.showFloatingTip(step.msg, 3000);
+            this._tipWorkflow(step.msg, 3000);
             await new Promise(r => setTimeout(r, 1800));
         }
         await new Promise(r => setTimeout(r, 2000));  // 延时 2s 后由 act() 真正执行按钮/开关操作
@@ -707,7 +732,7 @@ export class Workflow {
         const faultModal = document.getElementById('faultModal');
         const fid = String(op.fault || step.fault || '').replace(/[^\w-]/g, '');
         const isRepair = !!(op && op.repair);
-        sys.showFloatingTip(op.msg || step.msg || (isRepair ? '取消故障设置' : '设置故障'), 5000);
+        this._tipWorkflow(op.msg || step.msg || (isRepair ? '取消故障设置' : '设置故障'), 5000);
 
         // ① 指向工具栏"故障设置"按钮（闪烁约 2.2s）
         if (faultBtn) await this._flashDomElement(faultBtn, '点击"故障设置"按钮', 2200);
@@ -758,7 +783,7 @@ export class Workflow {
         // ── 特殊：工具栏独立复选框（如"重载询问面板" #heavyLoadShow）──
         if (instId === 'heavyload') {
             const cb = document.getElementById('heavyLoadShow');
-            sys.showFloatingTip(op.msg || step.msg || '勾选"重载询问面板"，调出重载询问面板并自动接线', 5000);
+            this._tipWorkflow(op.msg || step.msg || '勾选"重载询问面板"，调出重载询问面板并自动接线', 5000);
             if (!cb) {
                 await new Promise(r => setTimeout(r, 2000));
                 return;
@@ -792,7 +817,7 @@ export class Workflow {
 
         const btn = document.getElementById('btnInstrument');
         const modal = document.getElementById('instrumentModal');
-        sys.showFloatingTip(op.msg || step.msg || '选择仪表', 5000);
+        this._tipWorkflow(op.msg || step.msg || '选择仪表', 5000);
 
         // ① 指向工具栏"选择仪表"按钮
         if (btn) await this._flashDomElement(btn, '点击"选择仪表"按钮', 2200);
@@ -913,7 +938,7 @@ export class Workflow {
             arrow.style.cssText = `left:${r.left - 54}px;top:${r.top + r.height / 2 - 17}px;`;
             document.body.appendChild(box);
             document.body.appendChild(arrow);
-            if (msg) this.sys.showFloatingTip(msg, Math.min(dur, 4500));
+            if (msg) this._tipWorkflow(msg, Math.min(dur, 4500));
             setTimeout(() => { box.remove(); arrow.remove(); resolve(); }, dur);
         });
     }
@@ -982,7 +1007,7 @@ export class Workflow {
             };
             await this._flashArrow(c);
         }
-        this.sys.showFloatingTip(tip, 4000);
+        this._tipWorkflow(tip, 4000);
         await new Promise(r => setTimeout(r, 800));
     }
 
@@ -1260,9 +1285,13 @@ export class Workflow {
                 parent.style.position = 'relative';
             }
 
-            // 1. 在目标组件右侧空白处定位输入框
+            // 1. 定位输入框：优先放在指定部件（如“配电板式兆欧表”）右侧，否则放在组件右侧空白处
             let boxLeft = 0, boxTop = 0;
-            if (comp && comp.group) {
+            const partCenter = (step.part && comp && comp.getClickablePartCenter) ? comp.getClickablePartCenter(step.part) : null;
+            if (partCenter) {
+                boxLeft = partCenter.x + 80;      // 部件右侧
+                boxTop = partCenter.y - 60;
+            } else if (comp && comp.group) {
                 const pos = comp.group.getAbsolutePosition ? comp.group.getAbsolutePosition() : null;
                 const w = comp.width || 160;
                 const h = comp.height || 100;
@@ -1272,6 +1301,10 @@ export class Workflow {
                 if (boxLeft + 240 > parent.clientWidth) {
                     boxLeft = (pos ? pos.x : (comp.config ? comp.config.x : 100)) - 260;
                 }
+                // 组件很宽（如整块主配电板）时会落到视口外 → 钳制到可见范围内，确保填空框一定弹出可见
+                const vw = parent.clientWidth || 1200, vh = parent.clientHeight || 800;
+                boxLeft = Math.max(10, Math.min(boxLeft, Math.max(10, vw - 250)));
+                boxTop = Math.max(10, Math.min(boxTop, Math.max(10, vh - 210)));
             } else {
                 boxLeft = 120;
                 boxTop = 120;

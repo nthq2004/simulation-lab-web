@@ -63,11 +63,13 @@ export class ImportantDistPanel extends BaseComponent {
         this._tieClosed = true;    // 联络开关合位（主电网供电）
         this._egfClosed = false;   // 应急主开关合位（应发供电）
         // 屏 3 岸电箱
-        this._spOn = false; this._spKnob = 1;                      // 0 相序1 / 1 OFF / 2 相序2
+        this._spOn = false; this._spKnob = 1;
+        this._spSupply = true;                                     // 岸电箱进线电源（默认已送到岸电箱 → 电源灯亮白）                      // 0 相序1 / 1 OFF / 2 相序2
         this._seq1Correct = Math.random() < 0.5;                   // 相序1 是否为正序（每次重置随机；相序2 必与其相反）
         this._spSig = '';                                          // 推送主配电板岸电开关下端带电状态签名
         // 屏 4 重载询问
-        this._hlPower = 45; this._hlRun = false; this._hlResp = 0; this._hlMode = 1;  // 0 直接起动 / 1 重载询问
+        this._hlPower = 500; this._hlRun = false; this._hlResp = 0; this._hlMode = 1;  // 0 直接起动 / 1 重载询问
+        this._hlInquiry = false;   // 重载询问已发出，等待电站增容
         // 屏 5 应急切断
         this._pressed = [false, false, false, false];
         this._caps = []; this._sig = '';
@@ -180,8 +182,8 @@ export class ImportantDistPanel extends BaseComponent {
         s.add(new Konva.Circle({ x: x0 + 112, y: 206, radius: 9, fill: '#2c3a45', stroke: '#1a252f', strokeWidth: 1 }));
         s.add(new Konva.Text({ x: x0 + 12, y: 240, width: 201, text: '相序转换', fontSize: 12, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
         // 合闸 / 分闸
-        this._ring(x0 + 66, 278, 21, '#3a4249');
-        this._ring(x0 + 158, 278, 21, '#3a4249');
+        s.add(new Konva.Circle({ x: x0 + 66, y: 278, radius: 25, fill: RING, stroke: RING_S, strokeWidth: 1.2 }));
+        s.add(new Konva.Circle({ x: x0 + 158, y: 278, radius: 25, fill: RING, stroke: RING_S, strokeWidth: 1.2 }));
         s.add(new Konva.Text({ x: x0 + 44, y: 300, width: 44, text: '合闸', fontSize: 12, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
         s.add(new Konva.Text({ x: x0 + 136, y: 300, width: 44, text: '分闸', fontSize: 12, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
     }
@@ -189,32 +191,33 @@ export class ImportantDistPanel extends BaseComponent {
     // ── 屏 4：重载问询面板（界面参照 HeavyLoadInquiry）──
     _drawPanelHL() {
         const s = this._staticGroup, x0 = PW * 3;
-        s.add(new Konva.Text({ x: x0 + 6, y: 40, width: 213, text: '重载询问---侧推器', fontSize: 13, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
-        s.add(new Konva.Text({ x: x0 + 8, y: 72, width: 74, text: '功率(kW)', fontSize: 12, fontStyle: 'bold', fill: '#1a252f', align: 'left', listening: false }));
+        s.add(new Konva.Text({ x: x0 + 6, y: 40, width: 213, text: '重载询问---侧推器', fontSize: 15, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
+        s.add(new Konva.Text({ x: x0 + 8, y: 71, width: 74, text: '功率(kW)', fontSize: 15, fontStyle: 'bold', fill: '#1a252f', align: 'left', listening: false }));
         s.add(new Konva.Rect({ x: x0 + 88, y: 64, width: 90, height: 26, fill: '#ffffff', stroke: '#6a737c', strokeWidth: 1.2, cornerRadius: 2 }));
         this._ring(x0 + 66, 128, 10, '#8a929c');
         this._ring(x0 + 160, 128, 10, '#8a929c');
-        s.add(new Konva.Text({ x: x0 + 46, y: 142, width: 40, text: '运行', fontSize: 11, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
-        s.add(new Konva.Text({ x: x0 + 140, y: 142, width: 40, text: '回应', fontSize: 11, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
-        s.add(new Konva.Text({ x: x0 + 4, y: 178, width: 74, text: '直接起动', fontSize: 10, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
-        s.add(new Konva.Text({ x: x0 + 84, y: 178, width: 74, text: '重载询问', fontSize: 10, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
-        this._ring(x0 + 44, 222, 26, '#e6e9ec');
-        s.add(new Konva.Circle({ x: x0 + 44, y: 222, radius: 8, fill: '#2c3a45', stroke: '#1a252f', strokeWidth: 1 }));
+        s.add(new Konva.Text({ x: x0 + 46, y: 143, width: 40, text: '运行', fontSize: 13, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
+        s.add(new Konva.Text({ x: x0 + 140, y: 143, width: 40, text: '回应', fontSize: 13, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
+        // 转换开关两个档位标签：各分两行显示（与开关左侧/右侧档位对应）
+        s.add(new Konva.Text({ x: x0 - 1, y: 183, width: 58, text: '直接' + String.fromCharCode(10) + '起动', fontSize: 12, lineHeight: 1.15, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
+        s.add(new Konva.Text({ x: x0 + 46, y: 183, width: 58, text: '重载' + String.fromCharCode(10) + '问询', fontSize: 12, lineHeight: 1.15, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
+        this._ring(x0 + 54, 242, 26, '#e6e9ec');
+        s.add(new Konva.Circle({ x: x0 + 54, y: 242, radius: 8, fill: '#000', stroke: '#000', strokeWidth: 1 }));
         s.add(new Konva.Rect({ x: x0 + 104, y: 196, width: 106, height: 32, fill: '#2e7d32', stroke: '#1a4d20', strokeWidth: 1.2, cornerRadius: 3 }));
         s.add(new Konva.Rect({ x: x0 + 104, y: 240, width: 106, height: 32, fill: '#c0392b', stroke: '#7a1a12', strokeWidth: 1.2, cornerRadius: 3 }));
-        s.add(new Konva.Text({ x: x0 + 104, y: 205, width: 106, text: '起动 / 询问', fontSize: 13, fontStyle: 'bold', fill: '#ffffff', align: 'center', listening: false }));
-        s.add(new Konva.Text({ x: x0 + 104, y: 249, width: 106, text: '停  止', fontSize: 13, fontStyle: 'bold', fill: '#ffffff', align: 'center', listening: false }));
+        s.add(new Konva.Text({ x: x0 + 104, y: 205, width: 106, text: '起动 / 询问', fontSize: 15, fontStyle: 'bold', fill: '#ffffff', align: 'center', listening: false }));
+        s.add(new Konva.Text({ x: x0 + 104, y: 249, width: 106, text: '停  止', fontSize: 15, fontStyle: 'bold', fill: '#ffffff', align: 'center', listening: false }));
     }
 
     // ── 屏 5：应急风油切断控制屏 ──
     _drawPanelCut() {
         const s = this._staticGroup, cx0 = PW * 4;
-        s.add(new Konva.Text({ x: cx0 + 8, y: 40, width: 209, text: '按下自锁 / 再按弹出', fontSize: 10, fill: '#5a6a75', align: 'center', listening: false }));
+        s.add(new Konva.Text({ x: cx0 + 8, y: 40, width: 209, text: '按下自锁 / 再按弹出', fontSize: 12, fill: '#5a6a75', align: 'center', listening: false }));
         CUTOFF.forEach((c, i) => {
             const cy = 82 + i * 62;
-            s.add(new Konva.Text({ x: cx0 + 8, y: cy - 16, width: 78, text: c.label, fontSize: 11, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
-            s.add(new Konva.Text({ x: cx0 + 8, y: cy + 1, width: 78, text: c.sub, fontSize: 11, fontStyle: 'bold', fill: '#c03020', align: 'center', listening: false }));
-            s.add(new Konva.Text({ x: cx0 + 8, y: cy + 18, width: 78, text: c.tag, fontSize: 9, fill: '#5a6a75', align: 'center', listening: false }));
+            s.add(new Konva.Text({ x: cx0 + 8, y: cy - 16, width: 78, text: c.label, fontSize: 12, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
+            s.add(new Konva.Text({ x: cx0 + 8, y: cy + 1, width: 78, text: c.sub, fontSize: 12, fontStyle: 'bold', fill: '#c03020', align: 'center', listening: false }));
+            s.add(new Konva.Text({ x: cx0 + 8, y: cy + 18, width: 78, text: c.tag, fontSize: 10, fill: '#5a6a75', align: 'center', listening: false }));
             s.add(new Konva.Rect({ x: cx0 + 100, y: cy - 24, width: 56, height: 48, fill: '#3a4249', stroke: '#1a252f', strokeWidth: 1.5, cornerRadius: 4 }));
             s.add(new Konva.Rect({ x: cx0 + 104, y: cy - 20, width: 48, height: 40, fill: '#2a3138', stroke: '#151a1f', strokeWidth: 1, cornerRadius: 3 }));
         });
@@ -279,19 +282,24 @@ export class ImportantDistPanel extends BaseComponent {
             const n = new Konva.Circle({ x: sx + dx, y: 105, radius: 13, fill: '#3a4249', stroke: '#2a3138', strokeWidth: 1.2 });
             d.add(n); this._spLamp.push(n);
         });
+        this._spBtn = [66, 158].map(dx => {              // 合闸 / 分闸 钮帽（随状态变色）
+            const n = new Konva.Circle({ x: sx + dx, y: 278, radius: 21, fill: '#1e4d24', stroke: '#5a6068', strokeWidth: 1.2 });
+            d.add(n);
+            return n;
+        });
         this._spKnobNode = new Konva.Group({ x: sx + 112, y: 206, rotation: 0 });
         this._spKnobNode.add(new Konva.Line({ points: [0, 0, 0, -22], stroke: '#111', strokeWidth: 7, lineCap: 'round' }));
         d.add(this._spKnobNode);
 
         // ── 屏 4：重载问询 功率值 + 运行/回应灯 + 模式旋钮 ──
         const hx = PW * 3;
-        this._hlPowerText = new Konva.Text({ x: hx + 88, y: 69, width: 90, text: '45', fontSize: 15, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false });
+        this._hlPowerText = new Konva.Text({ x: hx + 88, y: 69, width: 90, text: '500', fontSize: 15, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false });
         d.add(this._hlPowerText);
         this._hlRunLamp = new Konva.Circle({ x: hx + 66, y: 128, radius: 10, fill: '#8a929c', stroke: '#2a3138', strokeWidth: 1.2 });
         this._hlRespLamp = new Konva.Circle({ x: hx + 160, y: 128, radius: 10, fill: '#8a929c', stroke: '#2a3138', strokeWidth: 1.2 });
         d.add(this._hlRunLamp, this._hlRespLamp);
-        this._hlKnob = new Konva.Group({ x: hx + 44, y: 222, rotation: 150 });
-        this._hlKnob.add(new Konva.Line({ points: [0, 0, 0, -17], stroke: '#ffffff', strokeWidth: 5, lineCap: 'round' }));
+        this._hlKnob = new Konva.Group({ x: hx + 54, y: 242, rotation: 150 });
+        this._hlKnob.add(new Konva.Line({ points: [0, 0, 0, -19], stroke: '#111', strokeWidth: 8, lineCap: 'round' }));
         d.add(this._hlKnob);
 
         // ── 屏 5：应急切断按钮帽 + 状态灯 ──
@@ -306,6 +314,16 @@ export class ImportantDistPanel extends BaseComponent {
         });
     }
 
+    /** 注册可识别部件（应急风油切断 4 个自锁按钮），点击即按下/弹出 */
+    _registerParts() {
+        const cx0 = PW * 4;
+        CUTOFF.forEach((c, i) => {
+            const cy = 82 + i * 62;
+            const hit = this.addClickablePart(`cutoff-${i + 1}`, cx0 + 8, cy - 28, 152, 56, true);
+            hit.on('click', () => this.toggleCutoff(i));
+        });
+    }
+
     _hit(x, y, w, h, fn) {
         const hit = new Konva.Rect({ x: x - w / 2, y: y - h / 2, width: w, height: h, fill: 'rgba(255,255,255,0.01)', listening: true, cursor: 'pointer' });
         this._dynamicGroup.add(hit);
@@ -313,6 +331,7 @@ export class ImportantDistPanel extends BaseComponent {
     }
 
     _bindInteraction() {
+        this._registerParts();
         // 屏 1：控制方式 / 起动 / 停止 / 调频
         this._hit(112, 168, 96, 36, () => { this._egMode = this._egMode ? 0 : 1; this._tip(`应急发电机控制方式：${this._egMode ? '自动（禁止手动起停）' : '手动'}`); this._refresh(); });
         this._hit(68, 215, 96, 36, () => this.setEmergencyGen(true));
@@ -333,9 +352,9 @@ export class ImportantDistPanel extends BaseComponent {
         this._hit(sx + 136, 206, 36, 76, () => this._spShift(1));    // 右半区：向右跳一档
         // 屏 4：模式旋钮 / 起动询问 / 停止
         const hx = PW * 3;
-        this._hit(hx + 44, 222, 60, 60, () => { this._hlMode = this._hlMode ? 0 : 1; this._tip(`重载启动方式：${this._hlMode ? '重载询问' : '直接起动'}`); this._refresh(); });
+        this._hit(hx + 54, 242, 62, 62, () => { this._hlMode = this._hlMode ? 0 : 1; this._tip(`重载启动方式：${this._hlMode ? '重载询问' : '直接起动'}`); this._refresh(); });
         this._hit(hx + 157, 212, 106, 32, () => this.onHeavyInquiry());
-        this._hit(hx + 157, 256, 106, 32, () => { this._hlRun = false; this._hlResp = 0; this._tip('重载启动停止'); this._refresh(); });
+        this._hit(hx + 157, 256, 106, 32, () => this.onHeavyStop());
         // 屏 5：4 个自锁式应急切断按钮
         const cx0 = PW * 4;
         CUTOFF.forEach((c, i) => {
@@ -389,19 +408,29 @@ export class ImportantDistPanel extends BaseComponent {
     _mainAvailable() {
         const lv = this._lv();
         if (!lv) return false;
+        const get = id => (typeof lv.getMCBState === 'function') ? lv.getMCBState(id) : false;
+        if (get('ld-loadR-4-1')) return true;          // 岸电开关合闸：岸电经主配电板供电 → 主电网有电
         const busLive = (typeof lv.isBusLive === 'function') ? lv.isBusLive() : false;
-        const mcb = (typeof lv.getMCBState === 'function') ? lv.getMCBState('ld-loadR-4-0') : false;
-        return !!(busLive && mcb);
+        return !!(busLive && get('ld-loadR-4-0'));     // 发电机供电 + 应急配电板开关闭合
     }
     getEmergencyGen() { return this._egRun; }
     setShore(on) {
-        if (on && this._egRun) { this._tip('应急发电机运行中，岸电与发电机互锁，禁止合闸'); return; }
-        if (on && this._spKnob === 1) { this._tip('相序开关在 OFF 位：请先打到相序1或相序2再合闸'); return; }
+        // 岸电箱的合闸/分闸按钮可直接操作；与发电机主开关的联锁在主配电板“岸电开关”上
+        if (this._spKnob === 1) { this._tip('相序开关在 OFF 位：合闸、分闸按钮均不工作'); return; }
         this._spOn = !!on;
         this._pushShoreLive(true);
         this._tip(on ? '岸电合闸：主配电板“岸电开关”下端带电' : '岸电分闸：主配电板“岸电开关”下端失电');
         this._refresh();
     }
+    /** 应急发电机主开关是否合闸（供主配电板岸电开关联锁用） */
+    isEGenClosed() { return !!this._egfClosed; }
+    /** 联络开关是否合闸（供单线图跟随模式用） */
+    isTieClosed() { return !!this._tieClosed; }
+    /** 岸电相序是否为负序（相序开关不在 OFF 位且该档为负序） */
+    getShoreSeqWrong() { return this._spKnob !== 1 && !this._isCorrectSeq(); }
+    /** 岸电箱进线电源（电源指示灯） */
+    setShoreSupply(on) { this._spSupply = !!on; this._refresh(); }
+    getShoreSupply() { return !!this._spSupply; }
     /** 相序开关档位切换：dir=-1 向左跳一档 / dir=+1 向右跳一档（两端限位） */
     _spShift(dir) {
         const n = Math.max(0, Math.min(2, this._spKnob + dir));
@@ -419,21 +448,75 @@ export class ImportantDistPanel extends BaseComponent {
         if (this._spKnob === 2) return !this._seq1Correct;
         return false;
     }
-    /** 岸电开关下端是否带电：合闸且相序开关不在 OFF 位 */
-    _shoreLowerLive() { return !!(this._spOn && this._spKnob !== 1); }
+    /**
+     * 岸电开关下端指示状态：0 = 下端没电（无指示）
+     *                          1 = 下端有电且相序正确 → 亮绿点
+     *                          2 = 下端有电但相序为负序 → 亮红点
+     */
+    _shoreState() {
+        if (!(this._spOn && this._spKnob !== 1)) return 0;
+        return this._isCorrectSeq() ? 1 : 2;
+    }
     _pushShoreLive(force) {
         const lv = this._lv();
         if (!lv || typeof lv.setShoreLive !== 'function') return;
-        const v = this._shoreLowerLive();
+        const v = this._shoreState();
         if (!force && String(v) === this._spSig) return;
         this._spSig = String(v);
         lv.setShoreLive(v);
     }
     getShore() { return this._spOn; }
+    /** 回应灯状态：0 熄灭 / 3 黄（等待增容）/ 1 绿（允许投入） */
+    _hlRespState() {
+        if (this._hlMode === 0) return 0;                     // 直接起动：回应灯保持熄灭
+        const lv = this._lv();
+        const mode = (lv && lv.getPlantMode) ? lv.getPlantMode() : 'HAND';
+        if (mode !== 'AUTO') return 0;                        // 手动模式：回应灯保持熄灭
+        if (!this._hlInquiry) return 0;
+        const ready = (lv && lv.isHeavyLoadReady) ? lv.isHeavyLoadReady() : false;
+        return ready ? 1 : 3;                                 // 容量就绪 → 绿；等待电站增容 → 黄
+    }
+    /** 起动 / 询问按钮 */
     onHeavyInquiry() {
-        this._hlRun = true;
-        this._hlResp = this._busLive() ? 1 : 2;      // 1 允许 / 2 拒绝
-        this._tip(this._hlResp === 1 ? '重载询问回应：允许启动' : '重载询问回应：拒绝启动');
+        const lv = this._lv();
+        if (!lv) return;
+        // ① 直接起动：主电网有电 → 负载直接起动（汇流排 + 负载功率）
+        if (this._hlMode === 0) {
+            if (!(lv.isMainLive && lv.isMainLive())) { this._tip('主电网无电：重载不能直接起动'); return; }
+            this._hlRun = true; this._hlResp = 0;
+            if (lv.setHeavyLoad) lv.setHeavyLoad(this._hlPower);
+            this._tip(`直接起动：重载投入电网，汇流排增加 ${this._hlPower}kW 负载`);
+            this._refresh();
+            return;
+        }
+        // ② 重载询问
+        const mode = (lv.getPlantMode) ? lv.getPlantMode() : 'HAND';
+        if (mode !== 'AUTO') { this._tip('电站为手动模式：重载询问无效，回应灯保持熄灭'); this._refresh(); return; }
+        if (!this._hlInquiry) {                               // 第 1 次按下：发询问信号
+            if (!(lv.isMainLive && lv.isMainLive())) { this._tip('主电网无电：无法发出重载询问'); return; }
+            this._hlInquiry = true;
+            if (lv.requestHeavyLoad) lv.requestHeavyLoad(this._hlPower);
+            this._tip('重载询问已发出：等待自动电站并入备用机组、均分负荷（回应灯黄色）');
+            this._refresh();
+            return;
+        }
+        if (this._hlRespState() !== 1) {                      // 等待中：按钮无效
+            this._tip('重载询问等待中：按钮无效（回应灯黄色）');
+            return;
+        }
+        this._hlRun = true;                                   // 容量就绪 → 重载投入电网
+        if (lv.setHeavyLoad) lv.setHeavyLoad(this._hlPower);
+        if (lv.releaseHeavyLoad) lv.releaseHeavyLoad();
+        this._hlInquiry = false;
+        this._tip(`重载投入电网：汇流排增加 ${this._hlPower}kW 负载`);
+        this._refresh();
+    }
+    /** 停止按钮：重载退出电网（负载卸掉） */
+    onHeavyStop() {
+        this._hlRun = false; this._hlInquiry = false;
+        const lv = this._lv();
+        if (lv) { if (lv.setHeavyLoad) lv.setHeavyLoad(0); if (lv.releaseHeavyLoad) lv.releaseHeavyLoad(); }
+        this._tip('重载退出电网：负载已卸掉');
         this._refresh();
     }
 
@@ -496,6 +579,17 @@ export class ImportantDistPanel extends BaseComponent {
         return '待机';
     }
 
+    /** 起动流程中主电网恢复 → 立即中断当前流程，转“延时停机”状态 */
+    _abortStart() {
+        if (this._egRun) {
+            this._phase = 'stop_delay'; this._phaseT = 0;
+            this._tip('主电网恢复：中断应发起动流程，应发延时 10s 自动停机');
+        } else {
+            this._phase = 'idle'; this._phaseT = 0;
+            this._tip('主电网恢复：中断应发起动流程，回到待机');
+        }
+    }
+
     _stepATS(dt, mainOK) {
         const test = !this._epTest;                  // 联络开关“试验”位
         const need = !mainOK || test;                // 需要应发供电
@@ -525,15 +619,18 @@ export class ImportantDistPanel extends BaseComponent {
                 break;
             case 'gen_start':
                 this._tieClosed = false;
+                if (!need) { this._abortStart(); break; }        // 主电网恢复 → 中断起动流程
                 this._phaseT += dt;
                 if (this._phaseT >= 3) { this._egRun = true; this._egT = 0; this._phase = 'gen_build'; this._phaseT = 0; this._tip('应急发电机自动起动（5s 建压）'); }
                 break;
             case 'gen_build':
                 this._tieClosed = false;
+                if (!need) { this._abortStart(); break; }        // 主电网恢复 → 中断建压流程
                 if (this._genReady()) { this._phase = 'eqf_delay'; this._phaseT = 0; this._tip('应发建压完成：延时 10s 合应急主开关'); }
                 break;
             case 'eqf_delay':
                 this._tieClosed = false;
+                if (!need) { this._abortStart(); break; }        // 主电网恢复 → 中断合闸延时，不合闸
                 this._phaseT += dt;
                 if (this._phaseT >= 10) { this._egfClosed = true; this._phase = 'running'; this._phaseT = 0; this._tip('应急主开关合闸：进入应发供电状态'); }
                 break;
@@ -564,6 +661,11 @@ export class ImportantDistPanel extends BaseComponent {
             if (this._egfClosed) { this._egfClosed = false; this._tip('应急发电机停机：应发主开关失压瞬时跳闸'); }   // 失压保护
         }
         this._pushToMainPanel(false);
+        // 岸电箱出线开关失压保护：相序开关打到 OFF → 失压自动分闸
+        if (this._spKnob === 1 && this._spOn) {
+            this._spOn = false;
+            this._tip('岸电箱开关失压保护：相序开关打到 OFF，开关自动分闸');
+        }
         this._pushShoreLive(false);          // 岸电开关下端带电状态同步给主配电板
 
         // ── 屏 1：应急发电机 ──
@@ -615,16 +717,27 @@ export class ImportantDistPanel extends BaseComponent {
             const on = this._spKnob !== 1;
             const pos = on && this._isCorrectSeq();       // 该档为正序
             const neg = on && !this._isCorrectSeq();      // 该档为负序
-            this._spLamp[0].fill(this._spOn ? GREEN : (on ? '#2a5a2a' : '#3a4249'));   // 电源（合闸亮）
-            this._spLamp[1].fill(pos ? '#1f9d33' : '#3a4249');                          // 正序
-            this._spLamp[2].fill(neg ? '#c0392b' : '#3a4249');                          // 负序
+            this._spLamp[0].fill(this._spSupply ? '#ffffff' : '#3a4249');              // 电源：进线有电 → 亮白
+            this._spLamp[1].fill(pos ? '#22c832' : '#1a4d20');                          // 正序：有效亮绿 / 默认暗绿
+            this._spLamp[2].fill(neg ? '#e0392b' : '#5a1a14');                          // 负序：有效亮红 / 默认暗红
+        }
+        // 合闸/分闸按钮：OFF 位 → 两只均为暗绿且不工作；否则 合闸亮绿(合)/暗绿(分)、分闸亮红(分)/暗红(合)
+        if (this._spBtn) {
+            if (this._spKnob === 1) { this._spBtn[0].fill('#1e4d24'); this._spBtn[1].fill('#5a1a14'); }   // OFF 位：默认暗绿 / 暗红（均不工作）
+            else {
+                this._spBtn[0].fill(this._spOn ? '#2ecc40' : '#1e4d24');
+                this._spBtn[1].fill(this._spOn ? '#5a1a14' : '#e0392b');
+            }
         }
         if (this._spKnobNode) this._spKnobNode.rotation((this._spKnob - 1) * 60);
 
         // ── 屏 4：重载询问 ──
         if (this._hlPowerText) this._hlPowerText.text(String(this._hlPower));
         if (this._hlRunLamp) this._hlRunLamp.fill(this._hlRun ? GREEN : '#8a929c');
-        if (this._hlRespLamp) this._hlRespLamp.fill(this._hlResp === 1 ? GREEN : (this._hlResp === 2 ? '#ff2020' : '#8a929c'));
+        if (this._hlRespLamp) {
+            const st = this._hlRespState();
+            this._hlRespLamp.fill(st === 1 ? GREEN : (st === 3 ? '#ffd400' : '#8a929c'));   // 绿 允许 / 黄 等待 / 灰 熄灭
+        }
         if (this._hlKnob) this._hlKnob.rotation(this._hlMode ? 30 : -30);
 
         // ── 屏 5：应急切断状态灯 ──

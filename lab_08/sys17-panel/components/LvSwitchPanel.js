@@ -157,7 +157,9 @@ export class LvSwitchPanel extends BaseComponent {
         this._autoBlocked = false;   // 自动模式阻塞（汇流排短路）
         this._genCBWas = {};         // 主开关上一帧状态（跳闸沿检测）
         this._shuntLive = {};        // 应急切断分励脱扣器带电状态（由“重要配电装置”推送）
-        this._shoreLower = false;    // 岸电开关下端带电（由“重要配电装置”岸电箱推送）
+        this._shoreState = 0;        // 岸电开关下端指示（0 没电 / 1 有电正序 / 2 有电负序）
+        this._extraLoad = 0;         // 重载（重要配电装置重载问询）已投入的负载 kW
+        this._hlReqKw = 0;           // 重载投入申请（kW，0 = 无申请）
         this._shoreNode = null;      // 岸电下端带电指示（动态节点，惰性创建）
         this._genShort = {};         // 短路电流注入倍数（测试短路保护）
         this._genProt = {};          // 各机组保护动作记录
@@ -486,6 +488,8 @@ export class LvSwitchPanel extends BaseComponent {
             const tw = widths[k];
             s.add(new Konva.Rect({ x: tx, y: y - 2, width: tw, height: fontSize + 7, fill: t.bg, stroke: t.stroke, strokeWidth: 1, cornerRadius: 2 }));
             s.add(new Konva.Text({ x: tx, y, width: tw, text: t.text, fontSize, fontStyle: 'bold', fill: t.fg || '#ffffff', align: 'center', listening: false }));
+            if (!this._tagPos) this._tagPos = {};
+            if (!this._tagPos[t.text]) this._tagPos[t.text] = { x: tx + tw / 2, y: y + (fontSize + 7) / 2 };
             tx += tw + 4;
         });
     }
@@ -747,6 +751,7 @@ export class LvSwitchPanel extends BaseComponent {
         s.add(new Konva.Text({ x: x0 + 36, y: dy0, width: 96, text: '绝缘指示灯', fontSize: 13, fontStyle: 'bold', fill: '#006400', align: 'center', listening: false }));
         this._glLamps = {};
         const glx = [x0 + 34, x0 + 74, x0 + 114];
+        this._glPos = { x: glx[1], y: dy0 + 42 };   // 绝缘指示灯（中部 L2）位置，供工作流识别
         ['L1', 'L2', 'L3'].forEach((ph, i) => {
             const lx = glx[i];
             s.add(new Konva.Text({ x: lx - 12, y: dy0 + 18, width: 24, text: ph, fontSize: 10, fontStyle: 'bold', fill: '#1a252f', align: 'center', listening: false }));
@@ -761,6 +766,7 @@ export class LvSwitchPanel extends BaseComponent {
 
         // 配电板式兆欧表（半圆刻度表 + 数码显示）
         const my0 = dy0 + 160, mx0 = x0 + 90, mmR = 78;
+        this._megPos = { x: mx0 + 40, y: my0 - 40 };   // 配电板式兆欧表位置（供工作流填空框定位）
         s.add(new Konva.Arc({ x: mx0, y: my0, innerRadius: mmR - 76, outerRadius: mmR, angle: 180, rotation: 180, fill: '#f4f6f8', stroke: '#2c3a45', strokeWidth: 1.5 }));
         // 刻度与数字
         for (let i = 0; i <= 10; i++) {
@@ -823,7 +829,7 @@ export class LvSwitchPanel extends BaseComponent {
                 for (let i = 0; i < n; i++) {
                     const cy = BODY_TOP + i * h + h / 2;
                     const key = `${cab.id}-${i}`;
-                    this._hit(x0 + 28, cy, 50, 104, () => this.toggleMCB(`cm-${cab.id}-${i}`));
+                    this._hit(x0 + 28, cy, 30, 104, () => this.toggleMCB(`cm-${cab.id}-${i}`));   // 仅中间手柄区域可交互
                     this._hit(cxk(0), cy + 18, 28, 28, () => this.toggleSelector(`${key}-heat`));
                     this._hit(cxk(1), cy + 18, 28, 28, () => this.toggleSelector(`${key}-mode`));
                     this._hit(cxk(2), cy + 18, 28, 28, () => this.setMotor(key, true), 11);
@@ -833,8 +839,8 @@ export class LvSwitchPanel extends BaseComponent {
                 const n = 5, h = (BODY_BOT - BODY_TOP) / n;
                 for (let r = 0; r < n; r++) {
                     const cy = BODY_TOP + r * h + h / 2 - 5;   // 与 MCB 同步上移 5px
-                    this._hit(x0 + 62, cy, 68, 108, () => this.toggleMCB(`ld-${cab.id}-${r}-0`));
-                    this._hit(x0 + 163, cy, 68, 108, () => this.toggleMCB(`ld-${cab.id}-${r}-1`));
+                    this._hit(x0 + 62, cy, 30, 96, () => this.toggleMCB(`ld-${cab.id}-${r}-0`));    // 仅中间手柄区域可交互
+                    this._hit(x0 + 163, cy, 30, 96, () => this.toggleMCB(`ld-${cab.id}-${r}-1`));
                 }
             } else if (cab.type === 'gen') {
                 const bY = 208;
@@ -854,12 +860,8 @@ export class LvSwitchPanel extends BaseComponent {
                 ];
                 defs.forEach(def => {
                     this._syncPos[def.key] = { i: def.i, angs: def.angs };
-                    this._hit(def.x, def.y, 56, 56, () => {
-                        const p = this._syncPos[def.key];
-                        p.i = (p.i + 1) % p.angs.length;
-                        if (this._syncKnobs[def.key]) this._syncKnobs[def.key].rotation(p.angs[p.i]);
-                        this._refresh();
-                    });
+                    if (def.key === 'mode' || def.key === 'seq') return;   // 模式/顺序开关由可识别部件热区处理（识别 + 换档）
+                    this._hit(def.x, def.y, 56, 56, () => this._stepSyncKnob(def.key));
                 });
                 // 3 台发电机调速开关（左半区降速 / 右半区升速）
                 ['gen1', 'gen2', 'gen3'].forEach((id, i) => {
@@ -874,6 +876,50 @@ export class LvSwitchPanel extends BaseComponent {
                 // 地气灯测试按钮（_hit 以中心点定位，与按钮圆心一致）
                 this._hit(x0 + 160, UPPER_H + MID_H + 78, 30, 30, () => this.onGroundTest(), 15);
             }
+        });
+        this._registerParts();
+    }
+
+    /** 注册可识别部件（供工作流 find 步骤识别与自动演示指示） */
+    _registerParts() {
+        const P = this._tagPos || {};
+        [['PT-1', 'tag-PT-1'], ['PT-2', 'tag-PT-2'], ['ESS-1F', 'tag-ESS-1F'], ['ESS-1P', 'tag-ESS-1P']].forEach(([tag, pid]) => {
+            const p = P[tag];
+            if (p) this.addClickablePart(pid, p.x - 24, p.y - 12, 48, 24, true);
+        });
+        // 应急配电板负荷开关 / 岸电开关：
+        //   识别（选择）区域 = 整只开关；交互（分合闸）区域仍仅中间手柄部分，叠在识别区之上
+        [[this._mcbNodes['ld-loadR-4-0'], 'emg-load', 'ld-loadR-4-0'],
+         [this._mcbNodes['ld-loadR-4-1'], 'shore-sw', 'ld-loadR-4-1']].forEach(([n, pid, mcbId]) => {
+            if (!n) return;
+            this.addClickablePart(pid, n.group.x() - 34, n.midY - 46, 68, 92, true);   // 整个区域均可识别/选择
+            const sw = new Konva.Rect({
+                x: n.group.x() - 15, y: n.midY - 48, width: 30, height: 96,
+                fill: 'rgba(255,255,255,0.01)', listening: true, cursor: 'pointer',
+            });
+            sw.on('click tap', (e) => { e.cancelBubble = true; this.toggleMCB(mcbId); });   // 中间手柄区域 = 开关操作
+            this._interactGroup.add(sw);
+        });
+        if (this._glPos) this.addClickablePart('ins-lamp', this._glPos.x - 24, this._glPos.y - 24, 48, 48, true);
+        if (this._megPos) this.addClickablePart('meg-meter', this._megPos.x - 34, this._megPos.y - 34, 68, 68, true);   // 配电板式兆欧表
+        // ── 仪表类部件 ──
+        const sy0 = 4 * CAB_W;                                  // 并车屏左边界
+        // 报警测试按钮：热区即按钮，点击执行声光报警测试
+        const at = this.addClickablePart('alarm-test', sy0 + 89 - 20, 378 - 20, 40, 40, true);
+        at.on('click', () => this.onAlarmTest());
+        // 同步表选择开关（待并机选择）：热区兼识别与换档
+        const ss = this.addClickablePart('sync-select', sy0 + 40 - 28, 190 - 28, 56, 56, true);
+        ss.on('click', () => this._stepSyncKnob('sync'));
+        // 1# 发电机控制屏（CABINETS 第 3 屏）：准备好指示灯 / PPU / 频率表
+        const g1x = 2 * CAB_W;
+        this.addClickablePart('gen1-ready', g1x + 52.5 - 18, 138 - 8, 36, 38, true);            // 准备好指示灯
+        this.addClickablePart('ppu', g1x + 15, UPPER_H + 10, CAB_W - 30, MID_H - 24, true);      // PPU 组件
+        this.addClickablePart('gen1-hz', g1x + CAB_W / 2 + 58 - 26, 82 - 26, 52, 52, true);      // 1# 频率表
+        // 并车屏「模式选择」「顺序选择」开关：热区既用于识别，也用于换档（点击切换一档）
+        const sx0 = 4 * CAB_W;
+        [['plant-mode', 'mode', sx0 + 112.5], ['seq', 'seq', sx0 + 185]].forEach(([pid, key, cx]) => {
+            const hit = this.addClickablePart(pid, cx - 28, 190 - 28, 56, 56, true);
+            hit.on('click', () => this._stepSyncKnob(key));
         });
     }
 
@@ -899,12 +945,14 @@ export class LvSwitchPanel extends BaseComponent {
             this._refresh();
             return;
         }
+        if (!this._mcbState[id] && this._shoreInterlock(id)) return;   // 岸电开关与发电机主开关联锁
         this._mcbState[id] = !this._mcbState[id];
         this._enforceShunt();          // 分励脱扣器带电时，合上即脱扣
         this._refresh();
     }
     setMCB(id, on) {
         if (this._mcbState[id] === undefined) return;
+        if (on && !this._mcbState[id] && this._shoreInterlock(id)) return;
         this._mcbState[id] = !!on;
         this._mcbTrip[id] = false;
         this._enforceShunt();
@@ -991,6 +1039,8 @@ export class LvSwitchPanel extends BaseComponent {
         this._refresh();
     }
     getGenMode(id) { return this._genMode[id]; }
+    /** 机组运行与主开关状态（供单线图跟随模式用） */
+    getGenState(id) { return { run: !!this._genRun[id], cb: !!this._genCB[id] }; }
     /** 发电机组故障 */
     setGenFault(id, on) {
         if (!(id in this._genFault)) return;
@@ -1046,6 +1096,29 @@ export class LvSwitchPanel extends BaseComponent {
     }
     getLoadGroundFault() { return !!this._groundFault.active; }
     getLoadGroundInfo() { return { ...this._groundFault }; }
+    // ── 重载问询（重要配电装置）联动接口 ──
+    /** 电站运行模式：HAND / SEMI-AUTO / AUTO */
+    getPlantMode() { return this._plantModeOf(); }
+    /** 主电网是否带电（汇流排由发电机供电） */
+    isMainLive() { return this._busLive(); }
+    /** 在网机组台数（运行且主开关合闸） */
+    getOnlineCount() { return ['gen1', 'gen2', 'gen3'].filter(id => this._genRun[id] && this._genCB[id]).length; }
+    /** 重载投入 / 退出（汇流排增减负载） */
+    setHeavyLoad(kw) { this._extraLoad = Math.max(0, Number(kw) || 0); this._refresh(); }
+    getHeavyLoad() { return this._extraLoad || 0; }
+    /** 重载投入申请：自动模式下电站据此并入备用机组增容 */
+    requestHeavyLoad(kw) { this._hlReqKw = Math.max(0, Number(kw) || 0); this._refresh(); }
+    releaseHeavyLoad() { this._hlReqKw = 0; this._refresh(); }
+    /** 电网是否已具备重载投入条件（容量足够、无并车/解列流程、负荷已均分） */
+    isHeavyLoadReady() {
+        const online = ['gen1', 'gen2', 'gen3'].filter(id => this._genRun[id] && this._genCB[id]);
+        const n = online.length;
+        if (n < 1) return false;
+        if (['gen1', 'gen2', 'gen3'].some(id => this._genSync[id] || this._genSplit[id])) return false;
+        const cap = n * 1000 * 0.75;
+        return ((this._busLoad || 0) + (this._hlReqKw || 0)) <= cap;
+    }
+
     /** 设置方形报警灯状态：ins 绝缘故障 / trip 优先脱扣 / short 汇流排短路 / lowv 汇流排电压低 */
     setAlarm(key, on) { if (this._alarms && key in this._alarms) { this._alarms[key] = !!on; this._refresh(); } }
 
@@ -1074,7 +1147,8 @@ export class LvSwitchPanel extends BaseComponent {
     getGenClass1(id) { return !!this._genClass1[id]; }
     /** 机组故障汇总：故障 / I 级故障 / 原动机保护动作 / 未复位的跳闸 → 自动模式下不计入备用机组 */
     _genFaulty(id) {
-        return !!(this._genFault[id] || this._genClass1[id] || this._primeFault[id] || this._genTrip[id]);
+        // 机旁（local）机组：准备好灯不亮 → 退出备用状态、不受自动控制
+        return !!(this._genMode[id] === 'local' || this._genFault[id] || this._genClass1[id] || this._primeFault[id] || this._genTrip[id]);
     }
     /**
      * 原动机保护：冷却水温高 / 滑油压力低 / 超速 → 柴油机组立即停机
@@ -1113,25 +1187,49 @@ export class LvSwitchPanel extends BaseComponent {
         return [];
     }
     /**
+     * 岸电开关（右动力负载屏 QF20）合闸联锁：
+     *   - 任一台主发电机在网（运行且主开关合闸），或应急发电机主开关合闸 → 无法合闸；
+     *   - 岸电相序为负序 → 同样无法合闸；
+     *   上述任一条成立时，按合闸会立即自动跳到脱扣（TRIP）位
+     */
+    _shoreInterlock(id) {
+        if (id !== 'ld-loadR-4-1') return false;
+        const ip = (this.sys && this.sys.comps) ? this.sys.comps.important_panel : null;
+        const egen = !!(ip && typeof ip.isEGenClosed === 'function' && ip.isEGenClosed());
+        const badSeq = !!(ip && typeof ip.getShoreSeqWrong === 'function' && ip.getShoreSeqWrong());
+        const genOn = this._busLive();                       // 任一台主发电机运行且主开关合闸
+        if (!genOn && !egen && !badSeq) return false;
+        this._mcbState[id] = false;
+        this._mcbTrip[id] = true;                            // 合闸即自动跳到脱扣位
+        const why = badSeq ? '岸电相序为负序' : '主/应急发电机处于合闸状态';
+        this._tip(`岸电开关联锁：${why}，合闸自动跳到脱扣位`);
+        this._refresh();
+        return true;
+    }
+    /**
      * 岸电开关下端带电指示（由“重要配电装置”岸电箱推送）：
      * 岸电箱合闸且相序开关不在 OFF 位 → 主配电板“岸电开关”下端有电
      */
-    setShoreLive(on) {
-        this._shoreLower = !!on;
+    setShoreLive(state) {
+        // 0 = 下端没电（无指示）；1 = 有电且相序正确（亮绿点）；2 = 有电但负序（亮红点）
+        this._shoreState = (state === true) ? 1 : (state === false || state == null ? 0 : (Number(state) || 0));
         if (!this._shoreNode) {
             const g = new Konva.Group({ listening: false });
-            g.add(new Konva.Line({ points: [-26, 0, 26, 0], stroke: '#ff2020', strokeWidth: 5, lineCap: 'round' }));
-            g.add(new Konva.Circle({ x: 0, y: 0, radius: 5, fill: '#ff2020', stroke: '#7a0000', strokeWidth: 1 }));
+            const dot = new Konva.Circle({ x: 0, y: 0, radius: 7, fill: '#2a2f34', stroke: '#1a252f', strokeWidth: 1 });
+            g.add(dot);
             this._dynamicGroup.add(g);
             this._shoreNode = g;
+            this._shoreDot = dot;
         }
         const n = this._mcbNodes['ld-loadR-4-1'];      // 右动力负载屏：岸电开关
-        if (n) this._shoreNode.position({ x: n.group.x(), y: n.midY + 38 });
-        this._shoreNode.visible(this._shoreLower);
+        if (n) this._shoreNode.position({ x: n.group.x() + 42, y: n.midY + 32 });
+        const st = this._shoreState;
+        this._shoreDot.fill(st === 1 ? '#2eff3e' : '#ff2020');
+        this._shoreNode.visible(st !== 0);
         this._refresh();
     }
-    /** 岸电开关下端是否带电 */
-    getShoreLive() { return !!this._shoreLower; }
+    /** 岸电开关下端指示状态（0 没电 / 1 有电正序 / 2 有电负序） */
+    getShoreLive() { return this._shoreState || 0; }
 
     /** 应急切断：分励脱扣器带电状态（由“重要配电装置”推送） */
     setShuntLive(map) { this._shuntLive = { ...map }; this._refresh(); }
@@ -1165,6 +1263,42 @@ export class LvSwitchPanel extends BaseComponent {
             this._tip(`应急切断：${hit.text} 分励脱扣器带电，该开关无法合闸`);
         });
     }
+    /** 某铭牌标签对应的开关 id 列表 */
+    getTaggedIds(tag) {
+        return Object.keys(this._mcbState).filter(id => this._mcbTags(id).some(t => t.text === tag));
+    }
+    /** 指定开关的世界坐标中心（供演示箭头逐个指示） */
+    getPartCenterById(id) {
+        const n = this._mcbNodes && this._mcbNodes[id];
+        if (!n) return null;
+        const abs = this.group.getAbsolutePosition();
+        return { x: abs.x + n.group.x(), y: abs.y + n.midY };
+    }
+    /** 某标签中一个已脱扣（TRIP 位）开关的中心，供演示指示 */
+    getTaggedPartCenter(tag) {
+        const ids = this.getTaggedIds(tag);
+        const id = ids.find(k => !this._mcbState[k] && this._mcbTrip[k]) || ids[0];
+        return id ? this.getPartCenterById(id) : null;
+    }
+    /** 某铭牌标签对应的开关是否全部合闸（含组合起动屏与负载屏） */
+    allTaggedClosed(tag) {
+        const ids = Object.keys(this._mcbState).filter(id => this._mcbTags(id).some(t => t.text === tag));
+        return ids.length > 0 && ids.every(id => !!this._mcbState[id]);
+    }
+    /** 整组复位并合闸某铭牌标签的开关（TRIP 位 → 先复位 OFF → 再推到 ON），返回操作路数 */
+    resetTagged(tag) {
+        let k = 0;
+        Object.keys(this._mcbState).forEach(id => {
+            if (!this._mcbTags(id).some(t => t.text === tag)) return;
+            this._mcbTrip[id] = false;          // 先复位到 OFF 位
+            this._mcbState[id] = true;          // 再推到 ON 位
+            k++;
+        });
+        if (!this._alarms.ins) this._alarms.trip = false;
+        this._refresh();
+        return k;
+    }
+
     /** 报警条件查询 */
     getAlarm(key) { return !!(this._alarms && this._alarms[key]); }
     /** 自动模式是否被阻塞（汇流排短路） */
@@ -1211,6 +1345,43 @@ export class LvSwitchPanel extends BaseComponent {
     }
 
     /** 电站运行模式由并车屏“模式选择”开关决定：半自动(-90°)/手动(0°)/自动(90°) */
+    /** 并车屏选择开关换档（待并机选择 / 模式选择 / 顺序选择）：点击切换一档 */
+    _stepSyncKnob(key) {
+        const p = this._syncPos && this._syncPos[key];
+        if (!p) return;
+        p.i = (p.i + 1) % p.angs.length;
+        if (this._syncKnobs && this._syncKnobs[key]) this._syncKnobs[key].rotation(p.angs[p.i]);
+        this._refresh();
+    }
+
+    /** 设置电站运行模式（供工作流/演示确定性切换）：'HAND' / 'SEMI-AUTO' / 'AUTO' */
+    setPlantMode(mode) {
+        const ang = mode === 'AUTO' ? 90 : (mode === 'SEMI-AUTO' ? -90 : 0);
+        const p = this._syncPos && this._syncPos.mode;
+        if (!p) return;
+        const i = p.angs.indexOf(ang);
+        if (i >= 0) { p.i = i; if (this._syncKnobs && this._syncKnobs.mode) this._syncKnobs.mode.rotation(ang); }
+        this._tip(`电站运行模式：${{ 90: '自动', '-90': '半自动', 0: '手动' }[ang]}`);
+        this._refresh();
+    }
+    /** 读取发电机备用顺序档位：'123' / '231' / '312' */
+    getSeqOrder() {
+        const p = this._syncPos && this._syncPos.seq;
+        if (!p) return '123';
+        const ang = p.angs[p.i];
+        return ang === 0 ? '231' : (ang === 90 ? '312' : '123');
+    }
+    /** 设置发电机备用顺序：'123' / '231' / '312' */
+    setSeqOrder(seq) {
+        const ang = seq === '231' ? 0 : (seq === '312' ? 90 : -90);
+        const p = this._syncPos && this._syncPos.seq;
+        if (!p) return;
+        const i = p.angs.indexOf(ang);
+        if (i >= 0) { p.i = i; if (this._syncKnobs && this._syncKnobs.seq) this._syncKnobs.seq.rotation(ang); }
+        this._tip(`发电机备用顺序：${seq}`);
+        this._refresh();
+    }
+
     _plantModeOf() {
         const p = this._syncPos && this._syncPos.mode;
         const a = p ? p.angs[p.i] : 0;
@@ -1313,14 +1484,15 @@ export class LvSwitchPanel extends BaseComponent {
         if (n === 0 && spare) { this._autoFlow = { stage: 'start', t: 3, target: spare, closeT: 5 }; return; }
 
         // 在网机组功率 > 750kW（额定 75%）→ 自动并车（合闸延时 10s）
-        if (n > 0 && spare && online.some(id => (this._genP[id] || 0) > 750)) {
+        const needMore = online.some(id => ((this._genP[id] || 0) + (this._hlReqKw || 0) / n) > 750);
+        if (n > 0 && spare && needMore) {
             this._autoFlow = { stage: 'start', t: 3, target: spare, closeT: 10 };
             return;
         }
 
         // 电网总功率 < 350kW（单机额定 35%）且在线 ≥2 → 自动解列优先级最低的机组
         if (load < 350 && n >= 2) {
-            const target = order.slice().reverse().find(id => online.includes(id));
+            const target = order.slice().reverse().find(id => online.includes(id) && this._genMode[id] !== 'local');
             if (target && !this._genSplit[target] && !this._splitWaitId && !this._splitStopping) {
                 this._genSplit[target] = { phase: 'transfer', t: 0 };
                 this._splitWaitId = target;
@@ -1457,6 +1629,12 @@ export class LvSwitchPanel extends BaseComponent {
         });
         if (cbTripped) this._alarms.trip = false;
         this._enforceShunt();          // 应急切断：分励脱扣器带电 → 相关开关强制脱扣
+        // 岸电开关失压保护：合闸但下端失电（岸电箱未合闸 / 相序开关在 OFF 位）→ 自动跳闸
+        if (this._mcbState['ld-loadR-4-1'] && !this._shoreState) {
+            this._mcbState['ld-loadR-4-1'] = false;
+            this._mcbTrip['ld-loadR-4-1'] = true;
+            this._tip('岸电开关失压保护：下端失电，岸电开关自动跳闸');
+        }
         // 汇流排短路：自动模式下只报警不处理 → 模式显示 BLOCKED；
         // 必须切回“手动”且排除短路故障，才能恢复自动模式
         if (this._alarms.short && this._plantModeOf() === 'AUTO') this._autoBlocked = true;
@@ -1546,6 +1724,7 @@ export class LvSwitchPanel extends BaseComponent {
         if (S['ld-loadL-4-0']) load += 400;                        // 测试负载1（400kW）
         if (S['ld-loadL-4-1']) load += 600;                        // 测试负载2（600kW）
         if (S['ld-loadR-4-0']) load += 80;                         // 应急配电板：固定 80kW
+        load += (this._extraLoad || 0);                            // 重载问询投入的重载（如侧推器 500kW）
         this._busLoad = load;
 
         // 2) 机组故障 → 主开关故障跳闸（点亮“故障复位”灯，待复位）
