@@ -1,18 +1,36 @@
+/**
+ * DMMController 数字万用表控制器组件。
+ *
+ * 作用：这是一个用于仿真平台中的数字多功能测量控制器，主要负责接收外部开关状态并在不同功能模式下计算电流、电压、电阻、二极管、电容和电感等参数。
+ * 它通过读取系统中的电压/端口信息，将不同测量模式下的数值格式化后显示在 LCD 面板中，适合用于教学演示和仪表联动调试。
+ *
+ * 设计特点：
+ * 1. 通过 switchId 关联外部智能开关，按功能切换 DCA/DCV/R/Diode/C/L 等模式；
+ * 2. 采用自动量程逻辑控制开关位置以模拟真实数字表的选档行为；
+ * 3. 以 LCD 文本方式展示当前量程和测量值，增强控制与可视化反馈；
+ * 4. 对电容和电感涉及的充放电过程做了状态机式处理，便于教学说明动态测量过程。
+ */
 import { BaseComponent } from './BaseComponent.js';
 
 export class DMMController extends BaseComponent {
     constructor(config, sys) {
+        // 调用父类构造函数，初始化组件基础能力和系统对象引用。
         super(config, sys);
+        // 初始化 Konva 的静态和动态图层，后续界面元素会分别挂到不同分组中。
         this._initGroups();
 
+        // 设置组件宽高，默认尺寸为 360×200，并允许外部配置覆盖。
         this.width  = config.width  || 360;
         this.height = config.height || 200;
+        // 组件类型和缓存策略用于在仿真系统中识别和复用该图形。
         this.type = 'dmm_controller';
         this.cache = 'fixed';
 
+        // 关联的智能开关 ID 用于从系统对象中拿到对应的开关组件，实际控制功能切换逻辑。
         this.switchId = config.switchId || 'smart_switch';
         this.switchRef = null;
 
+        // 直流电流档位的分流电阻和名称定义，用于换档时计算对应电流。
         this._shuntValues = [4, 0.4, 0.04];
         this._rangeNames = ['50mA', '500mA', '5A'];
         this._capMeasuring = false;
@@ -30,9 +48,11 @@ export class DMMController extends BaseComponent {
         this._rangeNamesR = ['200Ω', '2000Ω', '20kΩ', '200kΩ'];
         this._autoRangeCooldown = 0.5;
 
+        // 画出主体面板和 LCD 显示区，随后连接各个端口建立电气节点。
         this._drawBody();
         this._drawLCD();
 
+        // 端口均位于组件左侧，并命名为 Vin+、Vin-、A、B，便于接线和读取电压。
         this.addPort(0, 36, 'vin_p', 'wire', 'p');
         this.addPort(0, 86, 'vin_n', 'wire');
         this.addPort(0, 140, 'a', 'wire','p');
@@ -40,6 +60,7 @@ export class DMMController extends BaseComponent {
     }
 
     _drawBody() {
+        // 面板主体绘制仪表最外层外壳，并在顶部放置功能标题，模拟现实万用表外观。
         const W = this.width, H = this.height;
 
         this._staticGroup.add(new Konva.Rect({
@@ -67,6 +88,7 @@ export class DMMController extends BaseComponent {
     }
 
     _drawLCD() {
+        // LCD 区域因为会动态更新数值，因此由静态背景和动态文本节点共同构成。
         const W = this.width, H = this.height;
         const lcdX = 18, lcdW = W - 36, lcdH = 150, lcdY = 40;
 
@@ -98,6 +120,7 @@ export class DMMController extends BaseComponent {
     }
 
     _getSwitch() {
+        // 通过缓存的 switchRef 获取关联开关实例，避免每帧反复查找组件对象。
         if (!this.switchRef) {
             this.switchRef = this.sys.comps[this.switchId];
         }
@@ -105,6 +128,7 @@ export class DMMController extends BaseComponent {
     }
 
     _formatCapValue(f) {
+        // 电容显示采用工程单位格式，确保 1F、mF、μF、nF、pF 等值都能按真实仪表习惯展示。
         if (f >= 1) return f.toFixed(3) + ' F';
         if (f >= 1e-3) return (f * 1e3).toFixed(2) + ' mF';
         if (f >= 1e-6) return (f * 1e6).toFixed(1) + ' \u03BCF';
@@ -113,6 +137,7 @@ export class DMMController extends BaseComponent {
     }
 
     _formatIndValue(f) {
+        // 电感量值也遵循工程单位格式，显示为 H、mH、μH、nH 这几种常见单位。
         if (f >= 1) return f.toFixed(3) + ' H';
         if (f >= 1e-3) return (f * 1e3).toFixed(2) + ' mH';
         if (f >= 1e-6) return (f * 1e6).toFixed(1) + ' \u03BCH';
@@ -120,6 +145,7 @@ export class DMMController extends BaseComponent {
     }
 
     _autoRange(voltage, pos) {
+        // 自动量程按阈值逻辑切换档位：电压过高时升档，过低时降档，模拟真实万用表的量程切换行为。
         if (pos === 1 && voltage > 0.18) {
             this._getSwitch()?.setPosition(2);
         } else if (pos === 2 && voltage > 0.18) {
@@ -136,6 +162,7 @@ export class DMMController extends BaseComponent {
     }
 
     tick(dt) {
+        // 每个仿真步进都会读取关联开关的功能模式与端口电压，并据此更新 LCD 显示值。
         const sw = this._getSwitch();
         if (!sw) return;
 
@@ -345,12 +372,14 @@ export class DMMController extends BaseComponent {
     }
 
     getConfigFields() {
+        // 配置面板只暴露关联开关 ID，允许在运行前或调试时切换开关实例。
         return [
             { label: '关联开关 ID', key: 'switchId', type: 'text' },
         ];
     }
 
     onConfigUpdate(cfg) {
+        // 配置更新时仅重置关联开关引用，下一次读取时会重新绑定最新的开关组件。
         if (cfg.switchId !== undefined) {
             this.switchId = cfg.switchId;
             this.switchRef = null;

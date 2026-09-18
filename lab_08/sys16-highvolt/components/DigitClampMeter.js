@@ -1,15 +1,32 @@
+/**
+ * DigitClampMeter 数字钳形电流表组件。
+ *
+ * 作用：这是一个带有钳口、旋钮、LCD 显示和参数控制的数显钳形电流表，用于仿真平台中对交流/直流电流的测量演示。
+ * 它由左侧仪表表壳和右侧原理结构两部分组成：左侧负责视觉和交互，右侧解释了电流传感、整流、调理、ADC 和 MCU 处理链。
+ * 这种组件既适合教学展示，也能在中高压电力系统仿真中体现钳形表的测量原理和数字显示逻辑。
+ *
+ * 设计特点：
+ * 1. 钳口可开合，能够模拟测量前后的实际姿态变化；
+ * 2. 量程旋钮可切换 5 A / 50 A / 100 A / 250 A 等档位；
+ * 3. LCD 显示当前有效值并支持 HOLD / Hz 切换；
+ * 4. 动态磁通箭头、钳口动画和参数更新用于增强交互和教学效果。
+ */
 import { BaseComponent } from './BaseComponent.js';
 
 export class DigitClampMeter extends BaseComponent {
     constructor(config, sys) {
+        // 调用父类构造函数，获取基础组件能力和系统引用。
         super(config, sys);
 
+        // 仪表最小尺寸限定为 300×360，并允许调用方通过配置覆盖宽高。
         this.width  = Math.max(300, config.width  || 380);
         this.height = Math.max(360, config.height || 480);
 
+        // 组件类型和缓存策略用于在整个仿真系统中识别和复用该图形。
         this.type    = 'digitclamp';
         this.cache   = 'fixed';
 
+        // 按固定顺序初始化几何、参数和可视元素，形成标准组件生命周期。
         this._initGroups();
         this._recalcGeometry();
         this._initParameters(config);
@@ -32,6 +49,7 @@ export class DigitClampMeter extends BaseComponent {
     // ═══════════════════════════════════════════════════════
 
     _recalcGeometry() {
+        // 重新计算整个钳形表的几何布局，确保内部元素比例随组件尺寸变化而保持协调。
         const W = this.width, H = this.height;
         this._divX = W * 0.50;
         this._frame = { x: 2, y: 2, w: W - 4, h: H - 4, rx: 10 };
@@ -130,6 +148,7 @@ export class DigitClampMeter extends BaseComponent {
     // ═══════════════════════════════════════════════════════
 
     _initParameters(config) {
+        // 初始化表头参数，包括量程、当前测量值、钳口开合状态和响应速度。
         this._range     = config.range    !== undefined ? parseFloat(config.range)   : 5;
         this._targetI   = config.current  !== undefined ? parseFloat(config.current) : 0;
         this._currentI  = this._targetI;
@@ -154,6 +173,7 @@ export class DigitClampMeter extends BaseComponent {
     // ═══════════════════════════════════════════════════════
 
     _init() {
+        // 组件初始化时同步完成静态绘制、动态节点创建和交互绑定，形成完整显示对象。
         this._drawStaticParts();
         this._createDynamicNodes();
         this._bindInteraction();
@@ -1123,6 +1143,7 @@ export class DigitClampMeter extends BaseComponent {
     // ═══════════════════════════════════════════════════════
 
     tick(dt) {
+        // 仿真循环中用指数平滑更新当前被测值，避免数值瞬时跳变导致显示出现抖动。
         const tau = Math.max(0.05, this._rampTime);
         const alpha = 1 - Math.exp(-dt / tau);
         this._currentI += (this._targetI - this._currentI) * alpha;
@@ -1144,12 +1165,15 @@ export class DigitClampMeter extends BaseComponent {
     // 公开 API
     // ═══════════════════════════════════════════════════════
 
+    // 对外公开的设置和更新接口，方便外部控制系统按统一方式设置参数。
     setCurrent(i) {
+        // 只有处于测量状态时才允许更新目标电流，否则锁定为 0 以体现未开启测量。
         if (!this._measuring) { this._targetI = 0; return; }
         this._targetI = Math.max(0, Math.min(this._range * 1.2, parseFloat(i) || 0));
     }
     setJawOpen(open) { this._jawOpen = !!open; }
     setRange(r) {
+        // 量程切换仅接受 5 / 50 / 100 / 250 这几个常见档位，避免非法参数破坏仪表逻辑。
         const valid = [5, 50, 100, 250];
         if (valid.includes(parseFloat(r))) {
             this._range = parseFloat(r);
@@ -1160,6 +1184,7 @@ export class DigitClampMeter extends BaseComponent {
     getCurrent() { return this._currentI; }
 
     update(state) {
+        // 允许接受单值数字或者对象配置，兼容外部控制逻辑的不同调用方式。
         if (typeof state === 'object' && state !== null) {
             if (state.current !== undefined) this.setCurrent(state.current);
             if (state.jawOpen !== undefined) this.setJawOpen(state.jawOpen);

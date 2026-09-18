@@ -1,21 +1,40 @@
+/**
+ * DiagramThreePhaseACB 三相空气断路器示意组件。
+ *
+ * 作用：这是一个用于仿真平台中的三相空气断路器（ACB）图形元件，承担断路器的开合、过流脱扣和状态显示等教学功能。
+ * 它在三相供电系统中，用于模拟断路器的通断动作，并在过流超过设定值时触发跳闸状态，
+ * 同时保留手动操作和参数配置功能，适合做电力系统保护教学演示。
+ *
+ * 设计特点：
+ * 1. 三相并列结构，分别对应 L1/L2/L3 与 T1/T2/T3；
+ * 2. 通过刀片角度动画模拟断路器机械闭合/分断；
+ * 3. 采用 RMS 电流计算并在超过保护阈值时执行 trip；
+ * 4. 支持配置额定值、动作时间和初始状态，便于仿真实验扩展。
+ */
 import { BaseComponent } from './BaseComponent.js';
 
 export class DiagramThreePhaseACB extends BaseComponent {
     constructor(config, sys) {
+        // 调用父类构造函数，初始化基础组件能力和系统对象引用。
         super(config, sys);
 
+        // 组件尺寸按至少 120×90 处理，允许调用时通过配置调整外观。
         this.width  = Math.max(120, config.width  || 150);
         this.height = Math.max(90,  config.height || 120);
 
+        // 组件类型声明为 ACB，并标记为三相空气断路器类型。
         this.type    = 'ACB';
         this.special = '3P-ACB';
+        // 采用固定缓存，以减少整块图形频繁重绘。
         this.cache   = 'fixed';
 
+        // 按顺序初始化图层和组件状态。
         this._initGroups();
         this._recalcGeometry();
         this._initParameters(config);
         this._init();
 
+        // 配置对象用于保存该断路器的关键参数和当前状态。
         this.config = {
             id: this.id,
             label:        this.label,
@@ -27,6 +46,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
             tripCoilR:    this._tripCoilR,
         };
 
+        // 端口按三相输入和输出分布，分别连接 L1/L2/L3 与 T1/T2/T3。
         this.addPort(this._portL[0].x, this._portL[0].y, 'l1', 'wire');
         this.addPort(this._portL[1].x, this._portL[1].y, 'l2', 'wire');
         this.addPort(this._portL[2].x, this._portL[2].y, 'l3', 'wire');
@@ -38,6 +58,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _recalcGeometry() {
+        // 计算断路器的基准几何参数，包括边框、每相位置和触点分布。
         const W = this.width, H = this.height;
 
         this._frame = { x: 2, y: 2, w: W - 4, h: H - 4, rx: 4 };
@@ -77,6 +98,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _initParameters(config) {
+        // 初始化断路器参数，包括额定电压、电流、脱扣倍数和默认状态。
         this.ratedVoltage = config.ratedVoltage !== undefined ? config.ratedVoltage : 380;
         this.ratedCurrent = config.ratedCurrent !== undefined ? config.ratedCurrent : 100;
         this.tripCurrent  = config.tripCurrent  !== undefined ? config.tripCurrent  : 10;
@@ -107,18 +129,21 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _init() {
+        // 初始化断路器的静态图形、动态刀片和交互行为。
         this._drawStaticParts();
         this._createDynamicNodes();
         this._bindInteraction();
     }
 
     _drawStaticParts() {
+        // 断路器的静态视觉由外框、三相示意和脱扣线圈共同构成。
         this._drawFrame();
         this._drawSchematicStatic();
         this._drawTripCoil();
     }
 
     _drawFrame() {
+        // 外框提供清晰的断路器边界，方便整体识别和放置。
         const f = this._frame;
         this._staticGroup.add(new Konva.Rect({
             x: f.x, y: f.y, width: f.w, height: f.h,
@@ -130,6 +155,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _drawSchematicStatic() {
+        // 每一相都绘制极柱、静触点和端子标签，表示三相电源的通断关系。
         this._poleXs.forEach((px, i) => {
             const poleName = ['L1', 'L2', 'L3'][i];
             const outName  = ['T1', 'T2', 'T3'][i];
@@ -165,6 +191,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _drawXSymbolOnContact(px, y, color) {
+        // 在静触点附近加上 X 形符号，表示该位置为断路器的触点区。
         const hs = this._xSize * 0.5;
         this._staticGroup.add(new Konva.Line({
             points: [px - hs, y - hs, px + hs, y + hs],
@@ -179,6 +206,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _drawTripCoil() {
+        // 脱扣线圈的视觉描绘当前被注释掉，说明当前版本中该部分仍保留为扩展接口。
         // const W = this.width, H = this.height;
         // const coilCX = this._portFla.x - 16;
         // const coilTop = this._portFla.y + 5;
@@ -212,10 +240,12 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _createDynamicNodes() {
+        // 动态节点用于更新刀片旋转和接触通断状态。
         this._createBladeGroups();
     }
 
     _createBladeGroups() {
+        // 每相生成一个独立刀片组，分别控制各相断路器触头摆动情况。
         this._bladeGroups = this._poleXs.map((px, i) => {
             const color = ['#e03030', '#20a030', '#2050e0'][i];
             const g = new Konva.Group({
@@ -244,6 +274,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
         });
 
         this._contactGlows = this._poleXs.map((px, i) => {
+            // 接触发光效果在闭合状态下可见，反映三相断路器已接通。
             const glows = [];
             [this._contactInY, this._contactOutY].forEach(cy => {
                 const g = new Konva.Circle({
@@ -261,6 +292,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _updateDynamic() {
+        // 每帧同步刀片旋转角度，并根据状态决定是否显示接触发光。
         this._bladeGroups.forEach(g => g.rotation(this._curBladeAng));
 
         const closed = !this._animating && this._state === 'on';
@@ -270,9 +302,9 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _bindInteraction() {
+        // 为触头摆动带绑定点击事件，允许用户直接切换开合状态。
         const W = this.width;
         const tR = this._contactR;
-        // 触头（刀片摆动带）：仅点击此区域执行合/分闸
         const bandY = this._contactInY - tR;
         const bandH = (this._contactOutY - this._contactInY) + tR * 2;
 
@@ -285,6 +317,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
         });
 
         hitArea.on('click tap', (e) => {
+            // 点击触发时，根据当前状态进行合闸、分闸或复位操作。
             if (this._animating) return;
             if (e.evt?.button !== 0) return;
             const stage = this.group.getStage();
@@ -313,6 +346,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     tick(dt) {
+        // 仿真循环中依次更新动画、RMS 电流和过流跳闸判断。
         this._tickAnimation(dt);
         this._updateRMS();
         this._checkOvercurrentTrip();
@@ -326,6 +360,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _tickAnimation(dt) {
+        // 动画按照时间进度进行插值，形成平滑开合动作。
         if (!this._animating) return;
 
         this._animT += dt / this._animDur;
@@ -341,6 +376,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _updateRMS() {
+        // 通过滑动窗口计算各相电流的 RMS，用于后续过流判断。
         const pc = this.phaseCurrents;
         if (!pc) return;
         const inst = [pc.l1 || 0, pc.l2 || 0, pc.l3 || 0];
@@ -360,6 +396,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _checkOvercurrentTrip() {
+        // 如果断路器处于合闸状态且任一相 RMS 电流超过阈值，则触发 trip。
         if (this._state !== 'on') return;
         if (this._iBufCount < 40) return;
         const threshold = this.tripCurrent * this.ratedCurrent;
@@ -372,6 +409,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _startAnim(toState) {
+        // 统一启动动画逻辑，记录起始角度、目标角度和状态切换。
         this._animFromAng  = this._curBladeAng;
         this._animToAng    = this._bladeAngles[toState];
         this._animT        = 0;
@@ -381,23 +419,27 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     _resetToOff() {
+        // 从 trip 状态恢复到 off 状态，通常用于复位操作。
         this._animDur = 0.15;
         this._startAnim('off');
     }
 
     close() {
+        // 只有在 off 状态才允许合闸，避免重复或非法动作。
         if (this._animating || this._state !== 'off') return;
         this._animDur = this.config.animDur || 0.10;
         this._startAnim('on');
     }
 
     open() {
+        // 只有在 on 状态才允许分闸，模拟正常开闸动作。
         if (this._animating || this._state !== 'on') return;
         this._animDur = this.config.animDur || 0.10;
         this._startAnim('off');
     }
 
     trip() {
+        // trip 直接进入跳闸状态，动作更快并区别于普通分闸。
         if (this._state === 'trip') return;
         this._animDur = 0.06;
         this._startAnim('trip');
@@ -410,6 +452,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     getOpsCount()  { return this.opsCount; }
 
     update(state) {
+        // 外部控制统一走 update()，根据输入值调用 close/open/trip。
         const s = String(state).toLowerCase();
         if (s === 'on'   || s === '1') this.close();
         if (s === 'off'  || s === '0') this.open();
@@ -417,6 +460,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     getConfigFields() {
+        // 返回配置面板中的断路器参数字段，供编辑器动态展示。
         return [
             { label: '位号/名称',          key: 'label',        type: 'text'   },
             { label: '额定电压 (V)',        key: 'ratedVoltage', type: 'number' },
@@ -429,6 +473,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     onConfigUpdate(cfg) {
+        // 对配置项做安全更新，并在必要时重建图形和状态.
         if (cfg.label        !== undefined) this.label        = cfg.label;
         if (cfg.ratedVoltage !== undefined) this.ratedVoltage = parseFloat(cfg.ratedVoltage);
         if (cfg.ratedCurrent !== undefined) this.ratedCurrent = parseFloat(cfg.ratedCurrent);
@@ -453,6 +498,7 @@ export class DiagramThreePhaseACB extends BaseComponent {
     }
 
     destroy() {
+        // 调用父类析构逻辑，保持生命周期一致性。
         super.destroy?.();
     }
 }

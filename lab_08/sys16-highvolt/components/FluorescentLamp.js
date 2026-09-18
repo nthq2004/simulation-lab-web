@@ -1,25 +1,43 @@
+/**
+ * FluorescentLamp 荧光灯组件。
+ *
+ * 作用：这是一个模拟荧光灯的视觉和状态组件，主要用于演示灯丝预热、击穿启动、正常发光和熄灭恢复等过程。
+ * 它通过检测两端间的电压来决定当前是否达到起辉条件，并据此更新灯管发光强度和状态标签，适合在照明电路教学中展示启动特性。
+ *
+ * 设计特点：
+ * 1. 左右两端灯丝分别模拟热阴极发热过程；
+ * 2. 灯管中间发光强度跟随电压和状态变化；
+ * 3. 状态分为 idle、preheat、on 等，能够表现灯管的起辉和熄灭过程；
+ * 4. 支持配置灯丝阻值和导通状态参数，便于实验调参。
+ */
 import { BaseComponent } from './BaseComponent.js';
 
 export class FluorescentLamp extends BaseComponent {
     constructor(config, sys) {
+        // 调用父类构造函数，完成基础组件和系统引用的初始化。
         super(config, sys);
 
+        // 设置灯管的标准尺寸，固定宽高后方便视觉布局和端口定位。
         this.width = 473;
         this.height = 79;
 
+        // 组件类型和缓存标记用于系统识别和减少组件重绘成本。
         this.type = 'fluorescent_lamp';
         this.cache = 'fixed';
 
+        // 按常规组件顺序依次初始化几何、参数和渲染节点。
         this._initGroups();
         this._recalcGeometry();
         this._initParameters(config);
         this._init();
 
+        // 配置对象中记录关键运行参数，便于后续编辑器和状态同步使用。
         this.config = {
             id: this.id,
             filamentR: this.filamentR,
             gapOnR: this.gapOnR,
         };
+        // 灯管两端的四个端口分别对应左右两侧的两个灯丝端点，支持真实接线和电压测量。
         const s = this.scale || 1;
         this.addPort(-this._W / 2 - 10 * s, -16 * s, 'left_a', 'wire');
         this.addPort(-this._W / 2 - 10 * s, 16 * s, 'left_b', 'wire');
@@ -28,6 +46,7 @@ export class FluorescentLamp extends BaseComponent {
     }
 
     _recalcGeometry() {
+        // 用当前缩放比例重算灯管主体尺寸、灯管宽度和端帽宽度，保证整体比例稳定。
         const s = this.scale || 1;
         this._W = this.width * s;
         this._H = this.height * s;
@@ -37,6 +56,7 @@ export class FluorescentLamp extends BaseComponent {
     }
 
     _initParameters(config) {
+        // 灯丝电阻和通态电阻决定灯管导通特性，而状态参数用于维护当前发光阶段。
         this.filamentR = config.filamentR || 200;
         this.gapOnR = config.gapOnR || 220;
         this._state = 'idle';
@@ -53,6 +73,7 @@ export class FluorescentLamp extends BaseComponent {
     }
 
     _init() {
+        // 初始化时立即绘制静态结构和动态发光节点，方便打开展示和后续状态更新。
         this._drawStaticParts();
         this._createDynamicNodes();
     }
@@ -149,6 +170,7 @@ export class FluorescentLamp extends BaseComponent {
     }
 
     tick(dt) {
+        // 读取灯管两端电压，作为判断启动、发光和熄灭的核心依据。
         const gapV = this.sys.getVoltageBetween(
             `${this.id}_wire_left_b`, `${this.id}_wire_right_b`
         ) || 0;
@@ -158,6 +180,7 @@ export class FluorescentLamp extends BaseComponent {
         const effectiveGapV = this._gapPeakV / Math.SQRT2;
 
         if (this._faultAged) {
+            // 老化故障时直接置为待机，避免灯管继续正常发光。
             this._state = 'idle';
             this._tubeGlow = 0;
         }
@@ -200,6 +223,7 @@ export class FluorescentLamp extends BaseComponent {
     }
 
     _updateVisuals() {
+        // 根据状态同步灯管和灯丝的发光强度、状态文字和颜色，形成真实的发光动画。
         if (this._tubeGlow > 0.1) {
             const t = Math.min(1, this._tubeGlow);
             const r = Math.min(255, 40 + Math.round(215 * t));
@@ -238,6 +262,7 @@ export class FluorescentLamp extends BaseComponent {
     }
 
     getConfigFields() {
+        // 配置面板只暴露关键参数，便于维护灯丝和导通电阻等特性值。
         return [
             { label: '器件名称', key: 'id', type: 'text' },
             { label: '灯丝电阻 (\u03a9)', key: 'filamentR', type: 'number' },
@@ -246,6 +271,7 @@ export class FluorescentLamp extends BaseComponent {
     }
 
     onConfigUpdate(cfg) {
+        // 配置更新时同步到属性并重新刷显示，确保用户参数修改后的状态和视觉一致。
         if (cfg.id !== undefined) this.id = cfg.id;
         if (cfg.filamentR !== undefined) this.filamentR = cfg.filamentR;
         if (cfg.gapOnR !== undefined) this.gapOnR = cfg.gapOnR;

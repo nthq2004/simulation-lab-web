@@ -1,31 +1,50 @@
+/**
+ * JSZ3 时间继电器组件。
+ *
+ * 作用：这是一个典型的“延时型时间继电器”图形化仿真元件，用于展示继电器在线圈通电后经过设定延时再切换输出接点的过程。
+ * 在教学场景中，它常用于说明时间控制、电磁吸合、延时断开/延时闭合等基础控制原理。
+ *
+ * 主要特性：
+ * 1. 组件左侧为延时设定盘和状态显示区，支持拖动/滚轮调节延时时间；
+ * 2. 组件右侧为接线端子圈和继电器触点图示，包含常开、常闭和公共端；
+ * 3. 通过电压检测与状态机实现“待机 → 延时中 → 输出”三种运行状态；
+ * 4. 提供可配置的延时时间和线圈电阻参数，便于用于电气控制教学和演示。
+ */
 import { BaseComponent } from './BaseComponent.js';
 
 export class JSZ3 extends BaseComponent {
     constructor(config, sys) {
+        // 先调用父类构造逻辑，建立组件的基础系统引用和公共状态。
         super(config, sys);
 
+        // 根据配置或默认值初始化组件的外观尺寸，确保图形在不同场景中足够清晰。
         this.width = Math.max(380, config.width || 420);
         this.height = Math.max(240, config.height || 280);
 
+        // 组件类型与特殊标识用于系统识别和后续的控制逻辑判断。
         this.type = 'relay';
         this.special = 'time';
         this.cache = 'fixed';
 
+        // 按组件生命周期依次初始化图层、几何尺寸、参数、动态节点和交互行为。
         this._initGroups();
         this._recalcGeometry();
         this._initParameters(config);
         this._init();
 
+        // 保存配置快照，便于后续界面设置和状态同步。
         this.config = {
             id: this.id,
             delayTime: this.delayTime,
             coilResistance: this._coilResistance,
         };
 
+        // 读取端子圆盘的中心与半径，准备为每个端子创建对应端口。
         const cr = this._termCircleR;
         const cx = this._termCircleCx;
         const cy = this._termCircleCy;
 
+        // 根据预定义端子角度逐个生成端口，连接位置与接点编号一一对应。
         this._termDefs.forEach(([n, portName, ang]) => {
             const rad = ang * Math.PI / 180;
             const px = cx + cr * Math.cos(rad);
@@ -35,10 +54,12 @@ export class JSZ3 extends BaseComponent {
     }
 
     _recalcGeometry() {
+        // 组件整体划分为两大区域：左侧仪表区和右侧端子区。
         const W = this.width, H = this.height;
         this._divX = W * 0.48;
         this._frame = { x: 2, y: 2, w: W - 4, h: H - 4, rx: 8 };
 
+        // 左侧设置盘的几何中心与半径，保证刻度和指针可落在适当位置。
         const lCx = this._divX / 2;
         const lCy = H * 0.49;
         const lMaxR = Math.max(lCx * 0.9, lCy * 0.55, (H - lCy) * 0.55);
@@ -46,12 +67,15 @@ export class JSZ3 extends BaseComponent {
         this._dialCy = lCy;
         this._dialR = Math.max(60, lMaxR);
 
+        // 刻度盘起始角度和扫描范围形成 0~30s 的视觉展示区间。
         this._dialStartAngle = 135;
         this._dialSweep = 270;
 
+        // 主刻度和副刻度长度用于显示时间刻度与指针定位。
         this._majorTickLen = 12;
         this._minorTickLen = 6;
 
+        // 右侧端子区由圆环和端子编号组成，便于识别继电器的接线关系。
         const rLeft = this._divX + 15;
         const rRight = W - 15;
         const rWidth = rRight - rLeft;
@@ -59,6 +83,7 @@ export class JSZ3 extends BaseComponent {
         this._termCircleCy = H / 2;
         this._termCircleR = Math.min(rWidth * 0.44, H * 0.40, 110);
 
+        // 每个端子的编号和角度位置固定，按常见继电器接点布局组织。
         this._termDefs = [
             [1, 'com_b', 112.5],
             [2, 'l', 157.5],
@@ -70,6 +95,7 @@ export class JSZ3 extends BaseComponent {
             [8, 'com_a', 67.5],
         ];
 
+        // 电源指示灯与输出指示灯位于下方，便于展示动作状态。
         this._ledPowerX = lCx - 30;
         this._ledOutputX = lCx + 30;
         this._ledY = H - 28;
@@ -77,9 +103,12 @@ export class JSZ3 extends BaseComponent {
     }
 
     _initParameters(config) {
+        // 延时时间以秒为单位，限制在 0~30s 范围内，避免参数越界。
         this.delayTime = config.delayTime !== undefined ? parseFloat(config.delayTime) : 10;
         this.delayTime = Math.max(0, Math.min(30, this.delayTime));
+        // 线圈电阻决定电磁吸合的能耗和状态判定灵敏度。
         this._coilResistance = config.coilResistance || 2000;
+        // 组件状态机分别表示待机、延时中、输出三种阶段。
         this._state = 'idle';
         this._elapsed = 0;
         this._vAvg = 0;
@@ -90,12 +119,14 @@ export class JSZ3 extends BaseComponent {
     }
 
     _init() {
+        // 组件的静态图形、动态节点和可交互区域分别初始化，以保证绘制分层清晰。
         this._drawStaticParts();
         this._createDynamicNodes();
         this._bindInteraction();
     }
 
     _drawStaticParts() {
+        // 框架和背景是通用的继电器外壳，给整个面板提供一个稳定的视觉容器。
         const f = this._frame;
         this._staticGroup.add(new Konva.Rect({
             x: f.x, y: f.y, width: f.w, height: f.h,
@@ -113,11 +144,13 @@ export class JSZ3 extends BaseComponent {
             stroke: '#b0a898', strokeWidth: 1.5, dash: [5, 3],
         }));
 
+        // 左侧刻度盘与右侧端子盘分别绘制，便于时间设定与接点关系同时展示。
         this._drawDialStatic();
         this._drawTerminalCircle();
     }
 
     _drawDialStatic() {
+        // 刻度盘的绘制核心在于生成一段弧形轨迹和从外圈到内圈的刻度线。
         const cx = this._dialCx, cy = this._dialCy, R = this._dialR;
         const startA = this._dialStartAngle;
         const sweep = this._dialSweep;
@@ -147,6 +180,7 @@ export class JSZ3 extends BaseComponent {
             lineCap: 'round', listening: false,
         }));
 
+        // 从 0 到 30 秒按照 5 秒一组绘制主刻度和辅助刻度，说明延时设定范围。
         for (let s = 0; s <= 30; s++) {
             const frac = s / 30;
             const ang = (startA + frac * this._dialSweep) * Math.PI / 180;
@@ -175,6 +209,7 @@ export class JSZ3 extends BaseComponent {
             }
         }
 
+        // 在刻度盘下方标注“秒”，并说明其设定范围为 0 ~ 30。
         this._staticGroup.add(new Konva.Text({
             x: cx - 8, y: cy + R * 0.55, text: '秒', fontSize: 12,
             fill: '#504030', listening: false,
@@ -206,6 +241,7 @@ export class JSZ3 extends BaseComponent {
     }
 
     _drawTerminalCircle() {
+        // 右侧端子圈是继电器接点关系的抽象承载区，外圈标记端子编号与端子状态。
         const cx = this._termCircleCx, cy = this._termCircleCy, R = this._termCircleR;
 
         this._staticGroup.add(new Konva.Circle({
@@ -214,6 +250,7 @@ export class JSZ3 extends BaseComponent {
             listening: false,
         }));
 
+        // 每个端点按设定角度位置摆放，编号直接对应设备导出端子。
         this._termDefs.forEach(([num, portName, ang]) => {
             const rad = ang * Math.PI / 180;
             const px = cx + R * Math.cos(rad);
@@ -241,11 +278,13 @@ export class JSZ3 extends BaseComponent {
             }));
         });
 
+        // 端子圆圈中还包含线圈符号和接点示意图，用于说明继电器内部逻辑。 
         this._drawCoilSymbol();
         this._drawContactSymbols();
     }
 
     _drawCoilSymbol() {
+        // 线圈符号在下方生成，可视化表示电磁吸合动作与驱动输入的来源。
         const cx = this._termCircleCx, cy = this._termCircleCy, R = this._termCircleR;
         const H = this.height;
 
@@ -264,6 +303,7 @@ export class JSZ3 extends BaseComponent {
         const coilLeft = cx - coilW / 2;
         const coilRight = cx + coilW / 2;
 
+        // 左侧线圈回路由端子连到线圈框架，说明继电器输入端与线圈的连接方式。
         this._staticGroup.add(new Konva.Line({
             points: [x2, y2, x2, bottomY, coilLeft, bottomY],
             stroke: '#605040', strokeWidth: 2, lineJoin: 'round', listening: false,
@@ -281,6 +321,7 @@ export class JSZ3 extends BaseComponent {
             lineCap: 'round', listening: false,
         }));
 
+        // 右侧线圈回路和公共端连接，表明线圈是一个闭合驱动回路。
         this._staticGroup.add(new Konva.Line({
             points: [coilRight, bottomY, x7, bottomY, x7, y7],
             stroke: '#605040', strokeWidth: 2, lineJoin: 'round', listening: false,
@@ -294,6 +335,7 @@ export class JSZ3 extends BaseComponent {
     }
 
     _drawContactSymbols() {
+        // 接点示意图模拟常开与常闭触点的静态位置，便于观察接地/输出状态变化。
         const cx = this._termCircleCx, cy = this._termCircleCy, R = this._termCircleR;
 
         const mkPt = (a, r) => ({
@@ -389,6 +431,7 @@ export class JSZ3 extends BaseComponent {
     }
 
     _genWave(x1, y1, x2, y2, amp, cycles) {
+        // 波形函数专门生成线圈中的正弦样式曲线，增强线圈的视觉识别性。
         const pts = [];
         const dx = x2 - x1;
         const dy = y2 - y1;
@@ -402,6 +445,7 @@ export class JSZ3 extends BaseComponent {
 
 
     _createDynamicNodes() {
+        // 动态节点用于刷新指针、状态指示灯以及继电器接点的实时动作效果。
         this._needle = new Konva.Line({
             points: [0, 0, 0, 0],
             stroke: '#e02020', strokeWidth: 3, lineCap: 'round',
@@ -487,6 +531,7 @@ export class JSZ3 extends BaseComponent {
     }
 
     _updateNeedle() {
+        // 指针角度由延时时间与设定范围比例决定，显示当前定时位置。
         const frac = this.delayTime / 30;
         const ang = (this._dialStartAngle + frac * this._dialSweep) * Math.PI / 180;
         const R = this._dialR;
@@ -503,6 +548,7 @@ export class JSZ3 extends BaseComponent {
     }
 
     _updateLEDs() {
+        // 电源灯根据电压高低亮灭，输出灯根据状态切换颜色，模拟真实继电器动作指示。
         const energized = this._vAvg > this._pickupV;
         const output = this._state === 'output';
 
@@ -524,6 +570,7 @@ export class JSZ3 extends BaseComponent {
     }
 
     _updateDynamic() {
+        // 状态判定和进度显示是时间继电器的核心逻辑，决定是否处于待机、延时或输出阶段。
         const st = this._state;
         const et = this._elapsed;
 
@@ -567,7 +614,8 @@ export class JSZ3 extends BaseComponent {
         this._updateLEDs();
     }
 
-_updateContactVisual() {
+    _updateContactVisual() {
+        // 接点动画在动态状态变化时通过线性插值逐步移动，从而模拟常开/常闭触点切换。
 
     const nc = this._ncContactPos;
     const no = this._noContactPos;
@@ -681,9 +729,10 @@ _updateContactVisual() {
         points.push(x + vx * offset, y + vy * offset);
     }
     this._hookL.points(points);
-}
+    }
 
     _bindInteraction() {
+        // 交互区通过可拖拽的旋钮实现时间调节，支持滚轮和点击增减两种方式。
         const cx = this._dialCx, cy = this._dialCy;
         const knobHit = new Konva.Circle({
             x: cx, y: cy, radius: this._dialR * 0.35,
@@ -740,6 +789,7 @@ _updateContactVisual() {
     }
 
     tick(dt) {
+        // 仿真循环中先读取端口电压，计算平均电压并更新状态机，再刷新 UI 动画。
         if (this.sys && typeof this.sys.getVoltageBetween === 'function') {
             const vInst = Math.abs(this.sys.getVoltageBetween(
                 `${this.id}_wire_l`,
@@ -797,6 +847,7 @@ _updateContactVisual() {
     }
 
     _redrawDynamic() {
+        // 重新绘制动态内容，确保调节后指针、状态和接点同步刷新。
         this._updateNeedle();
         this._updateDynamic();
         if (this.sys && typeof this.sys.requestRedraw === 'function') {
@@ -805,12 +856,14 @@ _updateContactVisual() {
     }
 
     getConfigFields() {
+        // 配置界面只允许编辑延时时间，保持组件参数聚焦于时间继电器的核心能力。
         return [
             { label: '延时时间 (s)', key: 'delayTime', type: 'number', min: 0, max: 30, step: 0.5 },
         ];
     }
 
     onConfigUpdate(cfg) {
+        // 配置更新后立即覆盖延时参数，并同步刷新 UI 和缓存，保证展示与真实状态一致。
         if (cfg.delayTime !== undefined) {
             this.delayTime = Math.max(0, Math.min(30, parseFloat(cfg.delayTime)));
         }

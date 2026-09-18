@@ -1,20 +1,38 @@
+/**
+ * InductionMotor2 三相异步电动机简化版组件。
+ *
+ * 作用：这是一个更紧凑的三相异步电动机图元，用于展示电机定子、转子、端子接线、转速初始化和基础机械行为。
+ * 它保留了异步电机的关键参数和相序、转差率与转矩计算思路，但用更简洁的外观和接口实现教学场景中的快速展示。
+ *
+ * 设计特点：
+ * 1. 采用圆形定子和端子柱布局，适合小型电路面板场景；
+ * 2. 端口按 U/V/W 三相输入和返回线进行布局，便于接在三相系统中；
+ * 3. 提供双击转子设置初始转速功能，便于演示起动过程；
+ * 4. 通过参数和旋转磁场动画模拟电机运行状态，尽量保留教学直观性。
+ */
 import { BaseComponent } from './BaseComponent.js';
 
 export class InductionMotor2 extends BaseComponent {
     constructor(config, sys) {
+        // 调用父类构造函数，完成系统引用、图层容器和公共状态初始化。
         super(config, sys);
 
+        // 该版本使用更紧凑的尺寸来适应较小的仿真面板和显示区域。
         this.width  = Math.max(160, config.width  || 200);
         this.height = Math.max(200, config.height || 260);
 
+        // 电机统一注册为 induction_motor，便于系统按相同类型识别它。
         this.type  = 'induction_motor';
+        // fixed 缓存使定子和端子等静态图层能被复用，减少重绘成本。
         this.cache = 'fixed';
 
+        // 按照标准组件流程依次计算几何、参数和图形节点。
         this._initGroups();
         this._recalcGeometry();
         this._initParameters(config);
         this._init();
 
+        // 配置快照用于编辑器和状态恢复；关键参数与电机特性强相关。
         this.config = {
             id: this.id,
             label:         this.label,
@@ -31,6 +49,7 @@ export class InductionMotor2 extends BaseComponent {
             loadTorque:    this.loadTorque,
         };
 
+        // 六个端口分别表示三相输入与返回端，便于与三相电源和负载网络连接。
         this.addPort(this._tp.u1.x, this._tp.u1.y, 'u1', 'wire', 'p');
         this.addPort(this._tp.v1.x, this._tp.v1.y, 'v1', 'wire', 'p');
         this.addPort(this._tp.w1.x, this._tp.w1.y, 'w1', 'wire', 'p');
@@ -107,6 +126,7 @@ export class InductionMotor2 extends BaseComponent {
     }
 
     _initParameters(config) {
+        // 模型参数决定电机的等效电路、极对数、机械惯量与负载特性，是仿真的核心输入。
         this.label   = config.label || 'M';
         this.function = config.function || '三相异步电动机';
 
@@ -164,6 +184,7 @@ export class InductionMotor2 extends BaseComponent {
     }
 
     _init() {
+        // 初始化时先把静态定子和端子绘制出来，再创建旋转场和转子动态节点。
         this._drawStaticParts();
         this._createDynamicNodes();
     }
@@ -173,6 +194,7 @@ export class InductionMotor2 extends BaseComponent {
     // ═══════════════════════════════════════════
 
     _drawStaticParts() {
+        // 静态图形只在初始化时绘制一次，后续更新通过改变动态节点属性实现动画效果。
         this._drawStatorCore();
         this._drawTerminals();
         this._drawWires();
@@ -265,6 +287,7 @@ export class InductionMotor2 extends BaseComponent {
     // ═══════════════════════════════════════════
 
     _createDynamicNodes() {
+        // 动态节点包括旋转磁场和转子，能够根据电机状态和相序进行实时更新。
         this._createFieldGroup();
         this._createRotorGroup();
     }
@@ -345,6 +368,7 @@ export class InductionMotor2 extends BaseComponent {
     // ═══════════════════════════════════════════
 
     _updateDynamic() {
+        // 电压检测和相序判定是机械状态更新前提，决定旋转磁场方向和转子运动趋势。
         const solver = this.sys?.voltageSolver;
         const getV = (port) => {
             if (!solver) return 0;
@@ -407,6 +431,7 @@ export class InductionMotor2 extends BaseComponent {
     // ═══════════════════════════════════════════
 
     _computeTorqueSpecs() {
+        // 转矩规格根据系统频率和相电压估算起动转矩、最大转矩和额定输出参数。
         const sysFreq = (this.sys?.voltageSolver?._systemFreq) || 50;
         const omega_sync = 2 * Math.PI * sysFreq / this.polePairs;
         const absOmega = Math.abs(omega_sync);
@@ -563,6 +588,7 @@ export class InductionMotor2 extends BaseComponent {
     // ═══════════════════════════════════════════
 
     tick(dt) {
+        // 运行循环中更新机械状态并刷新图层，以实现电机动画和状态显示同步。
         if (this._dcBraking) this._Te = -Math.abs(this._omega_m);
         this._updateDynamic();
         this.markDirty();
@@ -574,6 +600,7 @@ export class InductionMotor2 extends BaseComponent {
     // ═══════════════════════════════════════════
 
     getConfigFields() {
+        // 配置面板公开了与电机过程核心相关的参数，便于在教学和调试场景中做快速调整。
         return [
             { label: '位号/名称',        key: 'label',         type: 'text'   },
             { label: '定子电阻 R1 (Ω)',   key: 'R1',           type: 'number' },

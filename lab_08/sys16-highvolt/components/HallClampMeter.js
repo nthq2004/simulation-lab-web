@@ -1,20 +1,38 @@
+/**
+ * HallClampMeter 霍尔钳形电流表组件。
+ *
+ * 作用：这是一个模拟式霍尔钳形电流表，用于展示钳口开合、量程切换、直流/交流模式切换、保持模式和液晶显示等典型仪表行为。
+ * 它通过钳口磁场感应与电流拟合方式模拟被测电流，适合工业电气教学中介绍钳形表的工作原理、测量范围和接口交互。
+ *
+ * 设计特点：
+ * 1. 钳口可开合，视觉上表现为可旋转的磁轭结构；
+ * 2. 量程旋钮与功能按钮支持用户交互切换；
+ * 3. LCD 显示实时电流值和单位/模式状态；
+ * 4. 右侧原理图展示了霍尔元件、放大器、滤波、ADC 与 MCU 的处理链；
+ * 5. 组件提供当前值、模式、量程和钳口状态的公开 API，便于仿真系统和配置界面调度。
+ */
 import { BaseComponent } from './BaseComponent.js';
 
 export class HallClampMeter extends BaseComponent {
     constructor(config, sys) {
+        // 调用父类来初始化组件基础状态、系统引用和渲染层对象。
         super(config, sys);
 
+        // 设置仪表的最小尺寸，并允许外部通过 width/height 参数覆盖默认布局规模。
         this.width  = Math.max(300, config.width  || 380);
         this.height = Math.max(360, config.height || 480);
 
+        // 设备类型标识用于组件注册和仿真系统中的实例识别；fixed 缓存能够让静态外壳在常规渲染中复用。
         this.type    = 'hallclamp';
         this.cache   = 'fixed';
 
+        // 按照组件开发规范依次执行：创建图层、计算几何、初始化参数、绘制节点。
         this._initGroups();
         this._recalcGeometry();
         this._initParameters(config);
         this._init();
 
+        // 保存一份配置快照，方便后续配置弹窗、状态回放和系统同步。
         this.config = {
             id: this.id,
             current:  this._targetI,
@@ -24,11 +42,13 @@ export class HallClampMeter extends BaseComponent {
             isDC:     this._isDC,
         };
 
+        // 两个测量端口分别对应 COM 和 V/A 接线点，采用电气 wire 端口类型与极性标记。
         this.addPort(this._portCom.x, this._portCom.y-3, 'com', 'wire', 'n');
         this.addPort(this._portVA.x,  this._portVA.y-3,  'v',  'wire', 'p');
     }
 
     _recalcGeometry() {
+        // 组件按左右两栏布局：左侧为钳口主体和面板，右侧为工作原理/处理链示意图。
         const W = this.width, H = this.height;
         this._divX = W * 0.50;
         this._frame = { x: 2, y: 2, w: W - 4, h: H - 4, rx: 10 };
@@ -113,6 +133,7 @@ export class HallClampMeter extends BaseComponent {
     }
 
     _initParameters(config) {
+        // 量程、目标电流、响应时间和钳口状态共同决定仪表的工作行为，是整个组件运行的核心变量。
         this._range     = config.range    !== undefined ? parseFloat(config.range)   : 5;
         this._targetI   = config.current  !== undefined ? parseFloat(config.current) : 0;
         this._currentI  = this._targetI;
@@ -133,12 +154,14 @@ export class HallClampMeter extends BaseComponent {
     }
 
     _init() {
+        // 初始化阶段先构建不会变化的静态装饰，再生成会被动画和交互更新的动态节点。
         this._drawStaticParts();
         this._createDynamicNodes();
         this._bindInteraction();
     }
 
     _drawStaticParts() {
+        // 静态部分只在初始化时绘制一次，后续更新通过更改已有节点属性来保证性能和稳定性。
         this._drawBodyShell();
         this._drawJawStatic();
         this._drawLCDStatic();
@@ -641,6 +664,7 @@ export class HallClampMeter extends BaseComponent {
     }
 
     _createDynamicNodes() {
+        // 动态节点负责处理钳口开合、旋钮角度、LCD 数值、磁通箭头和按钮状态等会随时间变化的对象。
         this._createJawDynamic();
         this._createLCDDynamic();
         this._createTriggerButton();
@@ -855,6 +879,7 @@ export class HallClampMeter extends BaseComponent {
     }
 
     _bindInteraction() {
+        // 交互区域使用透明的可点击矩形/圆形覆盖层，允许用户直接操作扳机、旋钮和两个按键而不改变视觉布局。
         const { x, y, w, h } = this._trigger;
 
         const trigHit = new Konva.Rect({
@@ -919,6 +944,7 @@ export class HallClampMeter extends BaseComponent {
     }
 
     _updateDynamic() {
+        // 这里按时间步更新钳口、磁通与显示状态，使组件的运行表现更接近真实仪表的缓慢响应过程。
         const i = this._oilFault ? this._currentI * 0.55 : this._currentI;
 
         const jawTarget = this._jawOpen ? 1 : 0;
@@ -989,6 +1015,7 @@ export class HallClampMeter extends BaseComponent {
     }
 
     tick(dt) {
+        // 仿真循环中每帧根据响应时间常数更新电流值，模拟仪表的平滑跟踪过程和信号滤波惯性。
         const tau = Math.max(0.05, this._rampTime);
         const alpha = 1 - Math.exp(-dt / tau);
         this._currentI += (this._targetI - this._currentI) * alpha;
@@ -1035,6 +1062,7 @@ export class HallClampMeter extends BaseComponent {
     }
 
     getConfigFields() {
+        // 配置面板只暴露影响读数和行为的关键参数，便于教学场景快速设置和演示。
         return [
             { label: '被测电流 A',                       key: 'current',  type: 'number' },
             { label: '量程 A（5/50/100/250）', key: 'range',    type: 'number' },

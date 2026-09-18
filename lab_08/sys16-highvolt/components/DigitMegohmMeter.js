@@ -1,15 +1,31 @@
+/**
+ * DigitMegohmMeter 数字绝缘电阻测试仪组件。
+ *
+ * 作用：这是一个用于电气绝缘测试场景的数字兆欧表，主要用于模拟测量绝缘电阻、选择测试电压、启动测试和锁定显示等操作。
+ * 它既体现了绝缘电阻测量仪表的外观特点，也包含了高压开关、采样处理、ADC 和 MCU 处理链的原理框图，适合在教学和仿真平台中展示绝缘检测过程。
+ *
+ * 设计特点：
+ * 1. 左侧为实物式仪表面板，提供 LCD、测试电压选择区和操作按钮；
+ * 2. 右侧为原理框图，说明高压升压、采样、ADC 和 MCU 处理链；
+ * 3. 支持测试状态、锁定模式和量程切换，以模拟真实兆欧表的工作流程；
+ * 4. 通过电压求解器读取等效电阻，并映射为表头显示读数。
+ */
 import { BaseComponent } from './BaseComponent.js';
 
 export class DigitMegohmMeter extends BaseComponent {
     constructor(config, sys) {
+        // 调用父类初始化，保证该组件具备通用的 Konva 图层、交互和生命周期能力。
         super(config, sys);
 
+        // 仪表最小尺寸约束为 300×200，并允许配置覆盖基本宽高参数。
         this.width  = Math.max(300, config.width  || 400);
         this.height = Math.max(200, config.height || 360);
 
+        // 组件类型用于识别仪表类别，并启用固定缓存以减少重绘开销。
         this.type    = 'digitmegohm';
         this.cache   = 'fixed';
 
+        // 按组件通用顺序初始化几何、参数和渲染节点。
         this._initGroups();
         this._recalcGeometry();
         this._initParameters(config);
@@ -29,6 +45,7 @@ export class DigitMegohmMeter extends BaseComponent {
     }
 
     _recalcGeometry() {
+        // 根据组件尺寸重新计算左右分区布局，保证仪表面板和原理图框架保持按比例排列。
         const W = this.width, H = this.height;
         this._divX = W * 0.55;
         this._frame = { x: 2, y: 2, w: W - 4, h: H - 4, rx: 8 };
@@ -88,6 +105,7 @@ export class DigitMegohmMeter extends BaseComponent {
     }
 
     _initParameters(config) {
+        // 初始化仪表的标识、测试电压、响应时间和目标电阻等参数。
         this.label        = config.label    || '数字MΩ';
         this._testVoltage = config.testVoltage !== undefined ? parseFloat(config.testVoltage) : 500;
         this._rampTime    = config.rampTime !== undefined ? parseFloat(config.rampTime) : 0.5;
@@ -111,6 +129,7 @@ export class DigitMegohmMeter extends BaseComponent {
     }
 
     _init() {
+        // 组件初始化时一起生成静态图形、动态显示节点和交互区，保证整体状态完整。
         this._drawStaticParts();
         this._createDynamicNodes();
         this._bindInteraction();
@@ -507,6 +526,7 @@ export class DigitMegohmMeter extends BaseComponent {
     }
 
     tick(dt) {
+        // 每个仿真步进都会根据测试状态更新高压指示和等效电阻值，随后刷新显示。
         if (this._testing) {
             this._flashTimer += dt;
 
@@ -546,7 +566,9 @@ export class DigitMegohmMeter extends BaseComponent {
         this._refreshIfDirty();
     }
 
+    // 对外公开的设置接口用于控制系统或配置更新时修改仪表的运行状态。
     setResistance(r) {
+        // 当输入为 Infinity 或空值时，表示绝缘电阻趋于无穷大，显示应为“∞”。
         if (r === Infinity || r === 'Infinity' || r === null) {
             this._targetR = Infinity;
         } else {
@@ -555,6 +577,7 @@ export class DigitMegohmMeter extends BaseComponent {
     }
 
     setTesting(on) {
+        // 测试开关控制高压和显示状态，关闭测试时则停止高压提示。
         this._testing = !!on;
         if (!on) this._hvActive = false;
     }
@@ -568,6 +591,7 @@ export class DigitMegohmMeter extends BaseComponent {
     }
 
     update(state) {
+        // 可接受对象配置或单值输入，兼容不同外部控制调用方式。
         if (typeof state === 'object' && state !== null) {
             if (state.resistance  !== undefined) this.setResistance(state.resistance);
             if (state.testing     !== undefined) this.setTesting(state.testing);
