@@ -1893,6 +1893,45 @@ importers:
         specifier: ^2.3.3
         version: 2.3.3(vite@8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0))
 
+  lab_08/sys20-ecircuit:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_08/sys21-serialsource:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_08/sys22-transformer:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.1)(jiti@1.21.7)(yaml@2.9.0))
+
   lastproj:
     dependencies:
       konva:
