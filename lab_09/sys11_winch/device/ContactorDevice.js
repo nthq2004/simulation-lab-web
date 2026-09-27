@@ -9,6 +9,16 @@ export class ContactorDevice extends BaseDevice {
             voltage: 0,
         };
         this._manualOverride = false;
+        // 线圈额定电压（V）：吸合取 0.85Un、释放取 0.7Un（默认 220，可被组件设定）
+        this.ratedVoltage = config.ratedVoltage !== undefined ? config.ratedVoltage : 220;
+    }
+
+    setRatedVoltage(v) {
+        if (v > 0) this.ratedVoltage = v;
+    }
+
+    getRatedVoltage() {
+        return this.ratedVoltage;
     }
 
     setCurrent(v) {
@@ -44,7 +54,7 @@ export class ContactorDevice extends BaseDevice {
     }
 
     preUpdate(dt) {
-        const ratedVoltage = 220;
+        const ratedVoltage = this.ratedVoltage || 220;
         const PICKUP_VOLTAGE  = ratedVoltage * 0.85;
         const RELEASE_VOLTAGE = ratedVoltage * 0.7;
 

@@ -133,6 +133,34 @@ export const CircuitUtils = {
         for (const dev of rawDevices) {
             const { id, type, special } = dev;
 
+            // 0. 接触器类（线圈 / 辅助触点 / 主触头）与热元件、过流测量绕组：
+            //    这些元件虽不在下面的白名单里，但同样是负载支路。若不纳入模型，
+            //    像电流互感器副边这样只挂这类元件的回路会被估算成"开路"，
+            //    导致 stampCurrentTransformers 误切入 ±1000V 顺从电压模式。
+            if (type === 'ContactorDevice') {
+                const addPair = (pa, pb, Rval) => {
+                    const ia = portToCluster.get(`${id}_wire_${pa}`);
+                    const ib = portToCluster.get(`${id}_wire_${pb}`);
+                    const R = Number.isFinite(Rval) ? Rval : 1e9;
+                    if (ia !== undefined && ib !== undefined) resistorList.push({ l: ia, r: ib, R });
+                };
+                const gv = (typeof dev.getValue === 'function') ? dev.getValue() : 1e9;
+                if (special === 'contactcoil') addPair('a1', 'a2', 1000);
+                else if (special === 'OC_COIL') addPair('a1', 'a2', Number.isFinite(dev._senseR) ? dev._senseR : 0.1);
+                else if (special === 'nocontact') addPair('com', 'no', gv);
+                else if (special === 'nccontact') addPair('com', 'nc', gv);
+                else if (special === 'maincontacts') {
+                    addPair('l1', 't1', gv); addPair('l2', 't2', gv); addPair('l3', 't3', gv);
+                }
+            } else if (type === 'ThermalRelayDevice' && special === 'heatelement') {
+                const R = Number.isFinite(dev._phaseResistance) ? dev._phaseResistance : 0.01;
+                for (let k = 1; k <= 3; k++) {
+                    const ia = portToCluster.get(`${id}_wire_l${k}`);
+                    const ib = portToCluster.get(`${id}_wire_t${k}`);
+                    if (ia !== undefined && ib !== undefined) resistorList.push({ l: ia, r: ib, R });
+                }
+            }
+
             // 1. 处理标准两线电阻类元件 (包括热电偶 tc、电压型继电器 relay)
             if (type === 'resistor' || type === 'tc' || (type === 'relay' && special === 'voltage') || (type === 'relay' && special === 'REV-POWER')) {
                 let rIdx = portToCluster.get(`${id}_wire_r`);

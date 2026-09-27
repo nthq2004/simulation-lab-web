@@ -9,8 +9,8 @@ import { BaseDevice } from './BaseDevice.js';
  *
  * 反时限特性（模拟双金属片热积累）：
  *   过载比 ratio = |I| / I_rated
- *   ratio > 1 时热量按 tripTime = tripClass / (ratio² - 1) 累积
- *   ratio ≤ 1 时热量按时间常数缓慢散失
+ *   ratio > noTripRatio（不动作区，默认 1.1）时按 tripTime = tripClass / (ratio² - 1) 累积
+ *   ratio ≤ noTripRatio 时视为不过载，热量按时间常数缓慢散失（与 IEC "1.05In 不动作" 一致）
  *   tripClass 越大，同样过载倍数下动作越慢（IEC 脱扣等级）
  */
 export class ThermalRelayDevice extends BaseDevice {
@@ -23,6 +23,9 @@ export class ThermalRelayDevice extends BaseDevice {
         };
         this.ratedCurrent = config.ratedCurrent || 9;
         this.tripClass    = config.tripClass    || 10;
+        // 不动作区（× 整定电流）：ratio ≤ 此值时视为不过载、不累积热量。
+        // 对应 IEC 60947-4-1 "1.05In 2h 不动作" 的死区；考虑仿真测流误差，默认取 1.1。
+        this.noTripRatio  = config.noTripRatio !== undefined ? config.noTripRatio : 1.1;
         // 最小动作时间（s）：双金属片热惯性决定的"再快也快不过"的动作时间。
         // 短路电流下反时限公式 tripClass/(k²-1) 会小到几毫秒，但实际热继电器
         // 来不及在上级断路器切断短路之前动作，故设此下限。默认取 tripClass/10。
@@ -56,6 +59,14 @@ export class ThermalRelayDevice extends BaseDevice {
 
     getTripClass() {
         return this.tripClass;
+    }
+
+    setNoTripRatio(v) {
+        if (v > 0) this.noTripRatio = v;
+    }
+
+    getNoTripRatio() {
+        return this.noTripRatio;
     }
 
     setMinTripTime(v) {
@@ -146,13 +157,13 @@ export class ThermalRelayDevice extends BaseDevice {
         }
 
         let nextHeat;
-        if (ratio > 1) {
+        if (ratio > this.noTripRatio) {
             // 反时限热积累：动作时间 ≈ tripClass / (ratio² - 1) 秒；
             // 但不快于双金属片的最小动作时间 minTripTime（热惯性下限）。
             const tripTime = Math.max(this.minTripTime, this.tripClass / Math.max(0.05, ratio * ratio - 1));
             nextHeat = Math.min(1, heat + dt / tripTime);
         } else {
-            // 冷却：时间常数约 20s 的指数衰减
+            // 不动作区（含额定及以下）：视为不过载，热积累按时间常数约 20s 指数衰减
             nextHeat = Math.max(0, heat - dt * heat * 0.05);
         }
 

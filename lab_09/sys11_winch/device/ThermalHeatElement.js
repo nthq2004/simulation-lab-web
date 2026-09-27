@@ -84,6 +84,8 @@ export class ThermalHeatElement extends BaseComponent {
         this.label         = config.label        || 'FR';
         this.ratedCurrent  = config.ratedCurrent !== undefined ? config.ratedCurrent : 9;
         this.tripClass     = config.tripClass    !== undefined ? config.tripClass    : 10;
+        // 不动作区（× 整定电流）：ratio ≤ 此值不累积热量（对应 IEC "1.05In 不动作"）
+        this.noTripRatio   = config.noTripRatio  !== undefined ? config.noTripRatio  : 1.1;
         this.function      = config.function     || '热继电器';
 
         this._phaseResistance = config.phaseResistance !== undefined ? config.phaseResistance : 0.01;
@@ -93,10 +95,12 @@ export class ThermalHeatElement extends BaseComponent {
         // 自动复位延时（s）：脱扣后双金属片冷却、触点自动复位的时间，默认 10s。
         this.autoResetDelay = config.autoResetDelay !== undefined ? config.autoResetDelay : 10;
 
-        // 每相滑动 RMS 缓冲区。注意：求解器给出的已是相量有效值，缓冲区只做去噪；
-        // 窗口必须足够短（默认 3 帧 ≈ 0.15s），否则短路被断路器切断后，
-        // 陈旧的大电流读数仍会持续喂给热积累模型，导致热继电器误脱扣。
-        this._rmsWindow = config.rmsWindow !== undefined ? Math.max(1, config.rmsWindow) : 3;
+        // 每相滑动 RMS 缓冲区。窗口必须覆盖足够多的工频周期才能得到真实有效值：
+        // 20fps 采样 50Hz（每帧 2.5 个周期）时，短窗估计方差极大，实测窗口
+        // 3帧→报 105.7A、10帧→98.5A、25帧→77.5A（真值≈79A），故默认取 25 帧(1.25s)。
+        // 代价：短路被上级断路器切断后，陈旧大电流读数会多滞留 ~1.25s；因热继电器
+        // 最小动作时间 ~4s 且热积累为积分式，影响很小。
+        this._rmsWindow = config.rmsWindow !== undefined ? Math.max(1, config.rmsWindow) : 25;
         this._iBuf     = [new Array(this._rmsWindow).fill(0), new Array(this._rmsWindow).fill(0), new Array(this._rmsWindow).fill(0)];
         this._iBufSum  = [0, 0, 0];
         this._iBufIdx  = 0;
@@ -301,11 +305,19 @@ export class ThermalHeatElement extends BaseComponent {
         this._iBufIdx = (this._iBufIdx + 1) % this._rmsWindow;
         if (this._iBufCount < this._rmsWindow) this._iBufCount++;
 
-        let maxI = 0;
+        // 取"三相平均"作为负载电流（平衡负载下即为真实相/线电流 RMS）；
+        // 20fps 采 50Hz 时短窗 RMS 方差大，若再取三相最大值会系统性偏向峰值
+        // （实测整定 75.9A、真实 79.3A 时，取最大相会报出 ~99A），故默认取平均。
+        // 三相明显不平衡（缺相/单相运行）时回退为取最大相，保证保护灵敏度。
+        let sumI = 0;
         for (let i = 0; i < 3; i++) {
             this._phaseCurrents[i] = Math.sqrt(this._iBufSum[i] / this._iBufCount);
-            maxI = Math.max(maxI, this._phaseCurrents[i]);
+            sumI += this._phaseCurrents[i];
         }
+        let maxI = sumI / 3;
+        const iMax = Math.max(this._phaseCurrents[0], this._phaseCurrents[1], this._phaseCurrents[2]);
+        const iMin = Math.min(this._phaseCurrents[0], this._phaseCurrents[1], this._phaseCurrents[2]);
+        if (iMax > 1 && iMin < iMax * 0.7) maxI = iMax;
 
         // ── 电动机缺相单相运行的过载电流近似 ──
         // 本仿真电机模型为三相等效，未含单相运行时的负序制动效应，缺相后健康两相
@@ -320,6 +332,7 @@ export class ThermalHeatElement extends BaseComponent {
             this.deviceRef.setCurrent(maxI);
             this.deviceRef.setRatedCurrent(this.ratedCurrent);
             this.deviceRef.setTripClass(this.tripClass);
+            this.deviceRef.setNoTripRatio?.(this.noTripRatio);
             this.deviceRef.setMinTripTime(this.minTripTime);
             this.deviceRef.setAutoResetDelay(this.autoResetDelay);
         }
@@ -374,6 +387,7 @@ export class ThermalHeatElement extends BaseComponent {
             { label: '位号/名称', key: 'label', type: 'text' },
             { label: '设备 ID (deviceid)', key: 'deviceid', type: 'text' },
             { label: '整定电流 (A)', key: 'ratedCurrent', type: 'number' },
+            { label: '不动作区 (×整定)', key: 'noTripRatio', type: 'number' },
             { label: '脱扣等级', key: 'tripClass', type: 'number' },
             { label: '最小动作时间 (s)', key: 'minTripTime', type: 'number' },
             { label: '自动复位时间 (s)', key: 'autoResetDelay', type: 'number' },
@@ -385,6 +399,7 @@ export class ThermalHeatElement extends BaseComponent {
         if (cfg.label !== undefined) this.label = cfg.label;
         if (cfg.deviceid !== undefined) this.config.deviceid = cfg.deviceid;
         if (cfg.ratedCurrent !== undefined) this.ratedCurrent = parseFloat(cfg.ratedCurrent);
+        if (cfg.noTripRatio !== undefined) this.noTripRatio = parseFloat(cfg.noTripRatio);
         if (cfg.tripClass !== undefined) this.tripClass = parseFloat(cfg.tripClass);
         if (cfg.minTripTime !== undefined) this.minTripTime = parseFloat(cfg.minTripTime);
         if (cfg.autoResetDelay !== undefined) this.autoResetDelay = parseFloat(cfg.autoResetDelay);

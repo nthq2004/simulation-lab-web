@@ -74,6 +74,8 @@ export class CircuitSolver {
             oscDevs:          raw.filter(d => d.type === 'oscilloscope'),
             osc3Devs:         raw.filter(d => d.type === 'oscilloscope_tri'),
             diodeDevs:        raw.filter(d => d.type === 'diode'),
+            bridgeRectDevs:   raw.filter(d => d.type === 'bridge_rectifier'),
+            ocCoilDevs:       raw.filter(d => d.special === 'OC_COIL'),
             zenerDevs:        raw.filter(d => d.type === 'zener'),
             ledDevs:          raw.filter(d => d.type === 'led'),
             photodiodeDevs:   raw.filter(d => d.type === 'photodiode'),
@@ -129,6 +131,7 @@ export class CircuitSolver {
             chargeBoardDevs: raw.filter(d => d.type === 'charge_board'),
             mwDevs:      raw.filter(d => d.type === 'motor_winding'),
             inductionMotorDevs: raw.filter(d => d.type === 'induction_motor'),
+            vpMotorDevs:      raw.filter(d => d.type === 'vp_motor'),
             contactorDevs: raw.filter(d => d.type === 'CONTACTOR'),
             mainContactDevs: raw.filter(d => d.type === 'ContactorDevice' && d.special === 'maincontacts'),
             noContactDevs: raw.filter(d => d.type === 'ContactorDevice' && d.special === 'nocontact'),
@@ -412,12 +415,14 @@ export class CircuitSolver {
         const {
             gndDevs, powerDevs, power3Devs, tcDevs, pidDevs, bjtDevs, opAmps,
             oscDevs, osc3Devs, diodeDevs, zenerDevs, ledDevs, photodiodeDevs, ptDevs, diacDevs, resistorDevs, potDevs, load3Devs, testerDevs, hvLoad3Devs, hvTransformerDevs, pressDevs, transmitterDevs,
+            bridgeRectDevs, ocCoilDevs,
             capacitorDevs, inductorDevs, lvdtDevs, sgDevs,             jfetDevs, relayDevs, aiDevs,
             pcDevs, aoDevs, diDevs, doDevs,             dcDevs, mf47Devs, multimeterDevs, ammeterDevs, ne555Devs, ccDevs, ptermDevs, svDevs,
             motorDevs, motor3dDevs, scrDevs, triacDevs, igbtDevs, mosfetDevs, ujtDevs,
             acAmmeterDevs, acVoltmeterDevs, syncroscopeDevs, ctDevs, potentialTransformerDevs,
             wattmeterDevs, revPowerDevs, reg7805Devs, fuseDevs,             batteryDevs, leadAcidBatteryDevs, singleLeadAcidBatteryDevs, chargeBoardDevs,
             mwDevs, inductionMotorDevs, contactorDevs, thermalRelayDevs, rlSeriesDevs,
+            vpMotorDevs,
             fluorescentLampDevs, ballastDevs, starterDevs,
             acbDevs, mainContactDevs, noContactDevs, ncContactDevs, contactCoilDevs,
             thermalHeatDevs, thermalNOCDevs, thermalNCCDevs,
@@ -803,6 +808,8 @@ const totalSize = nodeVarCount + pidEqCount + opAmps.length + oscDevs.length + l
             DeviceStamps.stampPotentiometers(ctx, G, B, potDevs);
             // ─ 1c. 三相可调负载 ──────────────────────────────────────────────
             DeviceStamps.stampLoad3p(ctx, G, B, load3Devs, this.deltaTime);
+            // ─ 1c'. 可变极三相异步电动机（被动等效负载，不注入旋转电动势）──────
+            DeviceStamps.stampVpMotor(ctx, G, B, vpMotorDevs);
             DeviceStamps.stampHvLoad3p(ctx, G, B, hvLoad3Devs, this.deltaTime);
             // ─ 1b. 单相熔断器（电阻模型） ─────────────────────────────────
             DeviceStamps.stampFuses(ctx, G, B, fuseDevs);
@@ -842,6 +849,10 @@ const totalSize = nodeVarCount + pidEqCount + opAmps.length + oscDevs.length + l
             DeviceStamps.stampOpAmps(ctx, G, B, opAmps, opVIdx);
             // ─ 9. 二极管 ───────────────────────────────────────────────────
             DeviceStamps.stampDiodes(ctx, G, B, diodeDevs, results);
+            // ─ 8b. 桥式整流器（KZ，四个内部二极管） ──────────────────────
+            DeviceStamps.stampBridgeRectifiers(ctx, G, B, bridgeRectDevs, results);
+            // ─ 8c. 过流继电器测量绕组（GLJ 线圈，小电阻注入） ──────────────
+            DeviceStamps.stampOverCurrentCoils(ctx, G, B, ocCoilDevs);
             // ─ 9b. 稳压二极管 ──────────────────────────────────────────────
             DeviceStamps.stampZeners(ctx, G, B, zenerDevs, results);
             // ─ 9c. 发光二极管 ──────────────────────────────────────────────

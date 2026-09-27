@@ -30,7 +30,7 @@ export class TimeRelayCoil extends BaseComponent {
     constructor(config, sys) {
         super(config, sys);
 
-        this.width  = Math.max(50, config.width  || 70);
+        this.width  = Math.max(100, config.width  || 124);
         this.height = Math.max(48, config.height || 60);
 
         // type 复用接触器分类，使求解器对线圈端口作 MNA stamp（固定电阻）；
@@ -79,6 +79,10 @@ export class TimeRelayCoil extends BaseComponent {
 
     _initParameters(config) {
         this.label = config.label || 'KT';
+        // 延时方式：'on' 通电延时；'off' 断电延时
+        this._mode = config.mode === 'off' ? 'off' : 'on';
+        // 线圈额定电压（V）：吸合取 0.85Un、返回取 0.7Un
+        this._ratedVoltage = config.ratedVoltage !== undefined ? parseFloat(config.ratedVoltage) : 24;
     }
 
     _init() {
@@ -92,11 +96,13 @@ export class TimeRelayCoil extends BaseComponent {
         const cy = H / 2;
 
         // 上矩形
-        this._staticGroup.add(new Konva.Rect({
+        this._fillRects = [];
+        this._fillRects.push(new Konva.Rect({
             x: u.bx, y: u.by, width: u.bw, height: u.bh,
             stroke: '#555', strokeWidth: 1.5, cornerRadius: 3,
             fill: '#f5f5f0',
         }));
+        this._staticGroup.add(this._fillRects[this._fillRects.length - 1]);
 
         // 上矩形内 ×（交叉对角线，时间继电器线圈符号）
         const mx1 = u.bx + 4, my1 = u.by + 2, mx2 = u.bx + u.bw - 4, my2 = u.by + u.bh - 2;
@@ -110,11 +116,12 @@ export class TimeRelayCoil extends BaseComponent {
         }));
 
         // 下矩形
-        this._staticGroup.add(new Konva.Rect({
+        this._fillRects.push(new Konva.Rect({
             x: l.bx, y: l.by, width: l.bw, height: l.bh,
             stroke: '#555', strokeWidth: 1.5, cornerRadius: 3,
             fill: '#f5f5f0',
         }));
+        this._staticGroup.add(this._fillRects[this._fillRects.length - 1]);
 
         // 下矩形内位号 KT1
         this._staticGroup.add(new Konva.Text({
@@ -143,14 +150,26 @@ export class TimeRelayCoil extends BaseComponent {
         });
         this._dynamicGroup.add(this._activeFrame);
 
-        // 倒计时文本（通电计时中显示在线圈上方）
+        // 动态倒计时文本（显示在线圈左侧，垂直居中）
+        const u0 = this._upperRect, l0 = this._lowerRect;
         this._countdownText = new Konva.Text({
-            x: 0, y: -5, width: this.width,
-            text: '', fontSize: 15, fontStyle: 'bold',
-            fill: '#e03030', align: 'center',
+            x: 0,
+            y: l0.by + (l0.bh - 18) / 2,
+            width: Math.max(20, u0.bx - 2),
+            text: '', fontSize: 16, fontStyle: 'bold',
+            fill: '#e03030', align: 'right',
             visible: false,
         });
         this._dynamicGroup.add(this._countdownText);
+
+        // 延时方式标注（通电延时 / 断电延时）
+        this._modeText = new Konva.Text({
+            x: 0, y: this.height - 10, width: this.width,
+            text: this._mode === 'off' ? '断电延时' : '通电延时',
+            fontSize: 9, fill: '#5a6a7a', align: 'center',
+            listening: false,
+        });
+        this._dynamicGroup.add(this._modeText);
     }
 
     getValue() {
@@ -172,22 +191,34 @@ export class TimeRelayCoil extends BaseComponent {
                     const vRms = Math.sqrt(this._vBufSum / 20);
                     this.deviceRef.setVoltage(vRms);
                     this.deviceRef.setDelayTime(this._delayTime);
+                    if (typeof this.deviceRef.setMode === 'function') this.deviceRef.setMode(this._mode);
+                    if (typeof this.deviceRef.setRatedVoltage === 'function') this.deviceRef.setRatedVoltage(this._ratedVoltage);
                 }
             }
         }
 
         const energized = this.deviceRef ? this.deviceRef.isEnergized() : false;
         this._activeFrame.visible(energized);
+        // 得电：粗红实线外框 + 内部淡红背景填充
+        if (energized !== this._lastEnergized) {
+            this._lastEnergized = energized;
+            if (this._fillRects) this._fillRects.forEach(r => r.fill(energized ? '#ffcccc' : '#f5f5f0'));
+        }
 
-        // 倒计时：通电计时中显示剩余时间，延时到达后消失
+        // 倒计时：通电延时在计时阶段显示剩余时间；断电延时在断电延续期显示剩余时间
         const st = this.deviceRef ? this.deviceRef.getState() : 'idle';
-        if (st === 'timing' && this.deviceRef.state) {
+        const counting = (this._mode === 'on')
+            ? (st === 'timing')
+            : (st === 'output' && !energized && !this.deviceRef.getManualOverride());
+        if (counting && this.deviceRef.state) {
             const remain = Math.max(0, this._delayTime - (this.deviceRef.state.elapsed || 0));
             this._countdownText.text(remain.toFixed(1) + 's');
             this._countdownText.visible(true);
         } else {
             this._countdownText.visible(false);
         }
+
+        if (this._modeText) this._modeText.text(this._mode === 'off' ? '断电延时' : '通电延时');
 
         this.markDirty();
         this._refreshIfDirty();
@@ -197,14 +228,21 @@ export class TimeRelayCoil extends BaseComponent {
         return [
             { label: '设备 ID (deviceid)', key: 'deviceid', type: 'text' },
             { label: '位号/名称', key: 'label', type: 'text' },
+            { label: '延时方式', key: 'mode', type: 'select', options: [
+                { value: 'on',  label: '通电延时' },
+                { value: 'off', label: '断电延时' },
+            ]},
             { label: '延时时间 (s)', key: 'delayTime', type: 'number', min: 0, max: 30, step: 0.5 },
+            { label: '线圈额定电压 (V)', key: 'ratedVoltage', type: 'number' },
             { label: '线圈电阻 (Ω)', key: 'coilResistance', type: 'number' },
         ];
     }
 
     onConfigUpdate(cfg) {
         if (cfg.label !== undefined) this.label = cfg.label;
+        if (cfg.mode !== undefined) this._mode = cfg.mode === 'off' ? 'off' : 'on';
         if (cfg.delayTime !== undefined) this._delayTime = Math.max(0, Math.min(30, parseFloat(cfg.delayTime)));
+        if (cfg.ratedVoltage !== undefined) this._ratedVoltage = parseFloat(cfg.ratedVoltage);
         if (cfg.coilResistance !== undefined) this._coilResistance = parseFloat(cfg.coilResistance);
         this.config = { ...this.config, ...cfg };
         this._staticGroup.destroyChildren();

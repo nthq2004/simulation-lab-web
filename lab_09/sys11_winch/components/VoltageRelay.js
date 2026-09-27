@@ -35,6 +35,16 @@ export class VoltageRelay extends BaseComponent {
         this._drawContact();
         this._createPorts();
 
+        // 可选位号标注（如零压继电器 LYJ）
+        this.label = config.label || '';
+        if (this.label) {
+            this._staticGroup.add(new Konva.Text({
+                x: 8, y: 4, width: this.W - 16,
+                text: this.label, fontSize: 13, fontStyle: 'bold',
+                fill: '#2c3e50', align: 'left',
+            }));
+        }
+
     }
 
     // ================= 外壳 =================

@@ -42,7 +42,7 @@ import { DistributionBox, ShorePowerMainSwitch, ShorePowerBox, NegativeSeqRelay 
 
 import { MotorControlBox, GroundBusBar, ThreePhaseMotor3D, InductionMotorExploded, LowVoltageGroundCable } from './export.js';
 
-import { componentConfigs, initSlider, applyAllPresets } from './project/sys_cddg10.js';
+import { componentConfigs, initSlider, applyAllPresets } from './project/sys_cddg11.js';
     
 /**
  * ControlSystem - 控制系统仿真引擎

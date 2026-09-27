@@ -122,6 +122,25 @@ export const DeviceStamps = {
         });
     },
 
+    // ─── 1c'. 可变极三相异步电动机（被动等效负载）────────────────────────
+    //  该电机不做旋转电动势注入，仅以三组绕组的等效电阻（Δ 等效）作为被动负载。
+    //  哪一组端子接了电源，电流就流过哪一组；未接线的绕组其簇不存在，自动跳过。
+    stampVpMotor(ctx, G, B, devs) {
+        (devs || []).forEach(dev => {
+            if (typeof dev.getWindings !== 'function') return;
+            dev.getWindings().forEach(w => {
+                const R = Math.max(w.R || 1e9, 0.001);
+                const [a, b, c] = w.ports;
+                const cA = ctx.portToCluster.get(`${dev.id}_wire_${a}`);
+                const cB = ctx.portToCluster.get(`${dev.id}_wire_${b}`);
+                const cC = ctx.portToCluster.get(`${dev.id}_wire_${c}`);
+                if (cA !== undefined && cB !== undefined) this._fill(ctx, G, B, cA, cB, 1 / R);
+                if (cB !== undefined && cC !== undefined) this._fill(ctx, G, B, cB, cC, 1 / R);
+                if (cC !== undefined && cA !== undefined) this._fill(ctx, G, B, cC, cA, 1 / R);
+            });
+        });
+    },
+
     // ─── 1d. 高压三相可调负载（三角联接，无中性点，对地绝缘）────────────────
     // Δ 联接：每相跨线电压 U_L=6600V，恒阻抗 RΔ=U_L²/(P/3)；
     // 无功支路跨线并联电感/电容伴随模型（后向欧拉）。
@@ -746,6 +765,48 @@ export const DeviceStamps = {
         });
     },
 
+    // ─── 8b. 桥式整流器（KZ）：四个内部二极管 ────────────────────────────
+    //  与 stampDiodes 相同的二极管模型；每个桥含 4 只二极管：
+    //      D1: ac1→pp   D2: ac2→pp   D3: nn→ac1   D4: nn→ac2
+    stampBridgeRectifiers(ctx, G, B, devs, results) {
+        (devs || []).forEach(dev => {
+            const p = (n) => ctx.portToCluster.get(`${dev.id}_wire_${n}`);
+            const cA1 = p('ac1'), cA2 = p('ac2'), cPP = p('pp'), cNN = p('nn');
+            const vF   = dev.vForward !== undefined ? dev.vForward : 0.7;
+            const rOn  = dev.rOn  || 1;
+            const rOff = dev.rOff || 1e9;
+
+            const branch = (cAnode, cCathode) => {
+                if (cAnode === undefined || cCathode === undefined) return;
+                const vA = ctx.getVoltageFromResults(results, cAnode);
+                const vC = ctx.getVoltageFromResults(results, cCathode);
+                if (vA - vC > vF) {
+                    const gOn = 1 / rOn;
+                    this._fill(ctx, G, B, cAnode, cCathode, gOn);
+                    this._addI(ctx, B, cAnode, cCathode, vF * gOn);
+                } else {
+                    this._fill(ctx, G, B, cAnode, cCathode, 1 / rOff);
+                }
+            };
+
+            branch(cA1, cPP);
+            branch(cA2, cPP);
+            branch(cNN, cA1);
+            branch(cNN, cA2);
+        });
+    },
+
+    // ─── 8c. 过流继电器测量绕组（GLJ 线圈）：小电阻注入 ───────────────────
+    //  触点由 OverCurrentNOContact 组件按 nocontact 分类另行注入。
+    stampOverCurrentCoils(ctx, G, B, devs) {
+        (devs || []).forEach(dev => {
+            const c1 = ctx.portToCluster.get(`${dev.id}_wire_a1`);
+            const c2 = ctx.portToCluster.get(`${dev.id}_wire_a2`);
+            const R = Math.max(dev._senseR || 0.1, 0.001);
+            if (c1 !== undefined && c2 !== undefined) this._fill(ctx, G, B, c1, c2, 1 / R);
+        });
+    },
+
     // ─── 9b. 稳压二极管 Zener（双向分段线性） ───────────────────────────
     stampZeners(ctx, G, B, zenerDevs, results) {
         zenerDevs.forEach(dev => {
@@ -1325,7 +1386,20 @@ export const DeviceStamps = {
             if (c1 !== undefined && c2 !== undefined)
                 this._fill(ctx, G, B, c1, c2, 1 / R);
 
-            if (dev.special === 'time') return;
+            if (dev.special === 'time') {
+                // 时间继电器：延时到达后，NO 组闭合、NC 组断开
+                const on = (typeof dev.isOutputOn === 'function') ? dev.isOutputOn() : false;
+                ['a', 'b'].forEach(g => {
+                    const cCom = ctx.portToCluster.get(`${dev.id}_wire_com_${g}`);
+                    const cNo  = ctx.portToCluster.get(`${dev.id}_wire_no_${g}`);
+                    const cNc  = ctx.portToCluster.get(`${dev.id}_wire_nc_${g}`);
+                    if (cCom !== undefined && cNo !== undefined)
+                        this._fill(ctx, G, B, cCom, cNo, 1 / (on ? 0.01 : 1e9));
+                    if (cCom !== undefined && cNc !== undefined)
+                        this._fill(ctx, G, B, cCom, cNc, 1 / (on ? 1e9 : 0.01));
+                });
+                return;
+            }
 
             const cCOM = ctx.portToCluster.get(`${dev.id}_wire_COM`);
             const cNO = ctx.portToCluster.get(`${dev.id}_wire_NO`);
@@ -2010,7 +2084,11 @@ export const DeviceStamps = {
                 );
 
                 // 判断是否需要切换为电压源模式
-                if (rReq * Math.abs(iSecondary) > 1000 || rReq > 1e6) {
+                // 注意：必须同时满足"负载本身高阻"这一前提。
+                // 否则当 rReq 被高估（等效电阻模型漏掉副边绕组/触点）时，
+                // 起动瞬间的大电流会让 rReq×i₂ 偶然超过 1000V，
+                // 从而把副边错误钳到 ±1000V —— 0.1Ω 测量绕组上即出现 10000A 假动作。
+                if (rReq > 1e6 || (rReq > 1e3 && rReq * Math.abs(iSecondary) > 1000)) {
                     // 顺从电压限制模式：注入 ±1000V 电压源
                     // 极性由副边电流方向决定
                     const sign = iSecondary >= 0 ? 1 : -1;

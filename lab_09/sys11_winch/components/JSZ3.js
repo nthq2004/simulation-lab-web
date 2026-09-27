@@ -95,6 +95,9 @@ export class JSZ3 extends BaseComponent {
         this._bindInteraction();
     }
 
+    /** 通电延时到达 → 输出（供电路注入读取触点状态） */
+    isOutputOn() { return this._state === 'output'; }
+
     _drawStaticParts() {
         const f = this._frame;
         this._staticGroup.add(new Konva.Rect({

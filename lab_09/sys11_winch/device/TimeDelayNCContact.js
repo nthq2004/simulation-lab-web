@@ -122,18 +122,29 @@ export class TimeDelayNCContact extends BaseComponent {
             lineCap: 'round', listening: false,
         }));
 
-        // 半圆弧（端点向外延伸更多，弧深向垂线靠拢）
+        // 半圆弧（连接两根垂线末端）；断电延时型弧向翻转
         const r = dx + 6;
-        const pts = [];
-        for (let i = 0; i <= 20; i++) {
-            const t = i / 20;
-            const a = Math.PI + Math.PI * t;
-            pts.push(xm - r * Math.cos(a), yEnd - r * Math.sin(a) * 0.55);
-        }
-        group.add(new Konva.Line({
-            points: pts, stroke: color, strokeWidth: 4,
+        this._markArcGeo = { xm, yEnd, r };
+        this._markFlipped = false;
+        this._markArc = new Konva.Line({
+            points: this._delayArcPoints(false), stroke: color, strokeWidth: 4,
             lineCap: 'round', listening: false,
-        }));
+        });
+        group.add(this._markArc);
+    }
+
+    /** 延时半圆弧路径：flipped=true 时弧朝下方（断电延时符号） */
+    _delayArcPoints(flipped) {
+        const { xm, yEnd, r } = this._markArcGeo;
+        const pts = [];
+        for (let k = 0; k <= 20; k++) {
+            const t = k / 20;
+            const a = Math.PI + Math.PI * t;
+            const dy = r * Math.sin(a) * 0.55;
+            // 断电延时：半圆弧整体外移 5px，避免翻转后与两根垂线相交
+            pts.push(xm - r * Math.cos(a), flipped ? yEnd + 5 + dy : yEnd - dy);
+        }
+        return pts;
     }
 
     _drawTerminal(x, y, color) {
@@ -179,6 +190,15 @@ export class TimeDelayNCContact extends BaseComponent {
     }
 
     tick(dt) {
+        // 断电延时型：翻转两根垂线末端半圆弧的方向
+        if (this._markArc && this.deviceRef && typeof this.deviceRef.getMode === 'function') {
+            const isOff = this.deviceRef.getMode() === 'off';
+            if (isOff !== this._markFlipped) {
+                this._markFlipped = isOff;
+                this._markArc.points(this._delayArcPoints(isOff));
+            }
+        }
+
         const closed = this.deviceRef ? this.deviceRef.getNCClosed() : true;
         const targetAng = closed ? 5 : 22.5;
 

@@ -54,8 +54,18 @@ export class BaseComponent {
         this._cacheDirty = true;
     }
 
-    _refreshIfDirty() {
+    _refreshIfDirty(force = false) {
+        // 重绘请求每帧照发（渲染循环靠 _needsRedraw 驱动动画，不能节流）
+        if (this.sys && typeof this.sys.requestRedraw === 'function') this.sys.requestRedraw();
         if (!this._cacheDirty) return;
+        // ── 节流：静态位图缓存重建限频 + 随机相位错开 ──
+        // 绝大多数组件在 tick()（20fps）里调用 markDirty()，但静态内容变化很慢；
+        // 若逐帧 clearCache()+cache()，全工程上百个组件会造成每秒上千次位图重建，
+        // 页面明显卡顿甚至无响应。这里限频，并给每个组件一个随机相位，
+        // 避免所有组件的重建窗口同时到期而在同一帧集中重建（造成周期性卡顿）。
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        if (!force && this._nextCacheFlush !== undefined && now < this._nextCacheFlush) return;
+        this._nextCacheFlush = now + 250 + Math.random() * 150;
         this._cacheDirty = false;
         this._forceCacheFlush();
     }

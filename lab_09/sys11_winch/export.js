@@ -213,6 +213,7 @@ import { ThreePhaseMotor } from './components/ThreePhaseMotor.js';
 import { MotorTerminalBox } from './components/MotorTerminalBox.js';
 import { InductionMotor } from './components/InductionMotor.js';
 import { InductionMotor2 } from './components/InductionMotor2.js';
+import { VariablePoleMotor } from './components/VariablePoleMotor.js';
 import { ThreePhaseContactor } from './components/ThreePhaseContactor.js';
 import { DiscElectromagneticBrake } from './components/DiscElectromagneticBrake.js';
 import { FeelerGauge } from './components/FeelerGauge.js';
@@ -277,6 +278,14 @@ import { ContactorCoil } from './device/ContactorCoil.js';
 import { MainContact } from './device/MainContact.js';
 import { AuxNOContact } from './device/AuxNOContact.js';
 import { AuxNCContact } from './device/AuxNCContact.js';
+import { LKAuxContact } from './device/LKAuxContact.js';
+import { MasterControllerDevice } from './device/MasterControllerDevice.js';
+import { MasterController } from './components/MasterController.js';
+import { BridgeRectifier } from './components/BridgeRectifier.js';
+import { OverCurrentDevice } from './device/OverCurrentDevice.js';
+import { OverCurrentCoil } from './device/OverCurrentCoil.js';
+import { OverCurrentNOContact } from './device/OverCurrentNOContact.js';
+import { BrakeActuator } from './device/BrakeActuator.js';
 import { ControlTransformer } from './device/ControlTransformer.js';
 import { ThermalRelayDevice } from './device/ThermalRelayDevice.js';
 import { ThermalHeatElement } from './device/ThermalHeatElement.js';
@@ -318,7 +327,7 @@ export {
     BourdonTube,DiaphragmGauge,SCR,RealScr,RealTransistor,IGBT,RealIGBT,Mosfet,RealMosfet,MagneticFlipLevelGauge,
     GlassPlateLevelGauge,SealedOilTank,SmartAnalogSwitch,DMMController,ConstantCurrentSource,
     GalvanometerHead,ClampMeter,DigitClampMeter,HallClampMeter,
-    Megohmmeter,DigitMegohmMeter,RealMegohmMeter,ACPower3P,DiagramACPower3P,ThreePhaseMotor,MotorTerminalBox,InductionMotor,InductionMotor2,
+    Megohmmeter,DigitMegohmMeter,RealMegohmMeter,ACPower3P,DiagramACPower3P,ThreePhaseMotor,MotorTerminalBox,InductionMotor,InductionMotor2,VariablePoleMotor,
     IncandescentLamp,RealIncandescentLamp,RealControlTransformer,Switch,Triac,RealTriac,Inductor,UJT,RealUJT,CurrentTransformer,PictureImage,
     ACVoltmeter,PotentialTransformer,SinglePhaseFuse,NiMHBattery,GeneratorFrequencyMeter,DigitalFrequencyMeter,Wattmeter,ElecMeter,PowerFactor,KwhMeter,
     IC7805,TsCurveDisplay,ThreePhaseContactor,DiscElectromagneticBrake,FeelerGauge,ContactCurveDisplay,ThermalOverloadRelay,ThreePhaseACB,ThreePhaseACB2,MoldedCaseCircuitBreaker,DiagramThreePhaseACB,JSZ3,JSZ3N,
@@ -357,6 +366,8 @@ export {
 export {
     BaseDevice, DeviceManager, ContactorDevice,
     ContactorCoil, MainContact, AuxNOContact, AuxNCContact, ControlTransformer,
+    LKAuxContact, MasterControllerDevice, MasterController,
+    BridgeRectifier, OverCurrentDevice, OverCurrentCoil, OverCurrentNOContact, BrakeActuator,
     ThermalRelayDevice, ThermalHeatElement, ThermalNOContact, ThermalNCContact,
     TimeRelayDevice, TimeRelayCoil, TimeDelayNOContact, TimeDelayNCContact,
 };

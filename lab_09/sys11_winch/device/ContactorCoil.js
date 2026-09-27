@@ -113,8 +113,12 @@ export class ContactorCoil extends BaseComponent {
         }
 
         const pickup = this.deviceRef ? this.deviceRef.isPickup() : false;
-        this._activeFrame.visible(pickup);
-        this._staticFrame.visible(!pickup);
+        // 得电：粗红实线外框 + 内部淡红背景填充
+        if (pickup !== this._lastPickup) {
+            this._lastPickup = pickup;
+            this._activeFrame.visible(pickup);
+            this._staticFrame.fill(pickup ? '#ffcccc' : '#f5f5f0');
+        }
 
         this.markDirty();
         this._refreshIfDirty();
