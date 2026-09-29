@@ -1,7 +1,7 @@
 import { PROJECT_WORKFLOWS, FAULT_CONFIGS,
     fiveStep as defaultFiveStep,
     applyAllPresets as defaultApplyAllPresets,
-    applyStartSystem as defaultApplyStartSystem } from '../project/sys_cdzdh1-1.js';
+    applyStartSystem as defaultApplyStartSystem } from '../project/sys_cdzdh1-2.js';
 
 /**
  * WorkflowManager - 流程与故障管理模块

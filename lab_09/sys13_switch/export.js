@@ -246,6 +246,9 @@ import { InductionMotorExploded } from './components/InductionMotorExploded.js';
 import { T568BCableBench } from './components/T568BCableBench.js';
 import { CableTypesBench } from './components/CableTypesBench.js';
 import { LowVoltageGroundCable } from './components/LowVoltageGroundCable.js';
+import { PC } from './components/PC.js';
+import { NetworkSwitch } from './components/NetworkSwitch.js';
+import { Router } from './components/Router.js';
 import { FluorescentLamp } from './components/FluorescentLamp.js';
 import { Ballast } from './components/Ballast.js';
 import { Starter } from './components/Starter.js';
@@ -348,6 +351,9 @@ export {
     T568BCableBench,
     CableTypesBench,
     LowVoltageGroundCable,
+    PC,
+    NetworkSwitch,
+    Router,
     DistributionBox, ShorePowerMainSwitch, ShorePowerBox, NegativeSeqRelay, InsulationIndicator, InsulationMonitor,
     EmergencyPanel
 };

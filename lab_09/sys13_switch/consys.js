@@ -40,9 +40,9 @@ import { CurrentTransformer, ACVoltmeter, PotentialTransformer, SinglePhaseFuse,
 
 import { DistributionBox, ShorePowerMainSwitch, ShorePowerBox, NegativeSeqRelay } from './export.js';
 
-import { MotorControlBox, GroundBusBar, ThreePhaseMotor3D, InductionMotorExploded, T568BCableBench, CableTypesBench, LowVoltageGroundCable } from './export.js';
+import { MotorControlBox, GroundBusBar, ThreePhaseMotor3D, InductionMotorExploded, T568BCableBench, CableTypesBench, LowVoltageGroundCable, PC, NetworkSwitch, Router } from './export.js';
 
-import { componentConfigs, initSlider, applyAllPresets } from './project/sys_cdzdh1-1.js';
+import { componentConfigs, initSlider, applyAllPresets } from './project/sys_cdzdh1-2.js';
     
 /**
  * ControlSystem - 控制系统仿真引擎
