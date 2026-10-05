@@ -1,0 +1,42 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // ── 项目特定命令 ──
+  "command": {
+    "dev": {
+      "template": "Run pnpm run dev to start the Vite dev server.",
+      "description": "启动 Vite 开发服务器"
+    },
+    "build": {
+      "template": "Build the project with pnpm run build. Check for errors and fix them.",
+      "description": "构建项目到 dist/"
+    },
+    "one": {
+      "template": "Build a single-file HTML with pnpm run one. This inlines all resources into dist-one/.",
+      "description": "单文件 HTML 构建"
+    },
+    "preview": {
+      "template": "Run pnpm run preview to preview the built output.",
+      "description": "预览构建产物"
+    },
+    "lint": {
+      "template": "Check code quality by inspecting the codebase for issues.",
+      "description": "代码检查"
+    }
+  },
+
+  // ── 项目指令（告诉 AI 项目结构和规范） ──
+  "instructions": ["CLAUDE.md"],
+
+  // ── 代理配置 ──
+  "agent": {
+    "explore": {
+      "description": "快速探索代码库，理解组件结构和关系",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    }
+  }
+}

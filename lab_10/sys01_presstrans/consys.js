@@ -256,7 +256,9 @@ export class ControlSystem {
             if (this.linkingState.comp && this.linkingState.comp.getAbsPortPos) {
                 startPos = this.linkingState.comp.getAbsPortPos(this.linkingState.portId);
             } else {
-                const did = this.linkingState.portId.split('_wire_')[0] || this.linkingState.portId.split('_')[0];
+                const did = this.linkingState.portId.includes('_wire_') ? this.linkingState.portId.split('_wire_')[0]
+                    : this.linkingState.portId.includes('_pipe_') ? this.linkingState.portId.split('_pipe_')[0]
+                    : this.linkingState.portId.split('_')[0];
                 startPos = this.comps[did]?.getAbsPortPos(this.linkingState.portId);
             }
             if (!startPos) return;

@@ -78,12 +78,6 @@ export class WorkflowManager {
     /** 项目选择框调用的函数，用于切换任务流程 */
     switchWorkflow(taskValue) {
         const sys = this.sys;
-        const km = sys.comps['km1'];
-        if (km) { km._animDur = 0.12; km.config.animDur = 0.12; }
-        if (taskValue === 'curve-characteristic' && km) {
-            km._animDur = 6;
-            km.config.animDur = 6;
-        }
         if (!taskValue) {
             console.log("未选择任何任务，清空流程数据");
             sys.workflowComp._workflow = [];

@@ -76,6 +76,72 @@ async act() { /* 断开 QF + 接线 + 摇动 全部塞在这里 */ },
   展示“正确答案 + 解析” → 停约 6s 自动关闭。
 - **fill（填空题）**：展示题目 → 自动填入/展示正确答案。
 
+### 操作一律用模拟点击，不直接赋值（硬性要求）
+
+自动演示中凡是"按钮/旋钮/开关/选项/复选框"类操作，**能直接模拟点击的就必须像真的一样点击**
+——触发组件/页面自身的 `click` 处理逻辑（`node.fire('click')`、复选框 `.click()`、
+Konva 节点 `.fire('click tap')` 等），**禁止**绕过交互直接给属性赋值
+（如 `cc.levelCtrl.inputChannel='ch2'`、`ai.channels.ch1.mode='disable'`、
+`comp.group.visible(true)`、`FAULT_CONFIG[id].trigger()`）。
+
+原因：① 学员看到的是一次"按下"动作，直接赋值会让画面毫无反馈；
+② 组件点击处理里还包含联动逻辑（循环切换档位、发送总线帧、刷新行显示、
+加/去重记录等），赋值会漏掉这些，导致状态与画面不一致。
+
+实现要点：
+
+- 组件用 `addClickablePart(partId, x, y, w, h)` 注册部件时，`_parts[partId]` 应**同时保存
+  `node`**，以便 `getClickablePartNode(partId).fire('click')` 能取出真实节点。
+- 分页类组件（如监控主机的 AI 设置页旋钮、液位页通道按钮）若未用 `addClickablePart` 注册，
+  项目侧应在登记部件几何时一并保存 node（见 `project/sys_dgdq8.js` 的 `_registerCCParts`），
+  并提供统一的点击辅助函数（如 `_firePartClick(comp, partId)`）。
+- 只有当部件确实取不到节点（未注册/已销毁）时，才允许**带 `console.warn` 的兜底赋值**，
+  且兜底不应当是主路径。
+- 需要"调成某个目标值"的操作（如循环切换的 Mode 旋钮 `normal→disable→test`），应
+  **反复点击直到目标值达成**（限次，如 4 次），而不是一次性赋值。
+
+### check() 必须覆盖步骤的全部验收点（硬性要求）
+
+演练（train）/评估（eval）模式靠 `check()` 判定该步是否完成，因此 **`check()` 必须与步骤
+描述里承诺的每一个验收点一一对应**，缺一项就会"描述已完成但判不过"或"没做也算过"：
+
+1. **故障设置/修复步骤**：除了 `FAULT_CONFIG[id].check()` 判定故障标志，
+   若该故障**会触发报警**（`_faultStep` 的 `waitAlarm` 为真），还必须检测监控主机
+   `cc.activeAlarms` 确实产生了报警（可再按 `waitText` 校验报警文字）。
+2. **含"定位"字样的步骤**：必须校验学员**点击过对应模块**（如 `sys.lastClickedId === 'ai'`），
+   不能只看故障标志。
+3. **含"进入/切到某某页面"的步骤**：必须校验**已切换到对应页签**
+   （如 `cc.activePage === 3`），不能只看参数是否改对。
+4. **含"按下按钮使某装置响应"的步骤**：若该步会松开按钮/复位锁存（导致结束时状态已消失），
+   必须在 `act()` 中用**步骤级标记**记录"本轮确实达成过"（如 `this._projFlag.s2Alarm = true`），
+   `check()` 读该标记兜底，否则结束状态必为假、演练模式永远过不去。
+
+### 指示箭头必须指向「目标本身」（硬性要求）
+
+自动演示中的闪烁箭头是学员的“视线引导”，必须精确指向真正被操作的对象，**不得一律指向组件中心**：
+
+- **接线 → 指向端口**：凡涉及接线的 op，箭头**必须指向所接线的端口**（端口的画布绝对坐标），
+  不得指向组件中心。op 需携带端口信息：
+
+  ```js
+  { type: 'observe', target: '<compId>', ports: ['<fromPortId>', '<toPortId>'], msg: '…', async act() { /* 接线 */ } }
+  ```
+
+  由演示引擎 `Workflow._introPorts()` 解析端口中心（BaseComponent 的 `getAbsPortPos(portId)`）并
+  闪烁箭头，两端可同时（`Promise.all`）指示。组件只要用 `addPort()` 正确定义端口即可。
+
+- **操作子部件 → 指向部件中心**：凡操作组件内的具体子元素（按钮、旋钮、开关手柄、LCD 等），
+  箭头**必须指向该子部件的中心**。工作流 op 用 `part` 字段传入部件 id：
+
+  ```js
+  { type: 'switch', target: '<compId>', part: '<partId>', msg: '…', async act() { /* 操作 */ } }
+  ```
+
+  由 `comp.getClickablePartCenter(partId)` 返回部件绝对坐标（组件须在 `_init()` 中用
+  `addClickablePart(partId, x, y, w, h)` 注册）。
+
+> 回退规则：仅当目标组件确实没有可定位的部件/端口信息时，才允许回退到组件中心。
+
 ### 故障设置/修复一律走故障界面（硬性要求）
 
 自动演示中凡涉及**设置故障 / 修复故障**，**必须完整演示故障设置界面的操作过程**，
@@ -169,3 +235,5 @@ op 的 `act()` 只需占位延时（可顺带设置仪表档位等），**不要
   **不使用** `shadowColor` / `shadowBlur` / `shadowOpacity` 三件套。
 - 组件实现 `getClickablePartCenter(partId)` 时**必须返回画布绝对坐标**
   （用组件的绝对变换换算，计入组件自身的位移、旋转与缩放），否则箭头会指偏。
+- 端口定位复用 BaseComponent 的 `getAbsPortPos(portId)`；组件用 `addPort()` 定义端口后即可
+  供接线演示箭头定位，无需再注册部件。
