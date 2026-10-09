@@ -6,7 +6,7 @@ import {
 import {
     LeakDetector, AirBottle, PressRegulator, PressMeter, TeeConnector,
     StopValve, Pump, Cooler, Engine, WaterTankSystem, WaterTankTwoPos,
-    WaterTankLevelControl, DiffTransmitter, BubbleLevelTransmitter,
+    WaterTankLevelControl, PressureWaterTankControl, DiffTransmitter, BubbleLevelTransmitter,
     PIDController, OvenSystem, ElecValve, LVDTPressureSensor, TempTransmitter,
     PressTransmitter, SmartPressTransmitter, Rosemount475, VoltageTransmitter,
     DCPower, DCVoltage, VariResistor, Resistor, OpAmp, Ground, Monitor, PictureImage,

@@ -31,22 +31,10 @@
         <button id="btnEval">评估</button>
         <button id="btnInstrument">选择仪表</button>
 
-        <span style="width:1px;height:24px;background:#555;margin:0 8px;display:inline-block;"></span>
-
-        <button id="btnHome" class="nav-btn" title="返回页面索引（主页）">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;">
-                <path d="M3 10.5 12 3l9 7.5"></path>
-                <path d="M5 9.5V21h14V9.5"></path>
-                <path d="M9.5 21v-6h5v6"></path>
-            </svg>
-        </button>
-        <button id="btnBack" class="nav-btn" title="上一页（循环）">&#8592;</button>
-        <button id="btnForward" class="nav-btn" title="下一页（循环）">&#8594;</button>
-
-        <span style="width:1px;height:24px;background:#555;margin:0 8px;display:inline-block;"></span>
-
-        <button id="btnGateway" title="硬件网关配置">硬件网关</button>
-        <span style="width:1px;height:24px;background:#555;margin:0 8px;display:inline-block;"></span>
+        <span id="gatewayGroup" style="display:inline-flex;align-items:center;">
+            <span style="width:1px;height:24px;background:#555;margin:0 8px;display:inline-block;"></span>
+            <button id="btnGateway" title="硬件网关配置">硬件网关</button>
+        </span>
         <!-- <label id="oneLineLabel" title="显示/隐藏船舶低压电力系统单线图（发电机、开关可互动）" style="cursor:pointer;user-select:none;">
             <input type="checkbox" id="btnOneLine" style="width:14px;height:14px;vertical-align:middle;cursor:pointer;" />
             <span style="vertical-align:middle;">单线图</span>

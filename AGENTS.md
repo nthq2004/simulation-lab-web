@@ -235,5 +235,9 @@ op 的 `act()` 只需占位延时（可顺带设置仪表档位等），**不要
   **不使用** `shadowColor` / `shadowBlur` / `shadowOpacity` 三件套。
 - 组件实现 `getClickablePartCenter(partId)` 时**必须返回画布绝对坐标**
   （用组件的绝对变换换算，计入组件自身的位移、旋转与缩放），否则箭头会指偏。
+- **旋转/缩放组件（硬性要求）**：部件/端口坐标一律视为组件**本地坐标**，指示前用
+  `comp.group.getAbsoluteTransform().point({ x, y })` 换算为画布绝对坐标；**禁止**只用
+  `comp.group.x() + part.x`（只加位移、不含旋转/缩放，组件旋转后会指偏）。
+  `_COMP_PARTS` / `_parts` 等坐标表一律保存部件的**本地（未旋转）坐标**，由绝对变换自动计入旋转。
 - 端口定位复用 BaseComponent 的 `getAbsPortPos(portId)`；组件用 `addPort()` 定义端口后即可
   供接线演示箭头定位，无需再注册部件。
