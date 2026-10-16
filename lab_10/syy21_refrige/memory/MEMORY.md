@@ -1,0 +1,1 @@
+- [语言偏好](feedback_language.md) — 思考过程和输出全程使用中文
