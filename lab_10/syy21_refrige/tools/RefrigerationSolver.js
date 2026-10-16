@@ -106,6 +106,7 @@ export class RefrigerationSolver {
             m.rooms[d.key] = {
                 name: d.name, temp: d.init, setStart: d.setStart, setStop: d.setStop,
                 valve: 0, cooling: false, alarm: false,
+                fanOn: true,      // 蒸发器风机（带灯按钮控制：上=起动、下=停止）
             };
         });
         this._inited = true;
@@ -165,10 +166,13 @@ export class RefrigerationSolver {
         m.loadPct = runningCount ? (m.comps.comp1.loadPct + m.comps.comp2.loadPct) / runningCount : 0;
 
         // ── ⑥ 各库制冷需求与分配 ──
+        // 库内蒸发器风机由带灯按钮控制；风机停机则该库不制冷（供液电磁阀随之关闭）
+        const rsys = comps['refsys'];
         let totalLoad = 0;
         for (const k in m.rooms) {
             const r = m.rooms[k];
-            r.cooling = m.running && (r.temp > r.setStop);
+            r.fanOn = (rsys && typeof rsys.getRoomFan === 'function') ? rsys.getRoomFan(k) : true;
+            r.cooling = m.running && r.fanOn && (r.temp > r.setStop);
             r.load = Math.max(0.05, P.kEnv * (P.ambient - r.temp));
             if (r.cooling) totalLoad += r.load;
         }

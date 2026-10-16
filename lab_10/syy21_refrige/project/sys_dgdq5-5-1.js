@@ -52,7 +52,7 @@ export const PROJECT_PAGES = [
 
 export const componentConfigs = [
     // 制冷系统（左侧整幅工艺流程图，1250 × 850）
-    { Class: RefrigerationSystem, id: 'refsys', x: 150, y: 30, page: 1, width: 1250, height: 850, visible: true },
+    { Class: RefrigerationSystem, id: 'refsys', x: -150, y: 10, page: 1, width: 1250, height: 850, visible: true },
 
     // 右侧三个面板
     { Class: CompressorControlPanel, id: 'cpanel', x: 1420, y: 30, page: 1, width: 455, height: 415, activeComp: 'comp1', visible: true },
