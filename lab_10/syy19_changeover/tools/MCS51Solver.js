@@ -76,9 +76,16 @@ function readBit(ctx, bit) {
     return (byteVal >> ba.bit) & 1;
 }
 
+// 位运算的读-改-写按 8051 语义读"端口锁存器"（而非引脚）
+function readBitLatch(ctx, bit) {
+    const ba = bitAddr(bit);
+    const byteVal = ba.isSFR ? (ctx.sfr[ba.addr - 0x80] || 0) : ctx.ram[ba.addr];
+    return (byteVal >> ba.bit) & 1;
+}
+
 function setBit(ctx, bit, val) {
     const ba = bitAddr(bit);
-    const old = ba.isSFR ? readDirect(ctx, ba.addr) : ctx.ram[ba.addr];
+    const old = ba.isSFR ? (ctx.sfr[ba.addr - 0x80] || 0) : ctx.ram[ba.addr];
     const newVal = val ? (old | (1 << ba.bit)) : (old & ~(1 << ba.bit));
     if (ba.isSFR) writeDirect(ctx, ba.addr, newVal);
     else ctx.ram[ba.addr] = newVal & 0xFF;
@@ -494,7 +501,7 @@ const OPCODES = {
     // ── CPL bit ──
     0xB2: { mnemonic: 'CPL bit', len: 2, cycles: 2, handler: (ctx) => {
         const bit = ctx.rom[(ctx.pc + 1) & 0xFFFF];
-        setBit(ctx, bit, readBit(ctx, bit) ? 0 : 1);
+        setBit(ctx, bit, readBitLatch(ctx, bit) ? 0 : 1);
     }},
 
     // ── ANL C, bit ──
@@ -636,6 +643,78 @@ const OPCODES = {
         ctx.inInterrupt = false;
         ctx.interruptPriority = -1;
     }},
+
+    // ═══════════════════════════════════════════════════════════
+    // 补充操作码（原表未收录；供 C 编译器代码生成使用）
+    // ═══════════════════════════════════════════════════════════
+    // ── MOV direct,#data ──
+    0x75: { mnemonic: 'MOV direct,#data', len: 3, cycles: 2, handler: (ctx) => {
+        const addr = ctx.rom[(ctx.pc + 1) & 0xFFFF];
+        const data = ctx.rom[(ctx.pc + 2) & 0xFFFF];
+        writeDirect(ctx, addr, data);
+    }},
+
+    // ── MOV direct,direct ──
+    0x85: { mnemonic: 'MOV direct,direct', len: 3, cycles: 2, handler: (ctx) => {
+        const src = ctx.rom[(ctx.pc + 1) & 0xFFFF];
+        const dst = ctx.rom[(ctx.pc + 2) & 0xFFFF];
+        writeDirect(ctx, dst, readDirect(ctx, src));
+    }},
+
+    // ── MOV direct,@Ri ──
+    0x86: { mnemonic: 'MOV direct,@R0', len: 2, cycles: 2, handler: (ctx) => { writeDirect(ctx, ctx.rom[(ctx.pc + 1) & 0xFFFF], ctx.ram[ctx.ram[0]]); } },
+    0x87: { mnemonic: 'MOV direct,@R1', len: 2, cycles: 2, handler: (ctx) => { writeDirect(ctx, ctx.rom[(ctx.pc + 1) & 0xFFFF], ctx.ram[ctx.ram[1]]); } },
+
+    // ── MOV @Ri,direct ──
+    0xA6: { mnemonic: 'MOV @R0,direct', len: 2, cycles: 2, handler: (ctx) => { ctx.ram[ctx.ram[0]] = readDirect(ctx, ctx.rom[(ctx.pc + 1) & 0xFFFF]); } },
+    0xA7: { mnemonic: 'MOV @R1,direct', len: 2, cycles: 2, handler: (ctx) => { ctx.ram[ctx.ram[1]] = readDirect(ctx, ctx.rom[(ctx.pc + 1) & 0xFFFF]); } },
+
+    // ── ADDC A,direct ──
+    0x35: { mnemonic: 'ADDC A,direct', len: 2, cycles: 2, handler: (ctx) => { _addc(ctx, readDirect(ctx, ctx.rom[(ctx.pc + 1) & 0xFFFF])); } },
+
+    // ── ADDC A,#data ──
+    0x34: { mnemonic: 'ADDC A,#data', len: 2, cycles: 1, handler: (ctx) => { _addc(ctx, ctx.rom[(ctx.pc + 1) & 0xFFFF]); } },
+
+    // ── ORL A,direct ──
+    0x45: { mnemonic: 'ORL A,direct', len: 2, cycles: 2, handler: (ctx) => { ctx.acc |= readDirect(ctx, ctx.rom[(ctx.pc + 1) & 0xFFFF]); updateP(ctx); } },
+
+    // ── ANL A,direct ──
+    0x55: { mnemonic: 'ANL A,direct', len: 2, cycles: 2, handler: (ctx) => { ctx.acc &= readDirect(ctx, ctx.rom[(ctx.pc + 1) & 0xFFFF]); updateP(ctx); } },
+
+    // ── XRL A,direct ──
+    0x65: { mnemonic: 'XRL A,direct', len: 2, cycles: 2, handler: (ctx) => { ctx.acc ^= readDirect(ctx, ctx.rom[(ctx.pc + 1) & 0xFFFF]); updateP(ctx); } },
+
+    // ── SUBB A,direct ──
+    0x95: { mnemonic: 'SUBB A,direct', len: 2, cycles: 2, handler: (ctx) => { _subb(ctx, readDirect(ctx, ctx.rom[(ctx.pc + 1) & 0xFFFF])); } },
+
+    // ── DEC direct ──
+    0x15: { mnemonic: 'DEC direct', len: 2, cycles: 2, handler: (ctx) => {
+        const addr = ctx.rom[(ctx.pc + 1) & 0xFFFF];
+        writeDirect(ctx, addr, (readDirect(ctx, addr) - 1) & 0xFF);
+    }},
+
+    // ── CJNE A,direct,rel ──
+    0xB5: { mnemonic: 'CJNE A,direct,rel', len: 0, cycles: 2, handler: (ctx) => {
+        const data = readDirect(ctx, ctx.rom[(ctx.pc + 1) & 0xFFFF]);
+        const rel = ctx.rom[(ctx.pc + 2) & 0xFFFF];
+        setCY(ctx, ctx.acc < data ? 1 : 0);
+        const off = (rel > 127 ? rel - 256 : rel);
+        ctx.pc = (ctx.acc !== data) ? ((ctx.pc + 3 + off) & 0xFFFF) : ((ctx.pc + 3) & 0xFFFF);
+    }},
+
+    // ── DJNZ direct,rel ──
+    0xD5: { mnemonic: 'DJNZ direct,rel', len: 0, cycles: 2, handler: (ctx) => {
+        const addr = ctx.rom[(ctx.pc + 1) & 0xFFFF];
+        const rel = ctx.rom[(ctx.pc + 2) & 0xFFFF];
+        const val = (readDirect(ctx, addr) - 1) & 0xFF;
+        writeDirect(ctx, addr, val);
+        const off = (rel > 127 ? rel - 256 : rel);
+        ctx.pc = (val !== 0) ? ((ctx.pc + 3 + off) & 0xFFFF) : ((ctx.pc + 3) & 0xFFFF);
+    }},
+
+    // ── MATH（仿真数学协处理器，非标准 8051 指令；供 C 编译器的 long/float 与 * / % 使用）──
+    //   格式：A5 func a1 a2 dst   （a1/a2/dst 为内部 RAM 地址）
+    0xA5: { mnemonic: 'MATH', len: 5, cycles: 4, handler: (ctx) => { mathUnit(ctx); } },
 };
 
 // ── 算术辅助函数 ──
@@ -778,12 +857,25 @@ export class MCS51Solver {
             }
             if (ctx.halted) return;
 
+            // 调试暂停：不自动执行，仅同步端口与显示（单步由 step() 驱动）
+            if (ctx.debug && ctx.debug.paused) {
+                this._syncPorts(mcu, ctx);
+                this._syncDisplay(mcu, ctx);
+                return;
+            }
+
             const freq = mcu.xtalFreq || this.defaultFreq;
             const cyclesPerSecond = freq / 12; // 12 时钟/机器周期
             const cyclesAvail = Math.floor(cyclesPerSecond * deltaTime);
             let cyclesUsed = 0;
 
             while (cyclesUsed < cyclesAvail && !ctx.halted) {
+                // 断点命中（在本条指令执行前停下）
+                if (ctx.debug && ctx.debug.breakpoints.size && ctx.debug.breakpoints.has(ctx.pc)) {
+                    ctx.debug.paused = true;
+                    ctx.debug.hit = true;
+                    break;
+                }
                 const opcode = ctx.rom[ctx.pc];
                 const instr = OPCODES[opcode];
                 if (!instr) {
@@ -816,7 +908,7 @@ export class MCS51Solver {
         const ctx = {
             // 存储
             rom: new Uint8Array(0x10000),  // 64KB 程序 ROM
-            ram: new Uint8Array(0x80),     // 128B 内部 RAM
+            ram: new Uint8Array(0x100),    // 256B 内部 RAM / idata（8052）
             sfr: new Uint8Array(0x80),     // SFR (索引0对应地址0x80)
 
             // 核心寄存器（SFR 别名）
@@ -858,6 +950,20 @@ export class MCS51Solver {
 
             // ROM 已加载
             romLoaded: false,
+
+            // 调试状态（供上位机单步/断点/源行映射/变量监视使用）
+            debug: {
+                paused: false,          // 暂停自动执行
+                breakpoints: new Set(), // 断点地址集合
+                hit: false,             // 上次是否因断点而停
+                lineMap: null,          // addr → C 行号
+                lineAddrs: null,        // C 行号 → [addr]
+                symbols: null,          // 变量符号表 [{name,addr,size,type,scope}]
+                // 外部输入覆盖（按键/矩阵键盘）：pinInput = (回读 & ~mask) | (val & mask)
+                forcedInput: { mask: { p0: 0, p1: 0, p2: 0, p3: 0 }, val: { p0: 0, p1: 0, p2: 0, p3: 0 } },
+                inputProvider: null,    // (portName, sfrVal) => byte|null，实时输入（矩阵键盘）
+                portLog: [],            // 端口写日志（P0/P2），供 LCD 等时序外设仿真
+            },
         };
 
         // 绑定 SFR 读写钩子（供 readDirect/writeDirect 使用）
@@ -1064,8 +1170,11 @@ export class MCS51Solver {
                 if (extVal) inputVal |= (1 << bit);
             }
 
-            // 更新引脚输入缓存
-            ctx.pinInput[name] = inputVal;
+            // 更新引脚输入缓存（回读 + 外部输入覆盖）
+            const fi = ctx.debug && ctx.debug.forcedInput;
+            const m = (fi && fi.mask) ? (fi.mask[name] | 0) : 0;
+            const vv = (fi && fi.val) ? (fi.val[name] | 0) : 0;
+            ctx.pinInput[name] = ((inputVal & ~m) | (vv & m)) & 0xFF;
         });
 
         // 特殊引脚 P3 的复用功能
@@ -1193,9 +1302,17 @@ export class MCS51Solver {
     resetMCU(mcuId) {
         const mcu = this.sys.comps[mcuId];
         if (!mcu) return;
+        const old = this._contexts.get(mcuId);
         const ctx = this._initContext(mcu);
         // 保留 ROM 数据
         if (mcu._romData) ctx.rom.set(mcu._romData);
+        // 保留调试元数据（源行映射/符号表/断点）
+        if (old && old.debug) {
+            ctx.debug.lineMap = old.debug.lineMap;
+            ctx.debug.lineAddrs = old.debug.lineAddrs;
+            ctx.debug.symbols = old.debug.symbols;
+            old.debug.breakpoints.forEach(a => ctx.debug.breakpoints.add(a));
+        }
         this._contexts.set(mcuId, ctx);
     }
 
@@ -1206,12 +1323,283 @@ export class MCS51Solver {
         this.resetMCU(mcuId);
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // 调试 API（供上位机 KeilUI 使用）
+    // ═══════════════════════════════════════════════════════════
+
+    pause(mcuId) { const ctx = this._contexts.get(mcuId); if (ctx && ctx.debug) ctx.debug.paused = true; }
+    resume(mcuId) { const ctx = this._contexts.get(mcuId); if (ctx && ctx.debug) { ctx.debug.paused = false; ctx.debug.hit = false; } }
+    isPaused(mcuId) { const ctx = this._contexts.get(mcuId); return !!(ctx && ctx.debug && ctx.debug.paused); }
+
+    setBreakpoints(mcuId, addrs) {
+        const ctx = this._contexts.get(mcuId); if (!ctx || !ctx.debug) return;
+        ctx.debug.breakpoints = new Set((addrs || []).map(a => a & 0xFFFF));
+    }
+    toggleBreakpoint(mcuId, addr) {
+        const ctx = this._contexts.get(mcuId); if (!ctx || !ctx.debug) return false;
+        addr &= 0xFFFF;
+        if (ctx.debug.breakpoints.has(addr)) ctx.debug.breakpoints.delete(addr);
+        else ctx.debug.breakpoints.add(addr);
+        return ctx.debug.breakpoints.has(addr);
+    }
+    clearBreakpoints(mcuId) { const ctx = this._contexts.get(mcuId); if (ctx && ctx.debug) ctx.debug.breakpoints.clear(); }
+
+    /** 单步执行 n 条指令（不受帧周期预算限制），执行后同步端口与显示，返回最新调试状态 */
+    step(mcuId, n = 1) {
+        const mcu = this.sys.comps[mcuId];
+        const ctx = this._contexts.get(mcuId);
+        if (!mcu || !ctx) return null;
+        if (ctx.debug) ctx.debug.paused = true;
+        for (let i = 0; i < n; i++) {
+            if (ctx.halted) break;
+            const opcode = ctx.rom[ctx.pc];
+            const instr = OPCODES[opcode];
+            if (!instr) { ctx.pc = (ctx.pc + 1) & 0xFFFF; continue; }
+            ctx._instrPC = ctx.pc;
+            try { instr.handler(ctx); } catch (e) { /* 容错 */ }
+            ctx.pc = (ctx.pc + instr.len) & 0xFFFF;
+            if (this._checkRST(mcu, ctx)) break;
+            this._checkInterrupts(mcu, ctx);
+        }
+        this._updateTimers(mcu, ctx, 0);
+        this._syncUART(mcu, ctx);
+        this._syncPorts(mcu, ctx);
+        this._syncDisplay(mcu, ctx);
+        return this.getDebugState(mcuId);
+    }
+
+    getDebugState(mcuId) {
+        const ctx = this._contexts.get(mcuId);
+        if (!ctx) return null;
+        const dbg = ctx.debug || {};
+        return {
+            id: mcuId,
+            pc: ctx.pc, acc: ctx.acc, b: ctx.b, psw: ctx.psw, sp: ctx.sp,
+            dph: ctx.dph, dpl: ctx.dpl,
+            sfr: ctx.sfr, ram: ctx.ram, rom: ctx.rom,
+            paused: !!dbg.paused, hit: !!dbg.hit, halted: !!ctx.halted,
+            ti: !!ctx.ti, ri: !!ctx.ri, tf0: !!ctx.tf0, tf1: !!ctx.tf1,
+            breakpoints: dbg.breakpoints ? Array.from(dbg.breakpoints) : [],
+            lineMap: dbg.lineMap || null,
+            symbols: dbg.symbols || null,
+            currentLine: (dbg.lineMap && dbg.lineMap.get) ? (dbg.lineMap.has(ctx.pc) ? dbg.lineMap.get(ctx.pc) : null) : null,
+        };
+    }
+
+    setRegister(mcuId, key, val) {
+        const ctx = this._contexts.get(mcuId); if (!ctx) return;
+        val = val & 0xFF;
+        switch (key) {
+            case 'acc': ctx.acc = val; ctx.sfr[0x60] = val; break;   // ACC = 0xE0
+            case 'b':   ctx.b   = val; ctx.sfr[0x70] = val; break;   // B   = 0xF0
+            case 'psw': ctx.psw = val; ctx.sfr[0x50] = val; break;   // PSW = 0xD0
+            case 'sp':  ctx.sp  = val; ctx.sfr[0x01] = val; break;   // SP  = 0x81
+            case 'dpl': ctx.dpl = val; ctx.sfr[0x02] = val; break;   // DPL = 0x82
+            case 'dph': ctx.dph = val; ctx.sfr[0x03] = val; break;   // DPH = 0x83
+            case 'pc':  ctx.pc  = val; break;
+        }
+    }
+
+    setMemory(mcuId, addr, val) {
+        const ctx = this._contexts.get(mcuId); if (!ctx) return;
+        addr &= 0xFFFF; val &= 0xFF;
+        if (addr < 0x80) ctx.ram[addr] = val;
+        else this._writeSFR(ctx, addr, val);
+    }
+
+    /**
+     * 设置外部强制输入（按键等）——使 MCU 能"读到"外部电平。
+     * 由于本引擎端口每帧先写后读，普通信号线写会被自身输出覆盖，
+     * 故这里单独维护 forcedInput，在 _syncPorts 中并入 pinInput。
+     * @param {'p0'|'p1'|'p2'|'p3'} port
+     * @param {number} bit 0..7
+     * @param {number} val 1=高（按键未按/IDLE），0=低（按下）
+     */
+    setInputPin(mcuId, port, bit, val) {
+        const ctx = this._contexts.get(mcuId); if (!ctx || !ctx.debug) return;
+        const fi = ctx.debug.forcedInput;
+        if (!fi.mask || !fi.val) { fi.mask = { p0: 0, p1: 0, p2: 0, p3: 0 }; fi.val = { p0: 0, p1: 0, p2: 0, p3: 0 }; }
+        const mask = 1 << (bit & 7);
+        fi.mask[port] = (fi.mask[port] | mask) & 0xFF;
+        if (val) fi.val[port] = (fi.val[port] | mask) & 0xFF;
+        else fi.val[port] = fi.val[port] & (~mask & 0xFF);
+        // 同时驱动信号线，供画布外设/指示灯显示
+        signalBridge.writeSignal(`${mcuId}_${port}_${bit & 7}`, val ? 1 : 0, 'strong');
+    }
+
+    /**
+     * 注册实时端口输入提供者（矩阵键盘等）：程序每次读端口时实时计算返回字节。
+     * @param {string} mcuId
+     * @param {(port:'p0'|'p1'|'p2'|'p3', sfrVal:number)=>number|null} fn
+     */
+    setPortInputProvider(mcuId, fn) {
+        const ctx = this._contexts.get(mcuId);
+        if (!ctx || !ctx.debug) return false;
+        ctx.debug.inputProvider = fn || null;
+        return true;
+    }
+
+    /** 取出并清空端口写日志（P0/P2），供 LCD 等帧内时序外设处理 */
+    drainPortLog(mcuId) {
+        const ctx = this._contexts.get(mcuId);
+        if (!ctx || !ctx.debug || !ctx.debug.portLog || !ctx.debug.portLog.length) return [];
+        const log = ctx.debug.portLog;
+        ctx.debug.portLog = [];
+        return log;
+    }
+
+    /**
+     * 下载程序（机器码）到指定 MCU 的 ROM，并建立调试信息
+     * @param {string} mcuId
+     * @param {Uint8Array|number[]} bytes 机器码
+     * @param {{lineMap?:Map,lineAddrs?:Map,symbols?:Array}|null} debug
+     * @param {{pause?:boolean}} opts  pause=true 时下载后停在复位向量（默认 false，下载即运行）
+     */
+    downloadProgram(mcuId, bytes, debug = null, opts = {}) {
+        const mcu = this.sys.comps[mcuId];
+        let ctx = this._contexts.get(mcuId);
+        if (!ctx) {
+            if (!mcu) return { ok: false, error: 'MCU not found' };
+            ctx = this._initContext(mcu);
+            this._contexts.set(mcuId, ctx);
+        }
+        let arr;
+        if (bytes && bytes.length !== undefined) arr = Uint8Array.from(bytes);
+        else arr = new Uint8Array(0);
+        const rom = new Uint8Array(0x10000).fill(0xFF);
+        rom.set(arr.subarray(0, Math.min(arr.length, 0x10000)), 0);
+        ctx.rom = rom;
+        ctx.romLoaded = true;
+        // CPU 复位
+        ctx.pc = 0; ctx.halted = false;
+        ctx.acc = 0; ctx.b = 0; ctx.psw = 0; ctx.sp = 0x07; ctx.dpl = 0; ctx.dph = 0;
+        ctx.inInterrupt = false; ctx.interruptPriority = -1;
+        ctx.tf0 = 0; ctx.tf1 = 0; ctx.ti = 0; ctx.ri = 0;
+        ctx.sfr.fill(0);
+        ctx.sfr[0x00] = 0xFF; ctx.sfr[0x10] = 0xFF; ctx.sfr[0x20] = 0xFF; ctx.sfr[0x30] = 0xFF;
+        if (!ctx.debug) ctx.debug = { paused: false, breakpoints: new Set(), hit: false, lineMap: null, lineAddrs: null, symbols: null, forcedInput: { mask: { p0: 0, p1: 0, p2: 0, p3: 0 }, val: { p0: 0, p1: 0, p2: 0, p3: 0 } }, inputProvider: null, portLog: [] };
+        ctx.debug.hit = false;
+        ctx.debug.paused = !!opts.pause;
+        ctx.debug.portLog = [];
+        if (debug) {
+            ctx.debug.lineMap = debug.lineMap || null;
+            ctx.debug.lineAddrs = debug.lineAddrs || null;
+            ctx.debug.symbols = debug.symbols || null;
+        }
+        if (mcu) mcu._romData = rom;
+        this._syncPorts(mcu, ctx);
+        this._syncDisplay(mcu, ctx);
+        return { ok: true, size: arr.length, entry: 0 };
+    }
+
+    /** 反汇编：从 start 起反汇编 count 条指令 */
+    disassemble(mcuId, start, count = 20) {
+        const ctx = this._contexts.get(mcuId);
+        if (!ctx) return [];
+        const out = [];
+        let addr = start & 0xFFFF;
+        for (let i = 0; i < count; i++) {
+            const d = this._disasmAt(ctx, addr);
+            out.push(d);
+            addr = (addr + d.len) & 0xFFFF;
+        }
+        return out;
+    }
+
+    _disasmAt(ctx, addr) {
+        const opcode = ctx.rom[addr];
+        const instr = OPCODES[opcode];
+        const b1 = ctx.rom[(addr + 1) & 0xFFFF];
+        const b2 = ctx.rom[(addr + 2) & 0xFFFF];
+        const rel = (b) => (b > 127 ? b - 256 : b);
+        const H2 = (b) => b.toString(16).toUpperCase().padStart(2, '0');
+        const H4 = (v) => v.toString(16).toUpperCase().padStart(4, '0');
+        if (!instr) {
+            return { addr, len: 1, bytes: [opcode], text: `DB 0x${H2(opcode)}` };
+        }
+        const len = instrLen(opcode, instr);
+        const m = instr.mnemonic;
+        let text = m;
+        if (len === 1) {
+            text = m;
+        } else if (opcode === 0xA5) {                                   // MATH 协处理器
+            const b3 = ctx.rom[(addr + 3) & 0xFFFF], b4 = ctx.rom[(addr + 4) & 0xFFFF];
+            const FN = { 0x01: 'UMUL16', 0x02: 'UDIV16', 0x03: 'UMOD16', 0x04: 'SMUL16', 0x05: 'SDIV16', 0x06: 'SMOD16', 0x07: 'UMUL32', 0x08: 'UDIV32', 0x09: 'UMOD32', 0x0A: 'SMUL32', 0x0B: 'SDIV32', 0x0C: 'SMOD32', 0x10: 'FADD', 0x11: 'FSUB', 0x12: 'FMUL', 0x13: 'FDIV', 0x14: 'FCMP', 0x15: 'I16TOF', 0x16: 'FTOI16', 0x17: 'I32TOF', 0x18: 'FTOI32', 0x1A: 'UCMP32', 0x1B: 'SCMP32' };
+            text = `MATH ${FN[b1] || ('0x' + H2(b1))} 0x${H2(b2)},0x${H2(b3)}→0x${H2(b4)}`;
+        } else if (opcode === 0x02 || opcode === 0x12) {                 // LJMP / LCALL
+            text = `${m.split(' ')[0]} 0x${H2(b1)}${H2(b2)}`;
+        } else if ((opcode & 0x1F) === 0x01 || (opcode & 0x1F) === 0x11) { // AJMP / ACALL
+            const page = (opcode >> 5) & 7;
+            const tgt = (addr & 0xF800) | (page << 8) | b1;
+            text = `${m} 0x${H4(tgt)}`;
+        } else if (opcode === 0x90) {                                   // MOV DPTR,#data16
+            text = `MOV DPTR,#0x${H2(b1)}${H2(b2)}`;
+        } else if (opcode === 0x75) {                                   // MOV direct,#data
+            text = `MOV 0x${H2(b1)},#0x${H2(b2)}`;
+        } else if (opcode === 0x85) {                                   // MOV direct,direct
+            text = `MOV 0x${H2(b2)},0x${H2(b1)}`;
+        } else if (opcode === 0x80 || opcode === 0x60 || opcode === 0x70 || opcode === 0x40 || opcode === 0x50) {
+            text = `${m.split(' ')[0]} 0x${H4((addr + 2 + rel(b1)) & 0xFFFF)}`;
+        } else if (opcode === 0x20 || opcode === 0x30) {                // JB / JNB
+            text = `${m.split(' ')[0]} ${this._bitName(b1)},0x${H4((addr + 3 + rel(b2)) & 0xFFFF)}`;
+        } else if (opcode === 0xB4 || opcode === 0xB5) {                // CJNE
+            const first = (opcode === 0xB4) ? `#0x${H2(b1)}` : `0x${H2(b1)}`;
+            text = `CJNE A,${first},0x${H4((addr + 3 + rel(b2)) & 0xFFFF)}`;
+        } else if (opcode === 0xD5) {                                   // DJNZ direct,rel
+            text = `DJNZ 0x${H2(b1)},0x${H4((addr + 3 + rel(b2)) & 0xFFFF)}`;
+        } else if (opcode >= 0xD8 && opcode <= 0xDF) {                  // DJNZ Rn,rel
+            text = `DJNZ R${opcode - 0xD8},0x${H4((addr + 2 + rel(b1)) & 0xFFFF)}`;
+        } else if (m.includes('#data')) {                               // 立即数
+            text = `${m.replace('#data', '').trim()} #0x${H2(b1)}`;
+        } else if (m.includes('direct,direct')) {
+            text = `MOV 0x${H2(b2)},0x${H2(b1)}`;
+        } else if (m.includes('bit')) {                                 // 位地址
+            text = `${m} ${this._bitName(b1)}`;
+        } else if (m.includes('direct')) {                              // 直接地址
+            text = `${m} 0x${H2(b1)}`;
+        } else {
+            text = `${m} 0x${H2(b1)}`;
+        }
+        const bytes = [];
+        for (let k = 0; k < len; k++) bytes.push(ctx.rom[(addr + k) & 0xFFFF]);
+        return { addr, len, bytes, text };
+    }
+
+    _bitName(bit) {
+        const H2 = (b) => b.toString(16).toUpperCase().padStart(2, '0');
+        if (bit < 0x80) return `0x${H2(bit)}`;      // 位区 RAM：0x20+n 的某位
+        const tables = {
+            0x80: ['P0.0','P0.1','P0.2','P0.3','P0.4','P0.5','P0.6','P0.7'],
+            0x88: ['IT0','IE0','IT1','IE1','TR0','TF0','TR1','TF1'],
+            0x90: ['P1.0','P1.1','P1.2','P1.3','P1.4','P1.5','P1.6','P1.7'],
+            0x98: ['RI','TI','RB8','TB8','REN','SM2','SM1','SM0'],
+            0xA0: ['P2.0','P2.1','P2.2','P2.3','P2.4','P2.5','P2.6','P2.7'],
+            0xA8: ['EX0','ET0','EX1','ET1','ES','—','—','EA'],
+            0xB0: ['P3.0','P3.1','P3.2','P3.3','P3.4','P3.5','P3.6','P3.7'],
+            0xB8: ['PX0','PT0','PX1','PT1','PS','—','—','—'],
+            0xD0: ['P','OV','RS0','RS1','F0','AC','F1','CY'],
+            0xE0: ['ACC.0','ACC.1','ACC.2','ACC.3','ACC.4','ACC.5','ACC.6','ACC.7'],
+            0xF0: ['B.0','B.1','B.2','B.3','B.4','B.5','B.6','B.7'],
+        };
+        const base = 0x80 + Math.floor((bit - 0x80) / 8) * 8;
+        const off = (bit - 0x80) % 8;
+        if (tables[base]) return tables[base][off];
+        return `0x${H2(bit)}`;
+    }
+
     /**
      * 读取 SFR（按 8051 地址）
      */
     _readSFR(ctx, addr) {
         const idx = addr - 0x80;
         if (idx < 0 || idx >= 0x80) return 0;
+
+        // 端口：优先使用实时输入提供者（矩阵键盘等）
+        const PORT_NAMES = { 0x80: 'p0', 0x90: 'p1', 0xA0: 'p2', 0xB0: 'p3' };
+        if (PORT_NAMES[addr] && ctx.debug && typeof ctx.debug.inputProvider === 'function') {
+            const v = ctx.debug.inputProvider(PORT_NAMES[addr], ctx.sfr[idx] || 0);
+            if (v !== null && v !== undefined) return v & 0xFF;
+        }
 
         // 特殊寄存器读取逻辑
         switch (addr) {
@@ -1241,6 +1629,13 @@ export class MCS51Solver {
 
         ctx.sfr[idx] = val & 0xFF;
         ctx.sfrWritten.add(addr);
+
+        // 端口写日志（供 LCD 等"帧内脉冲时序"外设仿真：P0 数据、P2 控制）
+        if (ctx.debug && (addr === 0x80 || addr === 0xA0)) {
+            if (!ctx.debug.portLog) ctx.debug.portLog = [];
+            ctx.debug.portLog.push({ a: addr, v: val & 0xFF });
+            if (ctx.debug.portLog.length > 4096) ctx.debug.portLog.splice(0, 2048);
+        }
 
         // 特殊寄存器写入副作用
         switch (addr) {
@@ -1304,5 +1699,76 @@ export class MCS51Solver {
                 ctx.b = val & 0xFF;
                 break;
         }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// 反汇编辅助：指令字节长度（len=0 的跳转类需按操作码判定）
+// ═══════════════════════════════════════════════════════════
+function instrLen(opcode, instr) {
+    if (instr && instr.len && instr.len > 0) return instr.len;
+    if (opcode === 0xD5) return 3;                              // DJNZ direct,rel
+    if (opcode >= 0xD8 && opcode <= 0xDF) return 2;             // DJNZ Rn,rel
+    if (opcode === 0xB4 || opcode === 0xB5) return 3;           // CJNE
+    if (opcode === 0x20 || opcode === 0x30) return 3;           // JB / JNB
+    if (opcode === 0x02 || opcode === 0x12) return 3;           // LJMP / LCALL
+    if ((opcode & 0x1F) === 0x01) return 2;                     // AJMP
+    if ((opcode & 0x1F) === 0x11) return 2;                     // ACALL
+    if (opcode === 0x80 || opcode === 0x60 || opcode === 0x70 || opcode === 0x40 || opcode === 0x50) return 2;
+    return 1;                                                   // SJMP/JZ/.../RET/RETI/JMP @A+DPTR
+}
+
+// ═══════════════════════════════════════════════════════════
+// 仿真数学协处理器（MATH 指令 0xA5）
+//   指令格式：A5 func a1 a2 dst（a1/a2/dst 为内部 RAM 地址，小端）
+//   整数 16/32 位乘除取余、IEEE-754 单精度浮点四则/比较/转换、32 位比较
+// ═══════════════════════════════════════════════════════════
+function _s16(v) { v &= 0xFFFF; return v >= 0x8000 ? v - 0x10000 : v; }
+function _s32(v) { v >>>= 0; return v >= 0x80000000 ? v - 0x100000000 : v; }
+
+function mathUnit(ctx) {
+    const base = ctx._instrPC;
+    const rom = ctx.rom;
+    const func = rom[(base + 1) & 0xFFFF];
+    const a1 = rom[(base + 2) & 0xFFFF];
+    const a2 = rom[(base + 3) & 0xFFFF];
+    const dst = rom[(base + 4) & 0xFFFF];
+    const ram = ctx.ram;
+    const rd = (a, n) => { let v = 0 >>> 0; for (let i = 0; i < n; i++) v |= (ram[(a + i) & 0xFF] & 0xFF) << (8 * i); return v >>> 0; };
+    const wr = (a, v, n) => { v = v >>> 0; for (let i = 0; i < n; i++) ram[(a + i) & 0xFF] = (v >>> (8 * i)) & 0xFF; };
+    const dv = new DataView(new ArrayBuffer(4));
+    const rf = (a) => { dv.setUint32(0, rd(a, 4), true); return dv.getFloat32(0, true); };
+    const wf = (a, f) => { dv.setFloat32(0, f, true); wr(a, dv.getUint32(0, true), 4); };
+    const div = (x, y) => (y === 0 ? 0 : x / y);
+
+    switch (func) {
+        // ── 16 位整型 ──
+        case 0x01: wr(dst, (rd(a1, 2) * rd(a2, 2)) & 0xFFFF, 2); break;                 // UMUL16
+        case 0x02: wr(dst, Math.floor(div(rd(a1, 2), rd(a2, 2))) & 0xFFFF, 2); break;    // UDIV16
+        case 0x03: { const d = rd(a2, 2); wr(dst, d ? rd(a1, 2) % d : rd(a1, 2), 2); break; } // UMOD16
+        case 0x04: wr(dst, (rd(a1, 2) * rd(a2, 2)) & 0xFFFF, 2); break;                 // SMUL16（低 16 位相同）
+        case 0x05: wr(dst, Math.trunc(div(_s16(rd(a1, 2)), _s16(rd(a2, 2)))) & 0xFFFF, 2); break; // SDIV16
+        case 0x06: { const s2 = _s16(rd(a2, 2)); wr(dst, (s2 ? (_s16(rd(a1, 2)) % s2) : _s16(rd(a1, 2))) & 0xFFFF, 2); break; } // SMOD16
+        // ── 32 位整型 ──
+        case 0x07: wr(dst, Number((BigInt(rd(a1, 4)) * BigInt(rd(a2, 4))) & 0xFFFFFFFFn), 4); break; // UMUL32
+        case 0x08: { const d = rd(a2, 4); wr(dst, d ? Math.floor(rd(a1, 4) / d) : 0xFFFFFFFF, 4); break; } // UDIV32
+        case 0x09: { const d = rd(a2, 4); wr(dst, d ? (rd(a1, 4) % d) : rd(a1, 4), 4); break; } // UMOD32
+        case 0x0A: wr(dst, Number((BigInt(rd(a1, 4)) * BigInt(rd(a2, 4))) & 0xFFFFFFFFn), 4); break; // SMUL32（低 32 位相同）
+        case 0x0B: { const s2 = _s32(rd(a2, 4)); wr(dst, Math.trunc(div(_s32(rd(a1, 4)), s2)) >>> 0, 4); break; } // SDIV32
+        case 0x0C: { const s2 = _s32(rd(a2, 4)); wr(dst, (s2 ? (_s32(rd(a1, 4)) % s2) : _s32(rd(a1, 4))) >>> 0, 4); break; } // SMOD32
+        // ── 浮点（IEEE-754 单精度）──
+        case 0x10: wf(dst, rf(a1) + rf(a2)); break;                                       // FADD
+        case 0x11: wf(dst, rf(a1) - rf(a2)); break;                                       // FSUB
+        case 0x12: wf(dst, rf(a1) * rf(a2)); break;                                       // FMUL
+        case 0x13: wf(dst, rf(a1) / rf(a2)); break;                                       // FDIV
+        case 0x14: { const x = rf(a1), y = rf(a2); wr(dst, x < y ? 0 : (x > y ? 2 : 1), 1); break; } // FCMP → 0/1/2
+        case 0x15: wf(dst, _s16(rd(a1, 2))); break;                                       // I16TOF
+        case 0x16: wr(dst, Math.trunc(rf(a1)) & 0xFFFF, 2); break;                        // FTOI16
+        case 0x17: wf(dst, _s32(rd(a1, 4))); break;                                       // I32TOF
+        case 0x18: wr(dst, Math.trunc(rf(a1)) >>> 0, 4); break;                           // FTOI32
+        // ── 32 位比较 → 0/1/2 ──
+        case 0x1A: { const x = rd(a1, 4), y = rd(a2, 4); wr(dst, x < y ? 0 : (x > y ? 2 : 1), 1); break; } // UCMP32
+        case 0x1B: { const x = _s32(rd(a1, 4)), y = _s32(rd(a2, 4)); wr(dst, x < y ? 0 : (x > y ? 2 : 1), 1); break; } // SCMP32
+        default: break;
     }
 }
