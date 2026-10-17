@@ -40,6 +40,7 @@ export class RefrigerationSystem extends BaseComponent {
         this._handValves = {};      // 手动截止阀状态（默认关断）
         this._solenoids = {};       // 电磁阀状态（由控制器驱动显示）
         this._fanOn = {};           // 各库蒸发器风机（默认运行；由带灯按钮控制）
+        this._ctrlOn = false;       // 控制器工作状态（默认关闭；点击控制器框切换）
         this._drawTop();
         this._drawHeaders();
         this._drawLeftColumn();
@@ -181,6 +182,15 @@ export class RefrigerationSystem extends BaseComponent {
         return !!(v && v.open);
     }
 
+    /** 批量设置手动截止阀通断（except 中的 id 跳过，保持不变） */
+    setHandValvesBulk(open, except) {
+        const ex = new Set(except || []);
+        Object.keys(this._handValves || {}).forEach(id => {
+            if (ex.has(id)) return;
+            this.setHandValve(id, open);
+        });
+    }
+
     /** 设置电磁阀状态：导通时线圈红色加粗外框 + 淡红填充、阀体亮绿 */
     setSolenoid(id, on) {
         const v = this._solenoids && this._solenoids[id];
@@ -194,6 +204,21 @@ export class RefrigerationSystem extends BaseComponent {
         v.diag.stroke(v.on ? '#e53935' : v.color);
         if (this.sys && this.sys.requestRedraw) this.sys.requestRedraw();
     }
+
+    // ── 控制器（温度控制器）工作状态 ──────────────────────
+
+    /** 控制器是否处于工作状态（默认关闭） */
+    isControllerOn() { return !!this._ctrlOn; }
+
+    /** 设置控制器工作状态：工作时控制器框填充亮绿色背景 */
+    setController(on) {
+        this._ctrlOn = !!on;
+        if (this._ctrlBox) this._ctrlBox.fill(this._ctrlOn ? '#00e83a' : '#f4f6f7');
+        if (this.sys && this.sys.requestRedraw) this.sys.requestRedraw();
+    }
+
+    /** 点击控制器框切换工作/关闭 */
+    toggleController() { this.setController(!this._ctrlOn); }
 
     // ── 冷库蒸发器风机（带灯按钮）──────────────────────────
 
@@ -265,9 +290,10 @@ export class RefrigerationSystem extends BaseComponent {
     _drawTop() {
         // 绿色外框（套在控制器框外）
         this._staticGroup.add(new Konva.Rect({ x: 23, y: 8, width: 114, height: 55, stroke: '#27ae60', strokeWidth: 2, cornerRadius: 3 }));
-        // 控制器框（加粗）
-        this._staticGroup.add(new Konva.Rect({ x: 30, y: 15, width: 100, height: 41, fill: '#f4f6f7', stroke: '#5f656b', strokeWidth: 3 }));
-        this._text(30, 26, 100, '控制器', 15, '#2c3e50', 'center', true);
+        // 控制器框（加粗）：动态节点，工作状态填充亮绿色背景（点击框体切换工作/关闭）
+        this._ctrlBox = new Konva.Rect({ x: 30, y: 15, width: 100, height: 41, fill: '#f4f6f7', stroke: '#5f656b', strokeWidth: 3 });
+        this._ctrlLabel = new Konva.Text({ x: 30, y: 26, width: 100, text: '控制器', fontSize: 15, fontStyle: 'bold', fill: '#2c3e50', align: 'center', fontFamily: 'Arial' });
+        this._dynamicGroup.add(this._ctrlBox, this._ctrlLabel);
 
         // 两条水平虚线：自控制器右侧 1/3、2/3 高度引出
         this._line([130, 29, 1360, 29], '#95a5a6', 1.5, [7, 4]);
@@ -376,8 +402,7 @@ export class RefrigerationSystem extends BaseComponent {
             // 控制虚线：左侧虚线移到库左边缘与左侧管道之间的空隙；右侧在 2/3 处
             this._line([x0 + 15, 29, x0 + 15, y0 + 24], '#95a5a6', 1.5, [6, 4]);
             this._line([x0 + 147, 42, x0 + 147, y0 - 6], '#95a5a6', 1.5, [6, 4]);
-            // 温度开关（悬空挂于虚线末端）
-            g.add(new Konva.Rect({ x: x0 + 9, y: y0 + 24, width: 12, height: 14, fill: '#ecf0f1', stroke: '#7f8c8d', strokeWidth: 2, cornerRadius: 2 }));
+            // 温度开关引线（悬空挂于虚线末端）；开关本体为动态节点（见 _drawDynamic）
             g.add(new Konva.Line({ points: [x0 + 15, y0 + 38, x0 + 15, y0 + 46], stroke: '#7f8c8d', strokeWidth: 2 }));
 
             // 制冷剂引入：细管在两库之间的空隙下引 → 库右上 → 库内粗管往左
@@ -545,11 +570,36 @@ export class RefrigerationSystem extends BaseComponent {
     }
 
     _drawTags() {
-        this._text(120, 350, 90, 'P 0.40', 12, '#1565c0', 'left', true);
-        this._text(320, 445, 90, 'P 0.30', 12, '#1565c0', 'left', true);
-        this._text(380, 445, 90, 'P 11.00', 12, '#1565c0', 'left', true);
-        this._text(860, 445, 90, 'P 0.30', 12, '#1565c0', 'left', true);
-        this._text(990, 445, 90, 'P 11.00', 12, '#1565c0', 'left', true);
+        // 回热器右上管道（回气总管）压力：各蒸发器出口汇合压力，动态显示
+        this._suctionPTag = new Konva.Text({
+            x: 140, y: 345, width: 90, text: 'P 0.20', fontSize: 15,
+            fontStyle: 'bold', fill: '#1565c0', align: 'left', fontFamily: 'Arial',
+        });
+        this._dynamicGroup.add(this._suctionPTag);
+        // 压缩机入口压力（动态）：入口截止阀开启 = 蒸发器输出管路压力；关闭降至约 0.1bar
+        this._psuc1Tag = new Konva.Text({
+            x: 280, y: 485, width: 90, text: 'P 0.10', fontSize: 15,
+            fontStyle: 'bold', fill: '#1565c0', align: 'left', fontFamily: 'Arial',
+        });
+        this._dynamicGroup.add(this._psuc1Tag);
+        // 压缩机入口压力（动态）：入口截止阀开启 = 蒸发器输出管路压力；关闭降至约 0.1bar
+        this._psuc2Tag = new Konva.Text({
+            x: 820, y: 485, width: 90, text: 'P 0.10', fontSize: 15,
+            fontStyle: 'bold', fill: '#1565c0', align: 'left', fontFamily: 'Arial',
+        });
+        this._dynamicGroup.add(this._psuc2Tag);
+        // 压缩机排气压力（动态）：正常 = 入口压力 + 10bar，冷却水断流且运行时升至约 30bar
+        this._pdis1Tag = new Konva.Text({
+            x: 400, y: 420, width: 90, text: 'P 14.50', fontSize: 15,
+            fontStyle: 'bold', fill: '#1565c0', align: 'left', fontFamily: 'Arial',
+        });
+        this._dynamicGroup.add(this._pdis1Tag);
+        // 压缩机排气压力（动态）：规则同 1 号机出口
+        this._pdis2Tag = new Konva.Text({
+            x: 960, y: 420, width: 90, text: 'P 11.00', fontSize: 15,
+            fontStyle: 'bold', fill: '#1565c0', align: 'left', fontFamily: 'Arial',
+        });
+        this._dynamicGroup.add(this._pdis2Tag);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -579,8 +629,10 @@ export class RefrigerationSystem extends BaseComponent {
             const green = new Konva.Circle({ x: x0 + 198, y: y0 + 118, radius: 13, fill: '#0b3d0b', stroke: '#08300b', strokeWidth: 2 });
             const red = new Konva.Circle({ x: x0 + 198, y: y0 + 158, radius: 13, fill: '#3d0b0b', stroke: '#300808', strokeWidth: 2 });
             const tText = new Konva.Text({ x: x0 + 118, y: y0 + 58, width: 110, text: 'T --.--', fontSize: 14, fontStyle: 'bold', fill: '#102a43', fontFamily: 'monospace' });
-            d.add(bezelOn, bezelOff, green, red, tText);
-            this._roomNodes.push({ fan, green, red, tText, key: r.key });
+            // 温度开关本体（动态）：库温 > 启动值时点亮（亮绿色）
+            const sw = new Konva.Rect({ x: x0 + 9, y: y0 + 24, width: 12, height: 14, fill: '#ecf0f1', stroke: '#7f8c8d', strokeWidth: 2, cornerRadius: 2 });
+            d.add(bezelOn, bezelOff, green, red, tText, sw);
+            this._roomNodes.push({ fan, green, red, tText, sw, key: r.key });
 
             // 按钮命中区：上「起动」→ 风机运行；下「停止」→ 风机停机
             const hitOn = this.addClickablePart('fan-on-' + r.key, x0 + 177, y0 + 97, 42, 42);
@@ -613,6 +665,8 @@ export class RefrigerationSystem extends BaseComponent {
     }
 
     _registerParts() {
+        const ctrl = this.addClickablePart('controller', 30, 15, 100, 41);
+        if (ctrl) ctrl.on('click tap', () => this.toggleController());
         this.addClickablePart('comp1', 240, 520, 200, 87);
         this.addClickablePart('comp2', 800, 520, 200, 87);
         this.rooms.forEach(r => this.addClickablePart('evap-' + r.key, r.cx - 17, 178, 77, 94));
@@ -636,12 +690,17 @@ export class RefrigerationSystem extends BaseComponent {
             // 带灯按钮：风机运行 → 上（起动）亮绿、下（停止）暗红；停机 → 上暗绿、下亮红
             rn.green.fill(r.fanOn ? '#00e83a' : '#0b3d0b');
             rn.red.fill(r.fanOn ? '#3d0b0b' : '#ff2020');
-            // 供液电磁阀随该库制冷与否导通
-            this.setSolenoid('sup-' + rn.key, !!r.cooling);
+            // 温度开关：库温高于启动值点亮（亮绿色）
+            if (rn.sw) rn.sw.fill(r.swOn ? '#00e83a' : '#ecf0f1');
+            // 供液电磁阀随该库是否供液导通
+            this.setSolenoid('sup-' + rn.key, !!r.solOpen);
         });
 
-        // 主管路电磁阀：回热器下方供液阀随系统运行、油分油管阀随对应压缩机运行
-        this.setSolenoid('liq', !!m.running);
+        // 控制器框：工作状态填充亮绿色背景
+        if (this._ctrlBox) this._ctrlBox.fill(m.ctrlOn ? '#00e83a' : '#f4f6f7');
+
+        // 主管路电磁阀：总供液阀随总供液状态、油分油管阀随对应压缩机运行
+        this.setSolenoid('liq', !!m.masterSol);
         this.setSolenoid('oil-sol1', !!(m.comps && m.comps.comp1 && m.comps.comp1.running));
         this.setSolenoid('oil-sol2', !!(m.comps && m.comps.comp2 && m.comps.comp2.running));
 
@@ -663,6 +722,12 @@ export class RefrigerationSystem extends BaseComponent {
         }
         if (this._cond1T) this._cond1T.text('T ' + (m.running ? m.tc : m.tcwIn).toFixed(1));
         if (this._cond2T) this._cond2T.text('T ' + (m.running ? m.tc : m.tcwIn).toFixed(1));
+        // 压力动态标签（单位 bar）
+        if (this._suctionPTag && m.pe !== undefined) this._suctionPTag.text('P ' + m.pe.toFixed(2));
+        if (this._psuc1Tag && m.psuc1 !== undefined) this._psuc1Tag.text('P ' + m.psuc1.toFixed(2));
+        if (this._psuc2Tag && m.psuc2 !== undefined) this._psuc2Tag.text('P ' + m.psuc2.toFixed(2));
+        if (this._pdis1Tag && m.pdis1 !== undefined) this._pdis1Tag.text('P ' + m.pdis1.toFixed(2));
+        if (this._pdis2Tag && m.pdis2 !== undefined) this._pdis2Tag.text('P ' + m.pdis2.toFixed(2));
     }
 
     tick(dt) {

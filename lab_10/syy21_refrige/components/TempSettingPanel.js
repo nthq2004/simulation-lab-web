@@ -51,11 +51,11 @@ export class TempSettingPanel extends BaseComponent {
         });
 
         // 温度数值
-        this._startVal = new Konva.Text({ x: 20, y: 116, width: 150, text: '6', fontSize: 34, fontStyle: 'bold', fill: '#102a43', align: 'center', fontFamily: 'monospace' });
-        this._stopVal = new Konva.Text({ x: 20, y: 224, width: 150, text: '1', fontSize: 34, fontStyle: 'bold', fill: '#102a43', align: 'center', fontFamily: 'monospace' });
+        this._startVal = new Konva.Text({ x: 20, y: 119, width: 150, text: '6', fontSize: 34, fontStyle: 'bold', fill: '#102a43', align: 'center', fontFamily: 'monospace' });
+        this._stopVal = new Konva.Text({ x: 20, y: 227, width: 150, text: '1', fontSize: 34, fontStyle: 'bold', fill: '#102a43', align: 'center', fontFamily: 'monospace' });
         d.add(this._startVal, this._stopVal);
 
-        // 上下箭头
+        // 增加 / 减少箭头（置于设定值右侧，增在上、减在下）
         const arrow = (x, y, up) => {
             const grp = new Konva.Group({ x, y });
             grp.add(new Konva.Rect({ width: 24, height: 20, fill: '#b0bec5', stroke: '#607d8b', strokeWidth: 1, cornerRadius: 3 }));
@@ -63,17 +63,17 @@ export class TempSettingPanel extends BaseComponent {
             d.add(grp);
             return grp;
         };
-        this._upStart = arrow(46, 162, true);
-        this._dnStart = arrow(78, 162, false);
-        this._upStop = arrow(46, 270, true);
-        this._dnStop = arrow(78, 270, false);
+        this._upStart = arrow(131, 116, true);
+        this._dnStart = arrow(131, 144, false);
+        this._upStop = arrow(131, 224, true);
+        this._dnStop = arrow(131, 252, false);
 
-        // 蒸发压力表 / 室温表
-        this._evap = this._makeGauge(268, 135, 56, '蒸发压力', 'bar', 16, '#00838f');
-        this._roomGauge = this._makeGauge(390, 150, 52, '室温', '℃', 40, '#ef6c00');
-        this._digital = new Konva.Text({ x: 200, y: 224, width: 200, text: '0.0', fontSize: 26, fontStyle: 'bold', fill: '#39ff39', align: 'center', fontFamily: 'monospace' });
+        // 蒸发压力表 / 室温表（同尺寸、水平对齐）
+        this._evap = this._makeGauge(258, 140, 54, '蒸发压力', 'bar', 16, '#00838f');
+        this._roomGauge = this._makeGauge(390, 140, 54, '室温', '℃', 40, '#ef6c00');
+        this._digital = new Konva.Text({ x: 224, y: 234, width: 200, text: '0.0', fontSize: 26, fontStyle: 'bold', fill: '#39ff39', align: 'center', fontFamily: 'monospace' });
         d.add(this._digital);
-        this._staticGroup.add(new Konva.Rect({ x: 200, y: 220, width: 200, height: 34, fill: '#12321f', stroke: '#0a2013', strokeWidth: 2, cornerRadius: 4 }));
+        this._staticGroup.add(new Konva.Rect({ x: 224, y: 230, width: 200, height: 34, fill: '#12321f', stroke: '#0a2013', strokeWidth: 2, cornerRadius: 4 }));
     }
 
     _makeGauge(cx, cy, r, label, unit, max, color) {
@@ -85,9 +85,9 @@ export class TempSettingPanel extends BaseComponent {
         }
         const needle = new Konva.Line({ points: [0, 0, 0, -(r - 12)], stroke: color, strokeWidth: 3, lineCap: 'round' });
         g.add(needle, new Konva.Circle({ radius: 5, fill: '#455a64' }));
-        g.add(new Konva.Text({ x: -r, y: -8, width: r * 2, text: label, fontSize: 10, fontStyle: 'bold', fill: '#37474f', align: 'center' }));
-        const valText = new Konva.Text({ x: -r, y: 16, width: r * 2, text: '0.0', fontSize: 14, fontStyle: 'bold', fill: '#102a43', align: 'center', fontFamily: 'monospace' });
-        g.add(valText, new Konva.Text({ x: -r, y: 32, width: r * 2, text: unit, fontSize: 9, fill: '#78909c', align: 'center' }));
+        g.add(new Konva.Text({ x: -r, y: 12, width: r * 2, text: label, fontSize: 10, fontStyle: 'bold', fill: '#37474f', align: 'center' }));
+        const valText = new Konva.Text({ x: -r, y: 26, width: r * 2, text: '0.0', fontSize: 14, fontStyle: 'bold', fill: '#102a43', align: 'center', fontFamily: 'monospace' });
+        g.add(valText, new Konva.Text({ x: -r, y: 40, width: r * 2, text: unit, fontSize: 9, fill: '#78909c', align: 'center' }));
         this._dynamicGroup.add(g);
         return { needle, valText, max };
     }
@@ -98,10 +98,10 @@ export class TempSettingPanel extends BaseComponent {
             const hit = this.addClickablePart('tab-' + k, x0 + i * (tw + gap), 40, tw, 26, true);
             hit.on('click tap', () => { this.active = i; this._syncVisuals(); });
         });
-        const u1 = this.addClickablePart('up-start', 46, 162, 24, 20, true);
-        const d1 = this.addClickablePart('down-start', 78, 162, 24, 20, true);
-        const u2 = this.addClickablePart('up-stop', 46, 270, 24, 20, true);
-        const d2 = this.addClickablePart('down-stop', 78, 270, 24, 20, true);
+        const u1 = this.addClickablePart('up-start', 131, 116, 24, 20, true);
+        const d1 = this.addClickablePart('down-start', 131, 144, 24, 20, true);
+        const u2 = this.addClickablePart('up-stop', 131, 224, 24, 20, true);
+        const d2 = this.addClickablePart('down-stop', 131, 252, 24, 20, true);
         u1.on('click tap', () => this._bump('setStart', +1));
         d1.on('click tap', () => this._bump('setStart', -1));
         u2.on('click tap', () => this._bump('setStop', +1));
@@ -125,9 +125,9 @@ export class TempSettingPanel extends BaseComponent {
             if (this._startVal) this._startVal.text(String(Math.round(r.setStart)));
             if (this._stopVal) this._stopVal.text(String(Math.round(r.setStop)));
             if (this._digital) this._digital.text(r.temp.toFixed(1));
-            if (this._roomGauge) { this._roomGauge.needle.rotation(-225 + Math.max(0, Math.min(1, Math.max(0, r.temp) / this._roomGauge.max)) * 270); this._roomGauge.valText.text(r.temp.toFixed(1)); }
+            if (this._roomGauge) { this._roomGauge.needle.rotation(-135 + Math.max(0, Math.min(1, Math.max(0, r.temp) / this._roomGauge.max)) * 270); this._roomGauge.valText.text(r.temp.toFixed(1)); }
         }
-        if (this._evap) { this._evap.needle.rotation(-225 + Math.max(0, Math.min(1, m.pe / this._evap.max)) * 270); this._evap.valText.text(m.pe.toFixed(2)); }
+        if (this._evap) { this._evap.needle.rotation(-135 + Math.max(0, Math.min(1, m.pe / this._evap.max)) * 270); this._evap.valText.text(m.pe.toFixed(2)); }
     }
 
     tick() { this._updateDynamic(); this._refreshIfDirty(); }

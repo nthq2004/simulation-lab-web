@@ -86,15 +86,28 @@ export function applyAllPresets(opts) {
     if (sys && sys.redrawAll) sys.redrawAll();
 }
 
-/** 启动系统：操作台置自动、两机投入自动控制 */
+/** 启动系统：操作台置自动、两机投入自动控制；默认开启制冷剂管路与冷却水管路的手动截止阀，
+ *  不改动冷库旁通阀、压缩机滑油注入/出口截止阀，制冷剂注入截止阀保持关闭） */
 export async function applyStartSystem() {
     const sys = _sysOf(this);
     if (!sys) return;
     const panel = sys.comps && sys.comps['cpanel'];
-    if (panel) { panel.mode = 'auto'; panel._syncVisuals && panel._syncVisuals(); }
+    if (panel) { panel.setMode ? panel.setMode('auto', true) : (panel.mode = 'auto'); panel._syncVisuals && panel._syncVisuals(); }
+    const refsys = sys.comps && sys.comps['refsys'];
+    if (refsys && typeof refsys.setHandValvesBulk === 'function') {
+        // 仅开启制冷剂管路、冷却水管路的截止阀；旁通阀、滑油阀保持原状，制冷剂注入阀保持关闭
+        refsys.setHandValvesBulk(true, [
+            'chg', 'byp-dry', 'byp-grain', 'byp-veg', 'byp-fish', 'byp-meat',
+            'oil1-in', 'oil1-out', 'oil2-in', 'oil2-out',
+        ]);
+    }
+    // 控制器投入工作状态（否则电磁阀无输出、制冷不生效）
+    if (refsys && typeof refsys.setController === 'function') refsys.setController(true);
     const s = sys.refrigSolver;
     if (s && s.m) {
         s.m.mode = 'auto';
+        s.m.comps.comp1.mode = 'auto';
+        s.m.comps.comp2.mode = 'auto';
         s.m.comps.comp1.manualRun = true;
         s.m.comps.comp2.manualRun = true;
         s.m.trip = false;
