@@ -63,6 +63,15 @@ export class SafetyAlarmPanel extends BaseComponent {
     _bindInteraction() {
         const hit = this.addClickablePart('reset', this.W - 82, this.H - 82, 56, 56, true);
         hit.on('click tap', () => { const s = this.sys && this.sys.refrigSolver; if (s && s.m) s.m.resetPulse = true; });
+
+        // 各报警灯定位区（供操作流程自动演示时箭头指向具体某路报警）
+        const colX = [44, 264];
+        this._items.forEach((it, i) => {
+            const y = 78 + i * 46 + 12;
+            colX.forEach((cx, ci) => {
+                this.addClickablePart(`alarm-${it.key}-${ci + 1}`, cx - 14, y - 14, 28, 28);
+            });
+        });
     }
 
     _syncVisuals() {

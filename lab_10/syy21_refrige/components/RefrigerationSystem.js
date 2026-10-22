@@ -643,10 +643,19 @@ export class RefrigerationSystem extends BaseComponent {
 
         this._oil1 = new Konva.Rect({ x: 361, y: 541, width: 20, height: 48, fill: '#f2a30f', cornerRadius: 2 });
         this._run1 = new Konva.Circle({ x: 403, y: 563, radius: 8, fill: '#0b3d0b', stroke: '#08300b', strokeWidth: 2 });
-        d.add(this._oil1, this._run1);
+        // 压缩机滑油液位动态数值标签（视镜右下方，避开进出油管）
+        this._oilText1 = new Konva.Text({
+            x: 374, y: 608, width: 64, text: '滑油 50%', fontSize: 9, fontStyle: 'bold',
+            fill: '#7a4a00', align: 'center', fontFamily: 'monospace',
+        });
+        d.add(this._oil1, this._run1, this._oilText1);
         this._oil2 = new Konva.Rect({ x: 921, y: 541, width: 20, height: 48, fill: '#f2a30f', cornerRadius: 2 });
         this._run2 = new Konva.Circle({ x: 963, y: 563, radius: 8, fill: '#0b3d0b', stroke: '#08300b', strokeWidth: 2 });
-        d.add(this._oil2, this._run2);
+        this._oilText2 = new Konva.Text({
+            x: 934, y: 608, width: 64, text: '滑油 50%', fontSize: 9, fontStyle: 'bold',
+            fill: '#7a4a00', align: 'center', fontFamily: 'monospace',
+        });
+        d.add(this._oil2, this._run2, this._oilText2);
 
         this._os1 = new Konva.Rect({ x: 587, y: 446, width: 18, height: 84, fill: '#f2a30f', cornerRadius: 2 });
         this._os2 = new Konva.Rect({ x: 1147, y: 446, width: 18, height: 84, fill: '#f2a30f', cornerRadius: 2 });
@@ -676,6 +685,16 @@ export class RefrigerationSystem extends BaseComponent {
         this.addClickablePart('oilsep_acc', 130, 405, 72, 95);
         this.addClickablePart('receiver', 210, 790, 70, 115);
         this.addClickablePart('dryer', 30, 630, 55, 90);
+        // 油液分离器（筒体）
+        this.addClickablePart('oilsep1', 575, 430, 55, 115);
+        this.addClickablePart('oilsep2', 1135, 430, 55, 115);
+        // 各库：膨胀阀 / 温度继电器 / 供液电磁阀
+        this.rooms.forEach(r => {
+            const x0 = r.cx - 110, y0 = 80;
+            this.addClickablePart('exp-' + r.key, x0 + 56, y0 + 12, 42, 32);
+            this.addClickablePart('tsw-' + r.key, x0 + 6, y0 + 21, 18, 20);
+            this.addClickablePart('sol-' + r.key, x0 + 134, y0 + 21, 26, 22);
+        });
     }
 
     // ═══════════════════════════════════════════════════════
@@ -701,12 +720,21 @@ export class RefrigerationSystem extends BaseComponent {
 
         // 主管路电磁阀：总供液阀随总供液状态、油分油管阀随对应压缩机运行
         this.setSolenoid('liq', !!m.masterSol);
-        this.setSolenoid('oil-sol1', !!(m.comps && m.comps.comp1 && m.comps.comp1.running));
-        this.setSolenoid('oil-sol2', !!(m.comps && m.comps.comp2 && m.comps.comp2.running));
+        // 油分回油电磁阀：分离器液位 ≥20% 接通、≤3% 断开（由求解器给出）
+        this.setSolenoid('oil-sol1', !!(m.comps && m.comps.comp1 && m.comps.comp1.oilSolOpen));
+        this.setSolenoid('oil-sol2', !!(m.comps && m.comps.comp2 && m.comps.comp2.oilSolOpen));
 
         const c1 = m.comps && m.comps.comp1, c2 = m.comps && m.comps.comp2;
-        if (c1) { this._run1.fill(c1.running ? '#00e83a' : '#0b3d0b'); const h = 48 * (c1.oilLevel / 100); this._oil1.height(h); this._oil1.y(589 - h); }
-        if (c2) { this._run2.fill(c2.running ? '#00e83a' : '#0b3d0b'); const h = 48 * (c2.oilLevel / 100); this._oil2.height(h); this._oil2.y(589 - h); }
+        if (c1) {
+            this._run1.fill(c1.running ? '#00e83a' : '#0b3d0b');
+            const h = 48 * (c1.oilLevel / 100); this._oil1.height(h); this._oil1.y(589 - h);
+            this._oilText1.text('滑油 ' + Math.round(c1.oilLevel) + '%');
+        }
+        if (c2) {
+            this._run2.fill(c2.running ? '#00e83a' : '#0b3d0b');
+            const h = 48 * (c2.oilLevel / 100); this._oil2.height(h); this._oil2.y(589 - h);
+            this._oilText2.text('滑油 ' + Math.round(c2.oilLevel) + '%');
+        }
         if (m.oilsep) {
             const h1 = 84 * ((m.oilsep.comp1 || 0) / 100);
             this._os1.height(Math.max(4, h1)); this._os1.y(530 - Math.max(4, h1));

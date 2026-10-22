@@ -378,7 +378,43 @@ export class Workflow {
             await new Promise(r => setTimeout(r, DEMO.STEP_END_HOLD));
         }
 
+        // 3. 等待步骤前置条件（step.waitFor）：用于「等物理现象出现再继续」的步骤，
+        //    例如等冷库温度真的降到停止值、或回升到启动值以上，自动/单步演示都不会提前跳过
+        if (typeof step.waitFor === 'function') {
+            await this._waitForCondition(step, token, flowRef);
+            if (stale()) return;
+        }
+
         this.sys.redrawAll();
+    }
+
+    /**
+     * 等待步骤的 waitFor 条件成立（自动演示 / 单步演示用）。
+     * 期间显示等待提示，最长等待 WAIT_FOR_MAX ms，超时后放行以免卡死演示。
+     * @param {object} step 步骤对象
+     * @param {*} token 演示令牌（流程被切换时立即让位）
+     * @param {*} flowRef 流程数组引用
+     * @returns {Promise<boolean>} 条件是否已成立
+     */
+    async _waitForCondition(step, token, flowRef) {
+        const WAIT_FOR_MAX = 300000;   // 最多等 5 分钟
+        const stale = () => (token !== undefined && token !== this._demoToken)
+            || (flowRef !== undefined && flowRef !== this._workflow);
+        const label = step.waitMsg || '等待系统状态满足条件…';
+        let waited = 0, tipShown = false;
+        while (waited < WAIT_FOR_MAX) {
+            if (stale()) return false;
+            let ok = false;
+            try { ok = !!step.waitFor.call(this); } catch (e) { ok = true; }
+            if (ok) return true;
+            if (!tipShown) {                         // 等待提示只显示一次，不反复刷屏
+                this._tipWorkflow('⏳ ' + label, 5000);
+                tipShown = true;
+            }
+            await new Promise(r => setTimeout(r, 500));
+            waited += 500;
+        }
+        return false;
     }
     resetWorkflow() {
         this._workflowIdx = 0;
@@ -406,8 +442,11 @@ export class Workflow {
                 const targets = Array.isArray(step.target) ? step.target : [step.target];
                 if (step.subTarget) {
                     // 子部件识别：点击电池内部的隔板/极板等
-                    var expectId = targets[0] + '/' + step.subTarget;
-                    if (this.sys.lastClickedPartId === expectId) {
+                    // subTargets（可选）给出「任一命中即通过」的等价部件集合，
+                    // 例：高低压继电器点击进口压力表或出口压力表均可
+                    const subs = Array.isArray(step.subTargets) ? step.subTargets : [step.subTarget];
+                    const ok = targets.some(t => subs.some(s => this.sys.lastClickedPartId === t + '/' + s));
+                    if (ok) {
                         this.sys.lastClickedPartId = null;
                         await this._onStepPass();
                     }
@@ -453,7 +492,13 @@ export class Workflow {
                 // 这里会等待 check() 内部的 6s 延时结束
                 const isPassed = await step.check.call(this);
 
-                if (isPassed) {
+                // waitFor 为「必须等到现象出现」的附加条件（演练/评估模式下同样不许提前跳过）
+                let waitOK = true;
+                if (isPassed && typeof step.waitFor === 'function') {
+                    try { waitOK = !!step.waitFor.call(this); } catch (e) { waitOK = true; }
+                }
+
+                if (isPassed && waitOK) {
                     await this._onStepPass();
                 }
             }

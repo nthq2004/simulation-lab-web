@@ -48,12 +48,21 @@ export function satPress(T) {
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const lerp = (a, b, f) => a + (b - a) * f;
 
+// 蒸发器化霜电路故障时，降温速率剩余比例（制冷效果变差 → 降温极慢）
+// 原为 0.15，再减为 1/4 → 0.0375
+const DEFROST_RATE_MUL = 0.15 * 0.25;
+
+// 个别冷库升温速率附加系数（相对全局 heatRateMul）：鱼库 / 肉库再减半；菜库再提高 50%
+const HEAT_MUL_BY_ROOM = { veg: 1.125, fish: 0.5, meat: 0.5 };
+// 个别冷库降温速率再加倍（相对全局 coolRateMul 的附加系数）：鱼库
+const COOL_MUL_BY_ROOM = { fish: 2 };
+
 const ROOM_DEFS = [
-    { key: 'dry', name: '干货库', setStart: 8, setStop: 4, init: 3 },
-    { key: 'grain', name: '粮库', setStart: 6, setStop: 1, init: 5 },
-    { key: 'veg', name: '菜库', setStart: -5, setStop: -8, init: -6 },
-    { key: 'fish', name: '鱼库', setStart: -14, setStop: -18, init: -17 },
-    { key: 'meat', name: '肉库', setStart: -16, setStop: -20, init: -17 },
+    { key: 'dry', name: '干货库', setStart: 8, setStop: 4, init: 7 },
+    { key: 'grain', name: '粮库', setStart: 6, setStop: 2, init: 4 },
+    { key: 'veg', name: '菜库', setStart: -5, setStop: -7, init: -6.5 },
+    { key: 'fish', name: '鱼库', setStart: -14, setStop: -18, init: -15 },
+    { key: 'meat', name: '肉库', setStart: -16, setStop: -20, init: -15 },
 ];
 
 // 回气总管压力（bar）：单库基准随库温/负荷由低到高（肉/鱼 < 菜 < 粮 < 干货）
@@ -92,11 +101,12 @@ export class RefrigerationSolver {
             rooms: {},
             activeRoom: 'dry', activeComp: 'comp1',
             comps: {
-                comp1: { running: false, loadPct: 0, manualRun: false, oilLevel: 70, mode: 'manual', startP: 1.8, diffP: 0.3, hpP: 22, hpTripped: false, _startTimer: 0, _stopTimer: 0, _hpTimer: 0 },
-                comp2: { running: false, loadPct: 0, manualRun: false, oilLevel: 70, mode: 'manual', startP: 1.8, diffP: 0.3, hpP: 22, hpTripped: false, _startTimer: 0, _stopTimer: 0, _hpTimer: 0 },
+                // mode：每台机各自的手动/自动档位（自动起动系统时一号机自动、二号机保持手动）
+                comp1: { running: false, loadPct: 0, manualRun: false, oilLevel: 50, mode: 'manual' },
+                comp2: { running: false, loadPct: 0, manualRun: false, oilLevel: 50, mode: 'manual' },
             },
-            oilsep: { comp1: 40, comp2: 25 },
-            receiver: 45,
+            oilsep: { comp1: 3, comp2: 3 },
+            receiver: 50,
             ctrlOn: false,            // 控制器工作状态（默认关闭）
             masterSol: false,
             alarms: {
@@ -108,14 +118,23 @@ export class RefrigerationSolver {
 
         this._params = {
             ambient: 32,
-            kEnv: 0.10,        // 每库围护漏热 kW/K
+            kEnv: 0.08,        // 每库围护漏热 kW/K（与「每库 18% 负荷」匹配：单机制冷量足以压住单库漏热）
             cRoom: 110,        // 每库热容 kJ/K
+            coolRateMul: 2,    // 降温速率倍数（净制冷段再提升 1 倍）
+            heatRateMul: 0.5,  // 升温速率倍数（净放热/停机回暖段减半）
             uaEvap: 3.5,       // 蒸发器总传热 kW/K
             uaCond: 6.0,       // 冷凝器传热 kW/K
             qCapMax: 24,       // 两机满负荷总制冷量 kW
+            roomLoadPct: 18,   // 单个冷库折算负荷率（%）：1 库 18%、2 库 36% … 5 库 90%
             copBase: 2.8,
             hpTrip: 16.5, wpLow: 0.5,
             oilDiff: 2.0, oilLowDiff: 0.8,
+        };
+
+        // 故障开关（由故障设置界面写入）
+        this.faults = {
+            vegExpValve: false,   // 菜库膨胀阀故障：制冷剂流量极小 → 不能制冷
+            defrost: false,       // 蒸发器化霜电路故障：制冷效果变差 → 降温极慢
         };
 
         this._demand = false;
@@ -148,6 +167,10 @@ export class RefrigerationSolver {
                 loop: false,      // 制冷剂回路是否形成
                 // 温度变化速度：自左向右每库递增 10%（最右库升温/降温最快），整体提升到原来的 2 倍
                 speed: 2 * Math.pow(1.1, i),
+                // 升温速率系数：全局 heatRateMul，菜/鱼/肉库再减半
+                heatMul: (this._params.heatRateMul || 1) * (HEAT_MUL_BY_ROOM[d.key] || 1),
+                // 降温速率系数：全局 coolRateMul，鱼库再加倍
+                coolMul: (this._params.coolRateMul || 1) * (COOL_MUL_BY_ROOM[d.key] || 1),
             };
         });
         this._inited = true;
@@ -188,14 +211,15 @@ export class RefrigerationSolver {
             m.alarms = { comp1: { hp: false, loil: false, oilhi: false, wplow: false }, comp2: { hp: false, loil: false, oilhi: false, wplow: false } };
             ['comp1', 'comp2'].forEach(id => {
                 const c = m.comps[id];
-                c.hpTripped = false; c._hpTimer = 0; c._startTimer = 0; c._stopTimer = 0;
+                c.hpTripped = false; c.loTripped = false;
+                c._hpTimer = 0; c._startTimer = 0; c._stopTimer = 0;
             });
             m.resetPulse = false;
         }
 
         // ── ④ 安全保护 ──
-        // 淡水压力过低 → 全局跳闸锁存（排出压力过高改为各压缩机独立保护，见第⑩段）
-        if (m.waterP < P.wpLow) { m.trip = true; m.tripReason = '淡水压力过低'; }
+        // 淡水压力低 / 冷却水进口阀关闭：只报警不停机（见第⑩段 a.wplow）；
+        // 关闭冷却水后该机排出压力持续上升，最终由排出压力过高保护停机。
 
         // ── ⑤ 运行判定（每台压缩机） ──
         // 自动模式：压力继电器 —— 入口压力 > 启动压力 → 延时 5s 启动；
@@ -229,13 +253,21 @@ export class RefrigerationSolver {
                     desired = c.running;
                 }
             }
-            if (m.trip || c.hpTripped) desired = false;
+            // 保护锁存（排出压力过高 / 滑油液位过低）后强制停机，需复位
+            if (m.trip || c.hpTripped || c.loTripped) desired = false;
             c.running = desired;
-            c.loadPct = lerp(c.loadPct, c.running ? 100 : 0, c.running ? 0.06 : 0.12);
-            if (c.loadPct < 0.5) c.loadPct = 0;
         });
         m.running = m.comps.comp1.running || m.comps.comp2.running;
         const runningCount = (m.comps.comp1.running ? 1 : 0) + (m.comps.comp2.running ? 1 : 0);
+        // 负荷率：每个制冷中的冷库折算 18%（上一帧统计，见 ⑥ 末）：单机 1 库 18%、2 库 36% … 5 库 90%；
+        // 双机运行时由运行中的压缩机平均分担
+        const demandPct = Math.min(100, (this._nCool || 0) * P.roomLoadPct);
+        ['comp1', 'comp2'].forEach(id => {
+            const c = m.comps[id];
+            const target = (c.running && runningCount) ? demandPct / runningCount : 0;
+            c.loadPct = lerp(c.loadPct, target, c.running ? 0.06 : 0.12);
+            if (c.loadPct < 0.5) c.loadPct = 0;
+        });
         m.loadPct = runningCount ? (m.comps.comp1.loadPct + m.comps.comp2.loadPct) / runningCount : 0;
 
         // ── ⑥ 各库制冷需求与分配 ──
@@ -248,17 +280,21 @@ export class RefrigerationSolver {
         m.ctrlOn = ctrlOn;
 
         // 各库温度开关与供液电磁阀：
-        //   控制器工作时：库温 > 启动值 → 温度开关点亮，延时 1s 后电磁阀接通；
-        //                 库温 < 停止值 → 温度开关熄灭，延时 1s 后电磁阀断电；中间滞环保持。
-        //   控制器关闭时：温度开关熄灭、电磁阀一并断电。
+        //   温度开关：只受库温控制 —— 库温 > 启动值 → 点亮；< 停止值 → 熄灭；中间滞环保持。
+        //             （与控制器是否工作无关）
+        //   供液电磁阀：由控制器输出驱动 —— 控制器工作时随温度开关动作（延时 1s）；
+        //             控制器不工作时无输出，电磁阀保持关闭。
         for (const k in m.rooms) {
             const r = m.rooms[k];
             r.fanOn = (rsys && typeof rsys.getRoomFan === 'function') ? rsys.getRoomFan(k) : true;
+            // 温度开关：只受库温变化控制（滞环），与控制器是否工作无关
+            if (r.temp > r.setStart) r.swOn = true;
+            else if (r.temp < r.setStop) r.swOn = false;
+
+            // 供液电磁阀：由控制器输出驱动；控制器不工作时无输出、电磁阀保持关闭
             if (!ctrlOn) {
-                r.swOn = false; r.solOpen = false; r._solTimer = 0;
+                r.solOpen = false; r._solTimer = 0;
             } else {
-                if (r.temp > r.setStart) r.swOn = true;
-                else if (r.temp < r.setStop) r.swOn = false;
                 const target = !!r.swOn;
                 if (target === r.solOpen) { r._solTimer = 0; }
                 else {
@@ -286,10 +322,15 @@ export class RefrigerationSolver {
         const comp2Path = m.comps.comp2.running && hv('suc2') && hv('dis2') && hv('cond2-out');
         const supplyOK = liquidLineOpen && (comp1Path || comp2Path);
 
+        // 故障：菜库膨胀阀故障 → 制冷剂流量极小，该库不能制冷（温度缓慢上升）
+        const F = this.faults || (this.faults = {});
         for (const k in m.rooms) {
             const r = m.rooms[k];
             r.loop = supplyOK && r.solOpen && hv('out-' + k);   // 形成制冷剂回路（供液电磁阀 + 出口截止阀）
             r.cooling = r.loop && r.fanOn;                      // 蒸发器风机开启 → 实际制冷
+            r.expFault = (k === 'veg') && !!F.vegExpValve;
+            if (r.expFault) r.cooling = false;                  // 膨胀阀卡死：无有效制冷剂流量
+            r.defrostFault = (k === 'fish') && !!F.defrost;     // 化霜电路故障（仅鱼库）：制冷效果变差
         }
 
         const flowRooms = [];   // 已形成制冷剂回路的库（供液电磁阀 + 出口截止阀 + 主回路导通）
@@ -303,6 +344,7 @@ export class RefrigerationSolver {
         }
         const anyBranchOpen = branchKeys.length > 0;
         const flowLoad = flowRooms.reduce((s, o) => s + o.r.load, 0);
+        this._nCool = coolRooms.length;   // 下一帧负荷率 = 18% × 制冷中的冷库数
 
         // ── ⑦ 热力平衡 ──
         const trAvg = this._avgRoomTemp();
@@ -316,7 +358,10 @@ export class RefrigerationSolver {
             if (flowRooms.length) {
                 const trMin = Math.min.apply(null, flowRooms.map(o => o.r.temp));
                 const loadRatio = clamp(flowLoad / Math.max(1, P.qCapMax), 0, 1);
-                teTarget = trMin - (5 + 5 * loadRatio);   // 低 5~10℃
+                // 蒸发温度比最冷库再低 7~12℃：基础温差必须大于最冷库的漏热所需
+                // （0.7×ΔT > 0.08×(32−T)，肉库 T=−20 约需 6℃），否则少库运行时低温库
+                // 会在停止温度之上找到平衡点、卡住降不下去
+                teTarget = trMin - (7 + 5 * loadRatio);
             } else {
                 teTarget = -35;                 // 压缩机运行但无供液回路：向低压抽空
             }
@@ -373,16 +418,25 @@ export class RefrigerationSolver {
         });
         m.pc = Math.max(m.pdis1, m.pdis2);   // 系统高压侧（代表值）
 
-        // 各制冷库吸热需求：∝ (库温 − 蒸发温度)。总吸热量为其和，受压缩机能力限制。
+        // 各制冷库实际制冷量分配：
+        //   ① 机制冷量按各库「漏热负荷」比例**公平分配**（不再按温差分配 —— 否则高温库
+        //      温差大、抢走绝大部分冷量，鱼库/肉库等低温库虽已制冷却仍升温）；
+        //   ② 单库再受蒸发器自身能力限制（∝ 库温 − 蒸发温度）。
+        let coolLoadSum = 0;
+        for (const o of coolRooms) coolLoadSum += Math.max(0.05, o.r.load);
+        const QeMax = Qcap * 1.1;                 // 机制冷量（含 10% 降温余量）
         let Qe = 0;
         const coolDem = new Map();
         for (const o of coolRooms) {
-            const d = Math.max(0, (P.uaEvap / 5) * (o.r.temp - m.te));
+            const share = (coolLoadSum > 0.001)
+                ? Math.max(0.05, o.r.load) / coolLoadSum
+                : 1 / coolRooms.length;
+            const evapCap = (P.uaEvap / 5) * Math.max(0, o.r.temp - m.te);
+            const d = Math.min(QeMax * share, evapCap);
             coolDem.set(o.key, d);
             Qe += d;
         }
         const demSum = Qe;
-        Qe = clamp(Qe, 0, Qcap * 1.1);
 
         const cop = Math.max(1.3, P.copBase * ((m.te + 273.15) / Math.max(5, (m.tc - m.te))));
         const Wcomp = Qe / cop;
@@ -403,17 +457,51 @@ export class RefrigerationSolver {
         // ── ⑧ 库温积分 ──
         for (const k in m.rooms) {
             const r = m.rooms[k];
-            // 各库按自身吸热需求分配实际制冷量（需求大的高温库优先，避免按负荷平均导致各库同时不降温）
-            const cool_i = (demSum > 0.001 && coolDem.has(k)) ? Qe * (coolDem.get(k) / demSum) : 0;
-            r.temp = clamp(r.temp + (r.load - cool_i) * r.speed * dt / P.cRoom, -30, 40);
+            // 各库实际制冷量（⑦ 已按漏热公平分配并受单库蒸发器能力限制）
+            const cool_i = (demSum > 0.001 && coolDem.has(k)) ? coolDem.get(k) : 0;
+            // 净制冷（降温）段速率 ×coolRateMul；净放热（升温）段速率 ×heatRateMul（减半）
+            // 故障：蒸发器化霜电路故障 → 蒸发器结霜、换热恶化 → 降温速率仅剩 DEFROST_MUL
+            let dT = (r.load - cool_i) * r.speed * dt / P.cRoom;
+            if (dT < 0) dT *= (r.coolMul !== undefined ? r.coolMul : (P.coolRateMul || 1))
+                * (r.defrostFault ? DEFROST_RATE_MUL : 1);
+            else if (dT > 0) dT *= (r.heatMul !== undefined ? r.heatMul : (P.heatRateMul || 1));
+            r.temp = clamp(r.temp + dT, -30, 40);
             r.valve = r.solOpen ? clamp(8 + m.loadPct * 0.3, 0, 100) : 0;
             r.alarm = m.trip || (r.temp > r.setStart + 8);
         }
 
         // ── ⑨ 附属显示量 ──
-        m.oilsep.comp1 = clamp(30 + m.comps.comp1.loadPct * 0.55, 0, 92);
-        m.oilsep.comp2 = clamp(20 + m.comps.comp2.loadPct * 0.55, 0, 92);
-        m.receiver = clamp(40 + m.loadPct * 0.3, 0, 90);
+        // ── 滑油系统（油液分离器液位 / 压缩机滑油液位 / 回油电磁阀）──
+        ['comp1', 'comp2'].forEach((id, i) => {
+            const c = m.comps[id];
+            const n = i + 1;
+            let lvl = (m.oilsep[id] !== undefined) ? m.oilsep[id] : 3;
+            if (c.oilSolOpen === undefined) c.oilSolOpen = false;
+
+            // ① 压缩机运行时：油气带入分离器，分离器 +6%/min，压缩机滑油 −2%/min
+            if (c.running) {
+                lvl += (6 / 60) * dt;
+                c.oilLevel = clamp(c.oilLevel - (2 / 60) * dt, 0, 100);
+            }
+
+            // ② 回油电磁阀：液位升到 20% 接通 → 向压缩机注油（分离器 −1%/s，压缩机 +1/3 %/s）；
+            //    液位降到 3% 断开
+            if (lvl >= 20) c.oilSolOpen = true;
+            else if (lvl <= 3) c.oilSolOpen = false;
+            if (c.oilSolOpen) {
+                lvl -= 1 * dt;
+                c.oilLevel = clamp(c.oilLevel + (1 / 3) * dt, 0, 100);
+            }
+
+            // ③ 滑油注入口截止阀打开：压缩机滑油液位 +2%/s
+            if (hv('oil' + n + '-in')) c.oilLevel = clamp(c.oilLevel + 2 * dt, 0, 100);
+            // ④ 滑油出口截止阀打开：压缩机滑油液位 −1.5%/s
+            if (hv('oil' + n + '-out')) c.oilLevel = clamp(c.oilLevel - 1.5 * dt, 0, 100);
+
+            m.oilsep[id] = clamp(lvl, 0, 100);
+        });
+        // 接收器液位：初始 50%，压缩机起动后随系统负荷下降（负荷 100% 时降到 30%）
+        m.receiver = clamp(50 - m.loadPct * 0.20, 30, 50);
 
         // ── ⑩ 报警与保护 ──
         ['comp1', 'comp2'].forEach(id => {
@@ -431,9 +519,17 @@ export class RefrigerationSolver {
                 c._hpTimer = 0;
             }
             a.hp = !!c.hpTripped;
-            a.wplow = m.waterP < P.wpLow;
-            a.loil = c.running && (m.oilP - m.pe) < P.oilLowDiff;
-            a.oilhi = (id === 'comp1' ? m.oilsep.comp1 : m.oilsep.comp2) > 85;
+            // 淡水泵压力低 或 该机冷却水进口截止阀关闭 → 该机「淡水压力过低」报警（只报警不停机）
+            a.wplow = (m.waterP < P.wpLow) || !hv(id === 'comp1' ? 'cw1' : 'cw2');
+            // 压缩机滑油液位过低（<15%）→ 滑油压力低报警，并触发该机保护停机（锁存）
+            a.loil = (c.oilLevel || 0) < 15;
+            if (a.loil && !c.loTripped) {
+                c.loTripped = true;
+                m.tripReason = (id === 'comp1' ? '一号压缩机' : '二号压缩机') + '滑油液位过低';
+            }
+            const oilLvl = (id === 'comp1' ? m.oilsep.comp1 : m.oilsep.comp2);
+            // 分离器滑油液位过高（>30%）→ 滑油分离器液位高
+            a.oilhi = oilLvl > 30;
         });
 
         this._writeBack();

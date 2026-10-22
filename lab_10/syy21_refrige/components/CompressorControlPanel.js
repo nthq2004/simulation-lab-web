@@ -246,6 +246,12 @@ export class CompressorControlPanel extends BaseComponent {
             fire('dec-' + sd.key, () => this._bump(sd, -1));
             fire('inc-' + sd.key, () => this._bump(sd, +1));
         });
+
+        // 三只压力表（进口压力 / 出口压力 / 滑油差压）——供流程「识别」步骤点击
+        GAUGE_DEFS.forEach((gd, i) => {
+            this.addClickablePart('gauge-' + gd.key,
+                GAUGE_CX[i] - GAUGE_R, GAUGE_CY - GAUGE_R, GAUGE_R * 2, GAUGE_R * 2, true);
+        });
     }
 
     _toggleMode() {
