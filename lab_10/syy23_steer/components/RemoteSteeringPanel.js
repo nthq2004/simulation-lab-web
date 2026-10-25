@@ -46,7 +46,6 @@ export class RemoteSteeringPanel extends BaseComponent {
             nfu: {
                 title: { x: 362, y: 341, w: 274 },
                 knob: { cx: 499, cy: 422, rOuter: 45, rInner: 34 },
-                top: { x: 449, y: 362, w: 100, text: '正北' },
                 left: { x: 398, y: 390, w: 60, text: '左转舵' },
                 right: { x: 540, y: 390, w: 70, text: '右转舵' },
                 parts: {
@@ -188,8 +187,7 @@ export class RemoteSteeringPanel extends BaseComponent {
         this._label(g, G.headingSet.inc.x, G.headingSet.inc.y + 6, '+', 20, '#263238', true, 'center', G.headingSet.inc.w);
 
         const N = G.nfu;
-        this._label(g, N.title.x, N.title.y, '非随动操舵', 12, '#263238', true, 'center', N.title.w);
-        this._label(g, N.top.x, N.top.y, N.top.text, 11, '#263238', true, 'center', N.top.w);
+        this._label(g, N.title.x, N.title.y + 5, '非随动操舵', 12, '#263238', true, 'center', N.title.w);
         this._label(g, N.left.x, N.left.y, N.left.text, 11, '#b71c1c', true, 'right', N.left.w);
         this._label(g, N.right.x, N.right.y, N.right.text, 11, '#1b5e20', true, 'left', N.right.w);
         this._drawSelectorKnobStatic(g, N.knob);
@@ -202,7 +200,7 @@ export class RemoteSteeringPanel extends BaseComponent {
         this._drawSelectorKnobStatic(g, M.knob);
 
         const S = G.system;
-        this._label(g, S.title.x, S.title.y, '电源选择', 12, '#263238', true, 'center', S.title.w);
+        this._label(g, S.title.x, S.title.y, '舵机选择', 12, '#263238', true, 'center', S.title.w);
         this._label(g, S.no1.x, S.no1.y, 'NO.1', 11, '#263238', true, 'center', S.no1.w);
         this._label(g, S.no2.x, S.no2.y, 'NO.2', 11, '#263238', true, 'center', S.no2.w);
         this._drawSelectorKnobStatic(g, S.knob);
@@ -302,6 +300,7 @@ export class RemoteSteeringPanel extends BaseComponent {
         this._modeKnob.add(new Konva.Rect({ x: -4, y: -31, width: 8, height: 25, fill: '#f2f2ee', cornerRadius: 2 }));
         d.add(this._modeKnob);
 
+        this._sysSel = 1;   // 舵机选择开关自身位置（只能人为转动）
         this._sysKnob = new Konva.Group({ x: G.system.knob.cx, y: G.system.knob.cy });
         this._sysKnob.add(new Konva.Rect({ x: -4, y: -31, width: 8, height: 25, fill: '#f2f2ee', cornerRadius: 2 }));
         d.add(this._sysKnob);
@@ -377,11 +376,13 @@ export class RemoteSteeringPanel extends BaseComponent {
         mk('mode-right', G.mode.parts.right, () => this.stepMode(1));
 
         mk('sys-1', G.system.parts.one, () => {
+            this._sysSel = 1;
             const s = this._solver();
             if (s) s.selectSystem(1);
             this._syncVisuals();
         });
         mk('sys-2', G.system.parts.two, () => {
+            this._sysSel = 2;
             const s = this._solver();
             if (s) s.selectSystem(2);
             this._syncVisuals();
@@ -512,8 +513,9 @@ export class RemoteSteeringPanel extends BaseComponent {
         this._setCurrentHeadingDigits(this._headingDigits, m.heading);
         this._setHeadingDigits(this._setDigits, m.headingSet);
 
-        this._needle.rotation(clamp(m.displayRudder, -40, 40));
-        this._rudderText.text((m.displayRudder >= 0 ? '+' : '') + m.displayRudder.toFixed(1));
+        const rudderDisplay = clamp(m.displayRudder, -40, 40);
+        this._needle.rotation(-140 + (rudderDisplay + 40) / 80 * 280);
+        this._rudderText.text((rudderDisplay >= 0 ? '+' : '') + rudderDisplay.toFixed(1));
 
         this._setKnob.rotation(m.headingSet);
 
@@ -529,9 +531,9 @@ export class RemoteSteeringPanel extends BaseComponent {
         const nfuAngle = m.nfu === 'port' ? -45 : (m.nfu === 'starboard' ? 45 : 0);
         this._nfuLever.rotation(nfuAngle);
 
-        this._sysKnob.rotation(m.sys === 1 ? -45 : 45);
-        this._sysLamp1.fill(m.sys === 1 ? '#25e04a' : '#0a2f0a');
-        this._sysLamp2.fill(m.sys === 2 ? '#25e04a' : '#0a2f0a');
+        this._sysKnob.rotation(this._sysSel === 1 ? -45 : 45);
+        this._sysLamp1.fill(m.pump[1] && m.pump[1].running && !m.pump[1].local ? '#25e04a' : '#0a2f0a');
+        this._sysLamp2.fill(m.pump[2] && m.pump[2].running && !m.pump[2].local ? '#25e04a' : '#0a2f0a');
 
         const p = m.pump[m.sys];
         const modeText = m.mode === 'auto' ? '自动' : (m.mode === 'manual' ? '手动' : '非随动');

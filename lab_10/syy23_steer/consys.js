@@ -45,7 +45,7 @@ import { CurrentTransformer, ACVoltmeter, PotentialTransformer, SinglePhaseFuse,
 import { DistributionBox, ShorePowerMainSwitch, ShorePowerBox, NegativeSeqRelay } from './export.js';
 
 import {
-    SteeringSolver, SteeringStatusPanel, RemoteSteeringPanel, HydraulicSteeringSystem, LocalSteeringPanel
+    SteeringSolver, SteeringStatusPanel, RemoteSteeringPanel, HydraulicSteeringSystem, LocalSteeringPanel, GearRemotePanel
 } from './export.js';
 
 import { MotorControlBox, GroundBusBar, ThreePhaseMotor3D, InductionMotorExploded, T568BCableBench, CableTypesBench, LowVoltageGroundCable, PC, NetworkSwitch, L3Switch, Router, NetServer } from './export.js';

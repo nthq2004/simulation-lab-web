@@ -237,6 +237,7 @@ import { SteeringStatusPanel } from './components/SteeringStatusPanel.js';
 import { RemoteSteeringPanel } from './components/RemoteSteeringPanel.js';
 import { HydraulicSteeringSystem } from './components/HydraulicSteeringSystem.js';
 import { LocalSteeringPanel } from './components/LocalSteeringPanel.js';
+import { GearRemotePanel } from './components/GearRemotePanel.js';
 import { NTCThermistor} from './components/NtcThermistor.js';
 import { NTCtempTransmitter } from './components/NtctempTransmitter.js';
 import { MagneticFlipLevelGauge } from './components/MagneticFlipLevelGauge.js';
@@ -417,7 +418,7 @@ export {
     DistributionBox, ShorePowerMainSwitch, ShorePowerBox, NegativeSeqRelay, InsulationIndicator, InsulationMonitor,
     EmergencyPanel,
     RefrigerationSystem, AirConditioningSystem, CompressorControlPanel, TempSettingPanel, ACControlPanel, SafetyAlarmPanel,
-    SteeringStatusPanel, RemoteSteeringPanel, HydraulicSteeringSystem, LocalSteeringPanel
+    SteeringStatusPanel, RemoteSteeringPanel, HydraulicSteeringSystem, LocalSteeringPanel, GearRemotePanel
 };
 
 

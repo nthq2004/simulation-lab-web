@@ -1,13 +1,18 @@
 import { BaseComponent } from './BaseComponent.js';
 
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-
+/**
+ * 机旁控制面板（上下两屏，1#/2# 独立）
+ * 每箱：
+ *   第一行：电源开关（关/开）、电源指示灯、故障跳闸指示灯
+ *   第二行：备用开关（关/开，备用投入可自起动）、起动按钮、停止按钮（带灯）
+ *   第三行：机旁遥控选择开关（左上机旁 / 右上遥控）、应急操舵开关（左转舵 / 右转舵，按住操舵）
+ */
 export class LocalSteeringPanel extends BaseComponent {
     constructor(config, sys) {
         super(config, sys);
 
-        this.W = Math.max(480, config.width || 540);
-        this.H = Math.max(720, config.height || 860);
+        this.W = Math.max(340, config.width || 360);
+        this.H = Math.max(680, config.height || 740);
         this.type = 'local_steering_panel';
         this.special = 'steering_panel';
         this.cache = 'fixed';
@@ -22,341 +27,258 @@ export class LocalSteeringPanel extends BaseComponent {
         this.config = { id: this.id, width: this.W, height: this.H };
     }
 
-    _recalcGeometry() {
-        const W = this.W, H = this.H;
-        this._geo = {
-            main: { x: 0, y: 0, w: 360, h: 660, r: 10 },
-            mainInner: { x: 10, y: 10, w: 340, h: 640, r: 7 },
-            title: { x: 44, y: 16, w: 272, h: 40, textY: 25 },
-            ammeter: { cx: 103, cy: 172, r: 68 },
-            mainPower: {
-                cx: 256, cy: 162, r: 46, innerR: 38,
-                labelX: 225, labelY: 88, offX: 235, offY: 110, onX: 235, onY: 206,
-                part: { x: 214, y: 120, w: 84, h: 86 },
-            },
-            lamps: {
-                y: 292, r: 19, innerR: 14,
-                items: [
-                    { x: 72, labelX: 36, labelY: 258, labelW: 72, text: '电源' },
-                    { x: 182, labelX: 146, labelY: 258, labelW: 72, text: '运行' },
-                    { x: 292, labelX: 252, labelY: 258, labelW: 88, text: '故障跳闸' },
-                ],
-            },
-            switches: {
-                standby: { cx: 75, cy: 392, r: 27, color: '#d4a017', top: '备用', bottom: '关  开', part: { x: 44, y: 354, w: 62, h: 76 } },
-                heater: { cx: 200, cy: 392, r: 27, color: '#1e5b9a', top: '空间加热器', bottom: '关  开', part: { x: 169, y: 354, w: 62, h: 76 } },
-            },
-            buttons: {
-                labels: {
-                    start: { x: 62, y: 470, w: 80, text: '起动' },
-                    stop: { x: 216, y: 470, w: 80, text: '停止' },
-                },
-                start: { cx: 102, cy: 530, r: 42, innerR: 32, part: { x: 60, y: 488, w: 84, h: 84 } },
-                stop: { cx: 256, cy: 530, r: 42, innerR: 32, part: { x: 214, y: 488, w: 84, h: 84 } },
-            },
-            system: {
-                box: { x: 130, y: 586, w: 200, h: 58, r: 4 },
-                title: { x: 130, y: 590, w: 200 },
-                no1: { x: 142, y: 622, w: 44 },
-                no2: { x: 276, y: 622, w: 44 },
-                knob: { cx: 230, cy: 608, r: 23, innerR: 18 },
-                parts: {
-                    one: { x: 134, y: 602, w: 88, h: 38 },
-                    two: { x: 238, y: 602, w: 88, h: 38 },
-                },
-            },
-            auto: {
-                panel: { x: 378, y: 90, w: 160, h: 272, r: 8 },
-                inner: { x: 386, y: 98, w: 144, h: 256, r: 6 },
-                title: { x: 396, y: 104, w: 124, h: 30, textY: 111 },
-                powerLabel: { x: 390, y: 158 },
-                engageLabel: { x: 390, y: 236 },
-                offLabels: [
-                    { x: 500, y: 146, text: '关' }, { x: 526, y: 146, text: '开' },
-                    { x: 500, y: 224, text: '脱出' }, { x: 526, y: 224, text: '投入' },
-                ],
-                powerLamp: { cx: 414, cy: 178, r: 12 },
-                engageLamp: { cx: 414, cy: 256, r: 12 },
-                powerKnob: { cx: 516, cy: 180, r: 27, innerR: 21 },
-                engageKnob: { cx: 516, cy: 258, r: 27, innerR: 21 },
-                powerPart: { x: 486, y: 146, w: 60, h: 64 },
-                engagePart: { x: 486, y: 224, w: 60, h: 64 },
-                footer: { x: 378, y: 376, w: 160 },
-            },
-            footer: { x: 0, y: 676, w: 360 },
-            status: { x: 12, y: 700, w: 516 },
-        };
-    }
-
     _label(g, x, y, text, size = 12, fill = '#222', bold = false, align = 'left', width = 0) {
-        const opts = {
-            x, y, text, fontSize: size,
-            fontStyle: bold ? 'bold' : 'normal', fill,
-            align, fontFamily: 'Arial, sans-serif',
+        return g.add(new Konva.Text({
+            x, y, text, fontSize: size, fill, width: width || undefined,
+            fontStyle: bold ? 'bold' : 'normal', align, fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
+            listening: false,
+        }));
+    }
+
+    _recalcGeometry() {
+        const W = this.W;
+        const boxH = 336, gap = 8, top = 8;
+        this._geo = {
+            boxes: [
+                { n: 1, x: 8, y: top, w: W - 16, h: boxH },
+                { n: 2, x: 8, y: top + boxH + gap, w: W - 16, h: boxH },
+            ],
+            row1: (b) => b.y + 92,
+            row2: (b) => b.y + 186,
+            row3: (b) => b.y + 278,
+            col: { sw: 62, lampA: 172, lampB: 286, sw2: 62, start: 176, stop: 290, localS: 88, emerg: 252 },
+            btnR: 27,
+            knobR: 22,
         };
-        if (width) opts.width = width;
-        g.add(new Konva.Text(opts));
     }
 
-    _drawAmmeter(g, cx, cy, r) {
-        g.add(new Konva.Circle({ x: cx, y: cy, radius: r + 8, fill: '#f6f6f2', stroke: '#37474f', strokeWidth: 2 }));
-        g.add(new Konva.Circle({ x: cx, y: cy, radius: r, fill: '#ffffff', stroke: '#546e7a', strokeWidth: 1.2 }));
-        for (let i = 0; i <= 30; i++) {
-            const a = (-135 + i * 270 / 30) * Math.PI / 180;
-            const major = i % 5 === 0;
-            g.add(new Konva.Line({
-                points: [cx + Math.sin(a) * (r - 4), cy - Math.cos(a) * (r - 4),
-                    cx + Math.sin(a) * (major ? r - 19 : r - 12), cy - Math.cos(a) * (major ? r - 19 : r - 12)],
-                stroke: '#263238', strokeWidth: major ? 1.4 : 0.8,
-            }));
-            if (major) {
-                this._label(g, cx + Math.sin(a) * (r - 32) - 12, cy - Math.cos(a) * (r - 32) - 6,
-                    String(i * 10), 7.5, '#263238', false, 'center', 24);
-            }
-        }
-        this._label(g, cx - 22, cy + 25, 'A', 14, '#263238', true, 'center', 44);
-    }
-
-    _drawRoundSwitch(g, cx, cy, r, labelTop, labelBottom, color) {
-        g.add(new Konva.Circle({ x: cx, y: cy, radius: r + 6, fill: '#d9dbd8', stroke: '#6d7271', strokeWidth: 1.6 }));
-        g.add(new Konva.Circle({ x: cx, y: cy, radius: r, fill: '#3b3f41', stroke: '#111', strokeWidth: 1.8 }));
-        g.add(new Konva.Circle({ x: cx, y: cy, radius: r * 0.52, fill: color }));
-        if (labelTop) this._label(g, cx - 28, cy - r - 20, labelTop, 10, '#263238', true, 'center', 56);
-        if (labelBottom) this._label(g, cx - 28, cy + r + 7, labelBottom, 10, '#263238', true, 'center', 56);
-    }
-
-    _drawStaticParts() {
-        const g = this._staticGroup, G = this._geo;
-
+    _drawPanel(g, x, y, w, h) {
         g.add(new Konva.Rect({
-            x: G.main.x, y: G.main.y, width: G.main.w, height: G.main.h, cornerRadius: G.main.r,
-            fillLinearGradientStartPoint: { x: 0, y: 0 }, fillLinearGradientEndPoint: { x: G.main.w, y: G.main.h },
+            x, y, width: w, height: h, cornerRadius: 10,
+            fillLinearGradientStartPoint: { x: 0, y: 0 }, fillLinearGradientEndPoint: { x: w, y: h },
             fillLinearGradientColorStops: [0, '#f0f0ec', 0.55, '#d8d9d5', 1, '#bfc1bd'],
             stroke: '#5f6463', strokeWidth: 3,
         }));
         g.add(new Konva.Rect({
-            x: G.mainInner.x, y: G.mainInner.y, width: G.mainInner.w, height: G.mainInner.h,
-            fill: 'transparent', stroke: '#8b908e', strokeWidth: 1.2, cornerRadius: G.mainInner.r,
+            x: x + 8, y: y + 8, width: w - 16, height: h - 16,
+            fill: 'transparent', stroke: '#8b908e', strokeWidth: 1.2, cornerRadius: 7,
         }));
+    }
 
-        g.add(new Konva.Rect({
-            x: G.title.x, y: G.title.y, width: G.title.w, height: G.title.h,
-            fill: '#f4f4f0', stroke: '#888d8c', strokeWidth: 1.2, cornerRadius: 4,
-        }));
-        this._label(g, G.title.x, G.title.textY, '1号起动控制', 19, '#263238', true, 'center', G.title.w);
+    _drawStaticParts() {
+        const g = this._staticGroup, G = this._geo, C = G.col;
 
-        this._drawAmmeter(g, G.ammeter.cx, G.ammeter.cy, G.ammeter.r);
-        const MP = G.mainPower;
-        this._label(g, MP.labelX, MP.labelY, '主电源', 12, '#263238', true, 'center', 100);
-        this._label(g, MP.onX, MP.onY, 'ON', 11, '#1b5e20', true, 'center', 24);
-        this._label(g, MP.offX, MP.offY, 'OFF', 11, '#b71c1c', true, 'center', 30);
-        g.add(new Konva.Circle({ x: MP.cx, y: MP.cy, radius: MP.r, fill: '#d9dbd8', stroke: '#6d7271', strokeWidth: 2 }));
-        g.add(new Konva.Circle({ x: MP.cx, y: MP.cy, radius: MP.innerR, fill: '#2b2f33', stroke: '#111', strokeWidth: 2 }));
+        G.boxes.forEach((b) => {
+            this._drawPanel(g, b.x, b.y, b.w, b.h);
+            g.add(new Konva.Rect({
+                x: b.x + 16, y: b.y + 10, width: b.w - 32, height: 28,
+                fill: '#f4f4f0', stroke: '#888d8c', strokeWidth: 1.2, cornerRadius: 4,
+            }));
+            this._label(g, b.x + 16, b.y + 16, `${b.n}# 舵机起动控制箱`, 14, '#263238', true, 'center', b.w - 32);
 
-        const L = G.lamps;
-        L.items.forEach(it => {
-            this._label(g, it.labelX, it.labelY, it.text, 11, '#263238', true, 'center', it.labelW);
-            g.add(new Konva.Circle({ x: it.x, y: L.y, radius: L.r, fill: '#c7cac6', stroke: '#777c7a', strokeWidth: 1.4 }));
+            const r1 = G.row1(b), r2 = G.row2(b), r3 = G.row3(b);
+
+            // 第一行
+            this._label(g, C.sw - 34, r1 - 48, '电源开关', 12, '#263238', true, 'center', 68);
+            this._label(g, C.sw - 42, r1 - 32, '关', 12, '#b71c1c', true, 'center', 24);
+            this._label(g, C.sw + 12, r1 - 32, '开', 12, '#1b5e20', true, 'center', 24);
+            this._label(g, C.lampA - 34, r1 - 36, '电源', 12, '#263238', true, 'center', 68);
+            this._label(g, C.lampB - 42, r1 - 36, '故障跳闸', 12, '#263238', true, 'center', 84);
+            [C.lampA, C.lampB].forEach((cx) => {
+                g.add(new Konva.Circle({ x: cx, y: r1, radius: 16, fill: '#c7cac6', stroke: '#777c7a', strokeWidth: 1.4 }));
+            });
+
+            // 第二行
+            this._label(g, C.sw2 - 30, r2 - 52, '备用', 12, '#263238', true, 'center', 60);
+            this._label(g, C.start - 30, r2 - 50, '起动', 12, '#1b5e20', true, 'center', 60);
+            this._label(g, C.stop - 30, r2 - 50, '停止', 12, '#b71c1c', true, 'center', 60);
+            // 第三行：机旁遥控选择（左上=机旁，右上=遥控）
+            this._label(g, C.localS - 44, r3 - 36, '机旁', 12, '#6d4c41', true, 'center', 34);
+            this._label(g, C.localS + 14, r3 - 36, '遥控', 12, '#1565c0', true, 'center', 34);
+            this._label(g, C.localS - 48, r3 + 36, '机旁遥控选择', 12, '#546e7a', false, 'center', 96);
+            // 应急操舵（复制遥控面板非随动操舵开关外观）
+            this._label(g, C.emerg - 70, r3 - 32, '左转舵', 12, '#b71c1c', true, 'right', 58);
+            this._label(g, C.emerg + 12, r3 - 32, '右转舵', 12, '#1b5e20', true, 'left', 58);
+            this._label(g, C.emerg - 34, r3 + 36, '应急操舵', 12, '#546e7a', false, 'center', 68);
         });
 
-        const SW = G.switches;
-        this._drawRoundSwitch(g, SW.standby.cx, SW.standby.cy, SW.standby.r, SW.standby.top, SW.standby.bottom, SW.standby.color);
-        this._drawRoundSwitch(g, SW.heater.cx, SW.heater.cy, SW.heater.r, SW.heater.top, SW.heater.bottom, SW.heater.color);
+    }
 
-        const BT = G.buttons;
-        this._label(g, BT.labels.start.x, BT.labels.start.y, BT.labels.start.text, 12, '#1b5e20', true, 'center', BT.labels.start.w);
-        this._label(g, BT.labels.stop.x, BT.labels.stop.y, BT.labels.stop.text, 12, '#b71c1c', true, 'center', BT.labels.stop.w);
-        g.add(new Konva.Circle({ x: BT.start.cx, y: BT.start.cy, radius: BT.start.r, fill: '#2e7d32', stroke: '#1b5e20', strokeWidth: 3 }));
-        g.add(new Konva.Circle({ x: BT.start.cx, y: BT.start.cy, radius: BT.start.innerR, fill: '#43a047' }));
-        g.add(new Konva.Circle({ x: BT.stop.cx, y: BT.stop.cy, radius: BT.stop.r, fill: '#b71c1c', stroke: '#7f0f0f', strokeWidth: 3 }));
-        g.add(new Konva.Circle({ x: BT.stop.cx, y: BT.stop.cy, radius: BT.stop.innerR, fill: '#d32f2f' }));
+    _knob(cx, cy, r) {
+        this._dyn.add(new Konva.Circle({ x: cx, y: cy, radius: r + 4, fill: '#d0d2cf', stroke: '#6a6f6d', strokeWidth: 1.5 }));
+        this._dyn.add(new Konva.Circle({ x: cx, y: cy, radius: r, fill: '#3b3f41', stroke: '#111', strokeWidth: 1.5 }));
+        const grp = new Konva.Group({ x: cx, y: cy });
+        grp.add(new Konva.Rect({ x: -3, y: -r + 5, width: 6, height: r - 10, fill: '#f2f2ee', cornerRadius: 2 }));
+        this._dyn.add(grp);
+        return grp;
+    }
 
-        const S = G.system;
-        g.add(new Konva.Rect({
-            x: S.box.x, y: S.box.y, width: S.box.w, height: S.box.h,
-            fill: '#e4e5e1', stroke: '#7b807e', strokeWidth: 1.2, cornerRadius: S.box.r,
-        }));
-        this._label(g, S.title.x, S.title.y, '系统选择', 10, '#263238', true, 'center', S.title.w);
-        this._label(g, S.no1.x, S.no1.y, '1号', 11, '#263238', true, 'center', S.no1.w);
-        this._label(g, S.no2.x, S.no2.y, '2号', 11, '#263238', true, 'center', S.no2.w);
-        g.add(new Konva.Circle({ x: S.knob.cx, y: S.knob.cy, radius: S.knob.r, fill: '#d9dbd8', stroke: '#6d7271', strokeWidth: 1.4 }));
-        g.add(new Konva.Circle({ x: S.knob.cx, y: S.knob.cy, radius: S.knob.innerR, fill: '#2b2f33', stroke: '#111', strokeWidth: 1.4 }));
+    _lamp(cx, cy, r, dark) {
+        const c = new Konva.Circle({ x: cx, y: cy, radius: r, fill: dark, stroke: '#333', strokeWidth: 1 });
+        this._dyn.add(c);
+        return c;
+    }
 
-        const A = G.auto;
-        g.add(new Konva.Rect({
-            x: A.panel.x, y: A.panel.y, width: A.panel.w, height: A.panel.h,
-            fillLinearGradientStartPoint: { x: 0, y: 0 },
-            fillLinearGradientEndPoint: { x: A.panel.w, y: A.panel.h },
-            fillLinearGradientColorStops: [0, '#ecece8', 1, '#c8cac6'],
-            stroke: '#5f6463', strokeWidth: 3, cornerRadius: A.panel.r,
-        }));
-        g.add(new Konva.Rect({
-            x: A.inner.x, y: A.inner.y, width: A.inner.w, height: A.inner.h,
-            fill: 'transparent', stroke: '#8b908e', strokeWidth: 1.1, cornerRadius: A.inner.r,
-        }));
-        g.add(new Konva.Rect({
-            x: A.title.x, y: A.title.y, width: A.title.w, height: A.title.h,
-            fill: '#f4f4f0', stroke: '#888d8c', strokeWidth: 1, cornerRadius: 3,
-        }));
-        this._label(g, A.title.x, A.title.textY, '自动舵机', 13, '#263238', true, 'center', A.title.w);
-        this._label(g, A.powerLabel.x, A.powerLabel.y, '电源', 11, '#263238', true);
-        this._label(g, A.engageLabel.x, A.engageLabel.y, '脱出', 11, '#263238', true);
-        A.offLabels.forEach(l => this._label(g, l.x, l.y, l.text, 9, '#37474f'));
-        g.add(new Konva.Circle({ x: A.powerKnob.cx, y: A.powerKnob.cy, radius: A.powerKnob.r, fill: '#d9dbd8', stroke: '#6d7271', strokeWidth: 1.6 }));
-        g.add(new Konva.Circle({ x: A.powerKnob.cx, y: A.powerKnob.cy, radius: A.powerKnob.innerR, fill: '#2b2f33', stroke: '#111', strokeWidth: 1.6 }));
-        g.add(new Konva.Circle({ x: A.engageKnob.cx, y: A.engageKnob.cy, radius: A.engageKnob.r, fill: '#d9dbd8', stroke: '#6d7271', strokeWidth: 1.6 }));
-        g.add(new Konva.Circle({ x: A.engageKnob.cx, y: A.engageKnob.cy, radius: A.engageKnob.innerR, fill: '#2b2f33', stroke: '#111', strokeWidth: 1.6 }));
-
-        this._label(g, G.footer.x, G.footer.y, '机旁控制面板', 12, '#546e7a', true, 'center', G.footer.w);
-        this._label(g, A.footer.x, A.footer.y, '自动舵电源与投入控制', 10, '#546e7a', false, 'center', A.footer.w);
+    _litButton(cx, cy, r, lensDark) {
+        this._dyn.add(new Konva.Circle({ x: cx, y: cy, radius: r + 4, fill: '#d0d2cf', stroke: '#6a6f6d', strokeWidth: 1.6 }));
+        this._dyn.add(new Konva.Circle({ x: cx, y: cy, radius: r, fill: '#eceeeb', stroke: '#9aa09d', strokeWidth: 1.2 }));
+        const lens = new Konva.Circle({ x: cx, y: cy, radius: r - 5, fill: lensDark, stroke: '#3b3f41', strokeWidth: 1.2 });
+        this._dyn.add(lens);
+        return lens;
     }
 
     _createDynamicNodes() {
-        const d = this._dynamicGroup, G = this._geo;
+        const G = this._geo, C = G.col;
+        this._dyn = new Konva.Group({ name: 'local_dyn' });
+        this._dynamicGroup.add(this._dyn);
 
-        this._title = new Konva.Text({
-            x: G.title.x, y: G.title.textY, width: G.title.w,
-            text: '1号起动控制', fontSize: 19, fontStyle: 'bold', fill: '#263238', align: 'center',
+        this._knobMain = [];
+        this._knobStandby = [];
+        this._standbyPlate = [];
+        this._knobLocal = [];
+        this._knobEmerg = [];
+        this._lamps = [];
+        this._lensStart = [];
+        this._lensStop = [];
+
+        G.boxes.forEach((b) => {
+            const r1 = G.row1(b), r2 = G.row2(b), r3 = G.row3(b);
+            this._knobMain.push(this._knob(C.sw, r1, G.knobR));
+            this._lamps.push({
+                power: this._lamp(C.lampA, r1, 13, '#3a0808'),
+                trip: this._lamp(C.lampB, r1, 13, '#3a0808'),
+            });
+            this._standbyPlate.push(this._lamp(C.sw2, r2, G.knobR + 10, 'rgba(0,0,0,0)'));
+            this._knobStandby.push(this._knob(C.sw2, r2, G.knobR));
+            this._lensStart.push(this._litButton(C.start, r2 + 2, G.btnR, '#14501a'));
+            this._lensStop.push(this._litButton(C.stop, r2 + 2, G.btnR, '#ff2d2d'));
+            this._knobLocal.push(this._knob(C.localS, r3 + 4, G.knobR));
+            // 应急操舵：三位旋钮（左/中/右），按住两侧热区操舵并联动旋钮转动
+            this._knobEmerg.push(this._knob(C.emerg, r3 + 4, G.knobR + 2));
         });
-        d.add(this._title);
-
-        this._ammeterNeedle = new Konva.Group({ x: G.ammeter.cx, y: G.ammeter.cy });
-        this._ammeterNeedle.add(new Konva.Line({ points: [0, 7, 0, -54], stroke: '#c62828', strokeWidth: 3, lineCap: 'round' }));
-        this._ammeterNeedle.add(new Konva.Circle({ radius: 5, fill: '#263238' }));
-        d.add(this._ammeterNeedle);
-
-        this._mainKnob = new Konva.Group({ x: G.mainPower.cx, y: G.mainPower.cy });
-        this._mainKnob.add(new Konva.Rect({ x: -5, y: -32, width: 10, height: 27, fill: '#f1f1ed', cornerRadius: 2 }));
-        d.add(this._mainKnob);
-
-        this._lamps = {};
-        const L = G.lamps;
-        this._lamps.power = new Konva.Circle({ x: L.items[0].x, y: L.y, radius: L.innerR, fill: '#2b2b2b', stroke: '#333', strokeWidth: 1 });
-        this._lamps.run = new Konva.Circle({ x: L.items[1].x, y: L.y, radius: L.innerR, fill: '#0a2f0a', stroke: '#333', strokeWidth: 1 });
-        this._lamps.fault = new Konva.Circle({ x: L.items[2].x, y: L.y, radius: L.innerR, fill: '#3b0d0d', stroke: '#333', strokeWidth: 1 });
-        d.add(this._lamps.power, this._lamps.run, this._lamps.fault);
-
-        this._standbyKnob = new Konva.Group({ x: G.switches.standby.cx, y: G.switches.standby.cy });
-        this._standbyKnob.add(new Konva.Rect({ x: -4, y: -24, width: 8, height: 20, fill: '#f1f1ed', cornerRadius: 2 }));
-        d.add(this._standbyKnob);
-
-        this._heaterKnob = new Konva.Group({ x: G.switches.heater.cx, y: G.switches.heater.cy });
-        this._heaterKnob.add(new Konva.Rect({ x: -4, y: -24, width: 8, height: 20, fill: '#f1f1ed', cornerRadius: 2 }));
-        d.add(this._heaterKnob);
-
-        this._startBtn = new Konva.Circle({ x: G.buttons.start.cx, y: G.buttons.start.cy, radius: G.buttons.start.innerR, fill: '#43a047', stroke: '#2e7d32', strokeWidth: 1 });
-        this._stopBtn = new Konva.Circle({ x: G.buttons.stop.cx, y: G.buttons.stop.cy, radius: G.buttons.stop.innerR, fill: '#d32f2f', stroke: '#b71c1c', strokeWidth: 1 });
-        d.add(this._startBtn, this._stopBtn);
-
-        this._sysKnob = new Konva.Group({ x: G.system.knob.cx, y: G.system.knob.cy });
-        this._sysKnob.add(new Konva.Rect({ x: -4, y: -18, width: 8, height: 15, fill: '#202324', cornerRadius: 2 }));
-        d.add(this._sysKnob);
-
-        const A = G.auto;
-        this._autoPowerLamp = new Konva.Circle({ x: A.powerLamp.cx, y: A.powerLamp.cy, radius: A.powerLamp.r, fill: '#0a2f0a', stroke: '#333', strokeWidth: 1 });
-        this._autoEngageLamp = new Konva.Circle({ x: A.engageLamp.cx, y: A.engageLamp.cy, radius: A.engageLamp.r, fill: '#4a3b05', stroke: '#333', strokeWidth: 1 });
-        d.add(this._autoPowerLamp, this._autoEngageLamp);
-
-        this._autoPowerKnob = new Konva.Group({ x: A.powerKnob.cx, y: A.powerKnob.cy });
-        this._autoPowerKnob.add(new Konva.Rect({ x: -4, y: -24, width: 8, height: 20, fill: '#f1f1ed', cornerRadius: 2 }));
-        d.add(this._autoPowerKnob);
-
-        this._autoEngageKnob = new Konva.Group({ x: A.engageKnob.cx, y: A.engageKnob.cy });
-        this._autoEngageKnob.add(new Konva.Rect({ x: -4, y: -24, width: 8, height: 20, fill: '#f1f1ed', cornerRadius: 2 }));
-        d.add(this._autoEngageKnob);
-
-        this._status = new Konva.Text({
-            x: G.status.x, y: G.status.y, width: G.status.w,
-            text: '', fontSize: 11, fill: '#455a64', fontFamily: 'Arial, sans-serif',
-        });
-        d.add(this._status);
     }
 
-    _bindInteraction() {
-        const G = this._geo;
-        const mk = (id, p, fn) => {
-            const n = this.addClickablePart(id, p.x, p.y, p.w, p.h, true);
-            if (n) n.on('click tap', fn);
-        };
-
-        mk('main-power', G.mainPower.part, () => {
-            const s = this._solver();
-            if (s) s.toggleMainPower();
-            this._syncVisuals();
-        });
-        mk('start', G.buttons.start.part, () => {
-            const s = this._solver();
-            if (s) s.startPump(s.m.sys);
-            this._syncVisuals();
-        });
-        mk('stop', G.buttons.stop.part, () => {
-            const s = this._solver();
-            if (s) s.stopPump(s.m.sys);
-            this._syncVisuals();
-        });
-        mk('sys-1', G.system.parts.one, () => {
-            const s = this._solver();
-            if (s) s.selectSystem(1);
-            this._syncVisuals();
-        });
-        mk('sys-2', G.system.parts.two, () => {
-            const s = this._solver();
-            if (s) s.selectSystem(2);
-            this._syncVisuals();
-        });
-        mk('standby', G.switches.standby.part, () => {
-            const s = this._solver();
-            if (s) s.toggleStandby();
-            this._syncVisuals();
-        });
-        mk('heater', G.switches.heater.part, () => {
-            const s = this._solver();
-            if (s) s.toggleHeater();
-            this._syncVisuals();
-        });
-        mk('auto-power', G.auto.powerPart, () => {
-            const s = this._solver();
-            if (s) s.toggleAutoPower();
-            this._syncVisuals();
-        });
-        mk('auto-engage', G.auto.engagePart, () => {
-            const s = this._solver();
-            if (s) s.toggleAutoEngaged();
-            this._syncVisuals();
-        });
+    _part(partId, x, y, w, h, onClick) {
+        const hit = this.addClickablePart(partId, x, y, w, h, true);
+        if (hit) {
+            hit.on('mousedown touchstart', (e) => { e.cancelBubble = true; });
+            hit.on('click tap', (e) => { e.cancelBubble = true; onClick(); });
+        }
+        return hit;
     }
 
     _solver() {
         return this.sys && this.sys.steerSolver ? this.sys.steerSolver : null;
     }
 
+    _releaseManual() {
+        const sv = this._solver();
+        if (sv) {
+            let released = false;
+            [1, 2].forEach(n => {
+                const p = sv.m.pump[n];
+                if (p && p.emerg) { p.emerg = 0; released = true; }
+            });
+            // 应急操舵松手后保持当前舵角（不做随动回零）：把舵轮角度对到当前舵角
+            if (released) {
+                // 让刚刚操舵的那台机组继续执行“伺服回中”，回中完成后才交还给所选机组
+                sv.m.returnSys = sv.m.activeSys || sv.m.sys;
+                if (sv.m.mode === 'manual') {
+                    sv.m.helmAngle = sv.m.rudder * 18;
+                    sv.m.helm = Math.max(-1, Math.min(1, sv.m.helmAngle / 630));
+                    sv.m.rudderCmd = sv.m.rudder;
+                }
+            }
+        }
+        this._syncVisuals();
+    }
+
+    _holdNfu(partId, x, y, w, h, dir, n) {
+        const hit = this.addClickablePart(partId, x, y, w, h, true);
+        if (!hit) return;
+        hit.on('mousedown touchstart', (e) => {
+            e.cancelBubble = true;
+            const sv = this._solver();
+            if (!sv) return;
+            const p = sv.m.pump[n];
+            if (!p || !p.local) return;                 // 只有本机在“机旁”位才允许应急操舵
+            sv.m.emergencyHold = false;
+            p.emerg = dir === 'port' ? -1 : 1;
+            this._syncVisuals();
+        });
+        hit.on('mouseup touchend mouseleave', () => this._releaseManual());
+    }
+
+    _bindInteraction() {
+        const G = this._geo, C = G.col, s = () => this._solver();
+
+        G.boxes.forEach((b) => {
+            const n = b.n;
+            const r1 = G.row1(b), r2 = G.row2(b), r3 = G.row3(b);
+
+            this._part(n === 1 ? 'main-power' : 'main-power2', C.sw - 28, r1 - 26, 56, 56, () => {
+                const sv = s(); if (sv) sv.toggleUnitPower(n); this._syncVisuals();
+            });
+            this._part(n === 1 ? 'standby' : 'standby2', C.sw2 - 28, r2 - 26, 56, 56, () => {
+                const sv = s(); if (sv) sv.toggleUnitStandby(n); this._syncVisuals();
+            });
+            this._part(n === 1 ? 'start' : 'start2', C.start - 32, r2 - 30, 64, 64, () => {
+                const sv = s(); if (sv) sv.startPump(n); this._syncVisuals();
+            });
+            this._part(n === 1 ? 'stop' : 'stop2', C.stop - 32, r2 - 30, 64, 64, () => {
+                const sv = s(); if (sv) sv.stopPump(n); this._syncVisuals();
+            });
+            this._part(`local-mode${n}`, C.localS - 26, r3 - 22, 52, 52, () => {
+                const sv = s(); if (!sv) return;
+                const p = sv.m.pump[n];
+                sv.setUnitLocal(n, !(p && p.local));
+                if (!sv.m.pump[n].local) this._releaseManual();
+                this._syncVisuals();
+            });
+            // 应急操舵：左/右按住
+            this._holdNfu(`emerg${n}-port`, C.emerg - 44, r3 - 22, 42, 52, 'port', n);
+            this._holdNfu(`emerg${n}-stbd`, C.emerg + 2, r3 - 22, 42, 52, 'starboard', n);
+        });
+
+        if (this.sys && this.sys.stage) this.sys.stage.on('mouseup touchend', () => this._releaseManual());
+
+        // 兼容旧工作流
+        this._part('auto-power', 4, this.H - 40, 40, 36, () => {
+            const sv = s(); if (sv) sv.toggleAutoPower(); this._syncVisuals();
+        });
+        this._part('auto-engage', 48, this.H - 40, 40, 36, () => {
+            const sv = s(); if (sv) sv.toggleAutoEngaged(); this._syncVisuals();
+        });
+        this._part('sys-1', G.boxes[0].x + 16, G.boxes[0].y + 10, G.boxes[0].w - 32, 28, () => {
+            const sv = s(); if (sv) sv.selectSystem(1); this._syncVisuals();
+        });
+        this._part('sys-2', G.boxes[1].x + 16, G.boxes[1].y + 10, G.boxes[1].w - 32, 28, () => {
+            const sv = s(); if (sv) sv.selectSystem(2); this._syncVisuals();
+        });
+    }
+
     _syncVisuals() {
         const s = this._solver();
-        if (!s) return;
+        if (!s || !this._knobMain.length) return;
         const m = s.m;
-        const p = m.pump[m.sys];
 
-        this._title.text(`${m.sys}号起动控制`);
-        this._ammeterNeedle.rotation(clamp(p.current / 300, 0, 1) * 270 - 135);
-        this._mainKnob.rotation(m.mainPower ? 42 : -42);
-        this._sysKnob.rotation(m.sys === 1 ? -90 : 90);
+        this._knobMain.forEach((k, i) => k.rotation((m.pump[i + 1] && m.pump[i + 1].power) ? 42 : -42));
+        this._knobStandby.forEach((k, i) => k.rotation((m.pump[i + 1] && m.pump[i + 1].standby) ? 42 : -42));
+        this._knobLocal.forEach((k, i) => k.rotation((m.pump[i + 1] && m.pump[i + 1].local) ? -42 : 42));
+        this._knobEmerg.forEach((k, i) => {
+            const e = (m.pump[i + 1] && m.pump[i + 1].emerg) || 0;
+            k.rotation(e > 0 ? 45 : (e < 0 ? -45 : 0));
+        });
 
-        this._lamps.power.fill(m.mainPower ? '#f5f5f5' : '#2b2b2b');
-        this._lamps.run.fill(p.running ? '#25e04a' : '#0a2f0a');
-        this._lamps.fault.fill(p.trip ? '#ff2020' : '#3b0d0d');
-
-        this._standbyKnob.rotation(m.standby ? 42 : -42);
-        this._heaterKnob.rotation(m.heater ? 42 : -42);
-        this._startBtn.opacity(p.running ? 0.55 : 1);
-        this._stopBtn.opacity(p.running ? 1 : 0.55);
-
-        this._autoPowerLamp.fill(m.autoPower ? '#25e04a' : '#0a2f0a');
-        this._autoEngageLamp.fill(m.autoEngaged ? '#0b3d0b' : '#ffd23f');
-        this._autoPowerKnob.rotation(m.autoPower ? 42 : -42);
-        this._autoEngageKnob.rotation(m.autoEngaged ? 42 : -42);
-
-        const st = p.trip ? '故障跳闸' : (p.running ? '运行' : '停止');
-        this._status.text(`系统 ${m.sys}# · 液压泵${st} · 电流 ${p.current.toFixed(1)} A · 压力 ${p.pressure.toFixed(1)} MPa${m.alarmText ? ' · ' + m.alarmText : ''}`);
+        this._lamps.forEach((L, i) => {
+            const p = m.pump[i + 1] || {};
+            L.power.fill(p.power ? '#25e04a' : '#3a0808');
+            L.trip.fill(p.trip ? '#ff2d2d' : '#3a0808');
+            const standbyReady = !!(p.power && p.standby && !p.trip && !p.running);
+            this._standbyPlate[i].fill(standbyReady ? '#ffd400' : 'rgba(0,0,0,0)');
+            this._lensStart[i].fill(p.running ? '#31d24b' : '#14501a');
+            this._lensStop[i].fill(p.running ? '#5c1010' : '#ff2d2d');
+        });
 
         if (this.sys && this.sys.requestRedraw) this.sys.requestRedraw();
     }
@@ -365,20 +287,4 @@ export class LocalSteeringPanel extends BaseComponent {
         this._syncVisuals();
         this._refreshIfDirty();
     }
-
-    getConfigFields() {
-        return [
-            { label: '器件名称 (ID)', key: 'id', type: 'text' },
-            { label: '宽度', key: 'width', type: 'number' },
-            { label: '高度', key: 'height', type: 'number' },
-        ];
-    }
-
-    onConfigUpdate(cfg) {
-        if (cfg.id) this.id = cfg.id;
-        this.config = { ...this.config, ...cfg };
-        if (this.sys && this.sys.requestRedraw) this.sys.requestRedraw();
-    }
 }
-
-export default LocalSteeringPanel;
