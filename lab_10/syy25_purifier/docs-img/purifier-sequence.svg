@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="430" viewBox="0 0 900 430">
+  <rect width="900" height="430" fill="#f7f9f8"/>
+  <text x="450" y="28" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="18" font-weight="bold" fill="#263238">起动 / 排渣 / 停机程序</text>
+
+  <!-- start row -->
+  <text x="30" y="70" font-family="Microsoft YaHei, Arial" font-size="13" font-weight="bold" fill="#1b5e20">起动</text>
+  <g font-family="Microsoft YaHei, Arial" font-size="11" fill="#263238">
+    <rect x="90" y="48" width="100" height="40" rx="5" fill="#e8f5e9" stroke="#43a047"/><text x="140" y="72" text-anchor="middle">检查水/气/电</text>
+    <rect x="210" y="48" width="100" height="40" rx="5" fill="#e8f5e9" stroke="#43a047"/><text x="260" y="72" text-anchor="middle">电机升速</text>
+    <rect x="330" y="48" width="100" height="40" rx="5" fill="#e8f5e9" stroke="#43a047"/><text x="380" y="72" text-anchor="middle">4000 rpm</text><text x="380" y="84" text-anchor="middle" font-size="9">SV16 脉冲</text>
+    <rect x="450" y="48" width="100" height="40" rx="5" fill="#e8f5e9" stroke="#43a047"/><text x="500" y="72" text-anchor="middle">预排渣</text><text x="500" y="84" text-anchor="middle" font-size="9">SV15→SV16</text>
+    <rect x="570" y="48" width="100" height="40" rx="5" fill="#e3f2fd" stroke="#1e88e5"/><text x="620" y="72" text-anchor="middle">水封 SV10</text>
+    <rect x="690" y="48" width="100" height="40" rx="5" fill="#fff3e0" stroke="#fb8c00"/><text x="740" y="72" text-anchor="middle">加热 98°C</text>
+    <rect x="810" y="48" width="70" height="40" rx="5" fill="#f3e5f5" stroke="#8e24aa"/><text x="845" y="72" text-anchor="middle">进油 V1</text>
+  </g>
+  <g stroke="#90a4ae" stroke-width="2" marker-end="url(#arr)">
+    <line x1="190" y1="68" x2="208" y2="68"/><line x1="310" y1="68" x2="328" y2="68"/><line x1="430" y1="68" x2="448" y2="68"/><line x1="550" y1="68" x2="568" y2="68"/><line x1="670" y1="68" x2="688" y2="68"/><line x1="790" y1="68" x2="808" y2="68"/>
+  </g>
+
+  <!-- discharge row -->
+  <text x="30" y="170" font-family="Microsoft YaHei, Arial" font-size="13" font-weight="bold" fill="#ef6c00">排渣</text>
+  <g font-family="Microsoft YaHei, Arial" font-size="11" fill="#263238">
+    <rect x="90" y="148" width="100" height="40" rx="5" fill="#fff8e1" stroke="#fb8c00"/><text x="140" y="172" text-anchor="middle">关 V1</text>
+    <rect x="210" y="148" width="100" height="40" rx="5" fill="#e3f2fd" stroke="#1e88e5"/><text x="260" y="172" text-anchor="middle">SV10 置换水</text>
+    <rect x="330" y="148" width="100" height="40" rx="5" fill="#e3f2fd" stroke="#1e88e5"/><text x="380" y="172" text-anchor="middle">SV15 开启水</text>
+    <rect x="450" y="148" width="100" height="40" rx="5" fill="#efebe9" stroke="#6d4c41"/><text x="500" y="172" text-anchor="middle">排渣 / 反馈</text>
+    <rect x="570" y="148" width="100" height="40" rx="5" fill="#e3f2fd" stroke="#1e88e5"/><text x="620" y="172" text-anchor="middle">等待 15 s</text>
+    <rect x="690" y="148" width="100" height="40" rx="5" fill="#e3f2fd" stroke="#1e88e5"/><text x="740" y="172" text-anchor="middle">SV16 关闭水</text>
+    <rect x="810" y="148" width="70" height="40" rx="5" fill="#e8f5e9" stroke="#43a047"/><text x="845" y="172" text-anchor="middle">恢复进油</text>
+  </g>
+  <g stroke="#90a4ae" stroke-width="2" marker-end="url(#arr)">
+    <line x1="190" y1="168" x2="208" y2="168"/><line x1="310" y1="168" x2="328" y2="168"/><line x1="430" y1="168" x2="448" y2="168"/><line x1="550" y1="168" x2="568" y2="168"/><line x1="670" y1="168" x2="688" y2="168"/><line x1="790" y1="168" x2="808" y2="168"/>
+  </g>
+
+  <!-- stop row -->
+  <text x="30" y="270" font-family="Microsoft YaHei, Arial" font-size="13" font-weight="bold" fill="#b71c1c">停机</text>
+  <g font-family="Microsoft YaHei, Arial" font-size="11" fill="#263238">
+    <rect x="90" y="248" width="100" height="40" rx="5" fill="#ffebee" stroke="#e53935"/><text x="140" y="272" text-anchor="middle">关 V1 / 停泵</text>
+    <rect x="210" y="248" width="100" height="40" rx="5" fill="#e3f2fd" stroke="#1e88e5"/><text x="260" y="272" text-anchor="middle">置换水</text>
+    <rect x="330" y="248" width="100" height="40" rx="5" fill="#efebe9" stroke="#6d4c41"/><text x="380" y="272" text-anchor="middle">排渣</text>
+    <rect x="450" y="248" width="100" height="40" rx="5" fill="#ffebee" stroke="#e53935"/><text x="500" y="272" text-anchor="middle">停电机</text>
+    <rect x="570" y="248" width="100" height="40" rx="5" fill="#eceff1" stroke="#607d8b"/><text x="620" y="272" text-anchor="middle">降速</text>
+    <rect x="690" y="248" width="100" height="40" rx="5" fill="#eceff1" stroke="#607d8b"/><text x="740" y="272" text-anchor="middle">4000 rpm</text><text x="740" y="284" text-anchor="middle" font-size="9">SV16 脉冲</text>
+    <rect x="810" y="248" width="70" height="40" rx="5" fill="#e8f5e9" stroke="#43a047"/><text x="845" y="272" text-anchor="middle">STANDSTILL</text>
+  </g>
+  <g stroke="#90a4ae" stroke-width="2" marker-end="url(#arr)">
+    <line x1="190" y1="268" x2="208" y2="268"/><line x1="310" y1="268" x2="328" y2="268"/><line x1="430" y1="268" x2="448" y2="268"/><line x1="550" y1="268" x2="568" y2="268"/><line x1="670" y1="268" x2="688" y2="268"/><line x1="790" y1="268" x2="808" y2="268"/>
+  </g>
+
+  <g font-family="Microsoft YaHei, Arial" font-size="11" fill="#546e7a">
+    <text x="90" y="350">· 起动前必须确认工作水 2～8 bar、控制空气 5～8 bar、油柜液位正常。</text>
+    <text x="90" y="372">· 排渣前先加置换水，减少排渣带油；排渣失败重试一次仍失败则报警停机。</text>
+    <text x="90" y="394">· 停机必须走 EPC-60 的 STOP 程序，不能直接切断电机电源。</text>
+    <text x="90" y="416">· 应急停止后必须等分离筒完全静止（&lt; 100 r/min）才能复位。</text>
+  </g>
+
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#90a4ae"/>
+    </marker>
+  </defs>
+</svg>

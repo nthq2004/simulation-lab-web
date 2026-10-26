@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="520" viewBox="0 0 780 520">
+  <rect width="780" height="520" fill="#f7f9f8"/>
+  <text x="390" y="26" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="17" font-weight="bold" fill="#263238">EPC-60 控制面板（实船面板布局）</text>
+
+  <!-- blue chassis -->
+  <rect x="20" y="42" width="430" height="456" rx="14" fill="#a9cadb" stroke="#5f8fa6" stroke-width="2"/>
+  <!-- grey panel -->
+  <rect x="36" y="58" width="398" height="300" rx="10" fill="#9a9a9a" stroke="#7f7f7f" stroke-width="2"/>
+
+  <!-- logo -->
+  <text x="235" y="88" text-anchor="middle" font-family="Arial" font-size="18" font-style="italic" font-weight="bold" fill="#2b2bb5">ALFA LAVAL</text>
+  <path d="M160 96 Q190 88 220 96 T280 96 T320 96" fill="none" stroke="#2b2bb5" stroke-width="2"/>
+  <text x="72" y="128" font-family="Arial" font-size="15" font-weight="bold" fill="#f7f7f7">EPC 60</text>
+
+  <!-- LCD -->
+  <rect x="70" y="140" width="220" height="76" rx="4" fill="#3f3f3f" stroke="#222" stroke-width="2"/>
+  <rect x="76" y="146" width="208" height="64" rx="2" fill="#b7d96a" stroke="#0b0d0c" stroke-width="1.5"/>
+  <g font-family="Consolas, monospace" font-size="10" fill="#1b2a0a">
+    <text x="82" y="160">_ _ _ RECIRCULATION _ _ _</text>
+    <text x="82" y="176">To start separation</text>
+    <text x="82" y="192">press start button</text>
+    <text x="82" y="206">Temp = 98.1C      29min</text>
+  </g>
+
+  <!-- keypad -->
+  <g font-family="Arial" font-size="13" font-weight="bold" fill="#1b1b1b">
+    <rect x="310" y="78" width="38" height="38" rx="3" fill="#f5f5f5" stroke="#555"/><text x="329" y="103" text-anchor="middle">7</text>
+    <rect x="354" y="78" width="38" height="38" rx="3" fill="#f5f5f5" stroke="#555"/><text x="373" y="103" text-anchor="middle">8</text>
+    <rect x="398" y="78" width="30" height="38" rx="3" fill="#f5f5f5" stroke="#555"/><text x="413" y="103" text-anchor="middle">9</text>
+    <rect x="310" y="122" width="38" height="38" rx="3" fill="#f5f5f5" stroke="#555"/><text x="329" y="147" text-anchor="middle">4</text>
+    <rect x="354" y="122" width="38" height="38" rx="3" fill="#f5f5f5" stroke="#555"/><text x="373" y="147" text-anchor="middle">5</text>
+    <rect x="398" y="122" width="30" height="38" rx="3" fill="#f5f5f5" stroke="#555"/><text x="413" y="147" text-anchor="middle">6</text>
+    <rect x="310" y="166" width="38" height="38" rx="3" fill="#f5f5f5" stroke="#555"/><text x="329" y="191" text-anchor="middle">1</text>
+    <rect x="354" y="166" width="38" height="38" rx="3" fill="#f5f5f5" stroke="#555"/><text x="373" y="191" text-anchor="middle">2</text>
+    <rect x="398" y="166" width="30" height="38" rx="3" fill="#f5f5f5" stroke="#555"/><text x="413" y="191" text-anchor="middle">3</text>
+    <rect x="310" y="210" width="38" height="32" rx="3" fill="#f5f5f5" stroke="#555"/><text x="329" y="233" text-anchor="middle">.</text>
+    <rect x="354" y="210" width="38" height="32" rx="3" fill="#f5f5f5" stroke="#555"/><text x="373" y="233" text-anchor="middle">0</text>
+    <rect x="398" y="210" width="30" height="32" rx="3" fill="#f5f5f5" stroke="#555"/><text x="413" y="232" text-anchor="middle">↵</text>
+  </g>
+
+  <!-- start/stop and icons -->
+  <rect x="58" y="238" width="44" height="62" rx="5" fill="#2f6b1f" stroke="#1b2f12" stroke-width="2"/>
+  <text x="80" y="280" text-anchor="middle" font-family="Arial" font-size="24" font-weight="bold" fill="#fff">I</text>
+  <text x="58" y="312" font-family="Microsoft YaHei, Arial" font-size="8" fill="#333">START</text>
+  <rect x="58" y="318" width="44" height="30" rx="5" fill="#7f1d1d" stroke="#3a0b0b" stroke-width="2"/>
+  <text x="80" y="340" text-anchor="middle" font-family="Arial" font-size="18" font-weight="bold" fill="#fff">O</text>
+  <text x="58" y="360" font-family="Microsoft YaHei, Arial" font-size="8" fill="#333">STOP</text>
+
+  <g font-family="Microsoft YaHei, Arial" font-size="8" fill="#263238" text-anchor="middle">
+    <rect x="118" y="238" width="52" height="52" rx="3" fill="#f5f5f5" stroke="#555"/><text x="144" y="275">分离筒</text>
+    <rect x="178" y="238" width="52" height="52" rx="3" fill="#f5f5f5" stroke="#555"/><text x="204" y="275">排渣</text>
+    <rect x="238" y="238" width="52" height="52" rx="3" fill="#f5f5f5" stroke="#555"/><text x="264" y="275">水封</text>
+    <rect x="298" y="238" width="52" height="52" rx="3" fill="#f5f5f5" stroke="#555"/><text x="324" y="275">系统图</text>
+    <rect x="118" y="298" width="52" height="52" rx="3" fill="#f5f5f5" stroke="#555"/><text x="144" y="335">分离盘</text>
+    <rect x="178" y="298" width="52" height="52" rx="3" fill="#f5f5f5" stroke="#555"/><text x="204" y="335">报警</text>
+    <rect x="238" y="298" width="52" height="52" rx="3" fill="#f5f5f5" stroke="#555"/><text x="264" y="335">CIP</text>
+    <rect x="298" y="298" width="52" height="52" rx="3" fill="#f5f5f5" stroke="#555"/><text x="324" y="335">信息</text>
+  </g>
+
+  <!-- lower -->
+  <circle cx="360" cy="388" r="28" fill="#f2c200" stroke="#b58e00" stroke-width="2"/>
+  <circle cx="360" cy="388" r="22" fill="#c62828" stroke="#7f1010" stroke-width="2"/>
+  <text x="360" y="430" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="10" fill="#263238">应急停止</text>
+
+  <rect x="60" y="388" width="100" height="86" rx="4" fill="#4a4a4a" stroke="#222" stroke-width="2"/>
+  <circle cx="110" cy="432" r="28" fill="#1e1e1e" stroke="#111" stroke-width="2"/>
+  <text x="68" y="402" font-family="Arial" font-size="9" fill="#d9ffd9">ON</text>
+  <text x="68" y="466" font-family="Arial" font-size="9" fill="#ffd9d9">OFF</text>
+  <text x="110" y="484" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="9" fill="#263238">电源开关</text>
+
+  <rect x="190" y="400" width="140" height="86" rx="4" fill="#3a3a3a" stroke="#222" stroke-width="2"/>
+  <rect x="196" y="406" width="128" height="74" fill="#f7f7f2" stroke="#111" stroke-width="1.5"/>
+  <text x="204" y="422" font-family="Arial" font-size="12" font-weight="bold" fill="#111">A</text>
+  <path d="M210 466 A40 40 0 0 1 310 466" fill="none" stroke="#111" stroke-width="1.5"/>
+  <path d="M288 466 A40 40 0 0 1 310 466" fill="none" stroke="#e53935" stroke-width="4"/>
+  <text x="304" y="454" font-family="Arial" font-size="9" fill="#111">8</text>
+  <text x="196" y="492" font-family="Microsoft YaHei, Arial" font-size="8" fill="#555">MOTOR CURRENT</text>
+
+  <rect x="28" y="404" width="24" height="18" fill="#f2b300" rx="2"/>
+  <text x="40" y="417" text-anchor="middle" font-family="Arial" font-size="9" font-weight="bold" fill="#3a2a00">54</text>
+
+  <text x="480" y="80" font-family="Microsoft YaHei, Arial" font-size="12" font-weight="bold" fill="#263238">面板说明</text>
+  <g font-family="Microsoft YaHei, Arial" font-size="11" fill="#37474f">
+    <text x="480" y="106">· 绿色 I：起动分离；红色 O：停止</text>
+    <text x="480" y="130">· 图标键：排渣、水封、CIP、报警复位、系统图</text>
+    <text x="480" y="154">· 数字键盘：参数输入；↵ 确认；▲▼ 选择/调整</text>
+    <text x="480" y="178">· 下方：电源开关、应急停止、电流表</text>
+    <text x="480" y="202">· 无 MAN/AUTO 选择；CIP 为专用按钮</text>
+    <text x="480" y="226">· 监视为主；调试模式的阀门/电机接口已预留</text>
+  </g>
+</svg>
