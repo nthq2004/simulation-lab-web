@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="540" viewBox="0 0 900 540">
+  <rect width="900" height="540" fill="#f7f9f8"/>
+  <text x="450" y="34" font-family="Microsoft YaHei, Arial" font-size="19" font-weight="bold" fill="#263238" text-anchor="middle">碟片式离心分离原理（S 936 分离筒）</text>
+  <polygon points="190,150 310,150 380,430 120,430" fill="#eef2f4" stroke="#455a64" stroke-width="3"/>
+  <polygon points="200,162 300,162 368,418 132,418" fill="#ffffff" stroke="#90a4ae" stroke-width="1.5"/>
+  <polygon points="200,162 300,162 368,418 132,418" fill="#e8a33d" stroke="none" stroke-width="0" opacity="0.22"/>
+  <polyline points="200,166 136,412" fill="none" stroke="#4fc3f7" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="300,166 364,412" fill="none" stroke="#4fc3f7" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="193,170 128,408" fill="none" stroke="#6d4c41" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="307,170 372,408" fill="none" stroke="#6d4c41" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="224,190 276,190" fill="none" stroke="#90a4ae" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="218,220 282,220" fill="none" stroke="#90a4ae" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="212,250 288,250" fill="none" stroke="#90a4ae" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="206,280 294,280" fill="none" stroke="#90a4ae" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="200,310 300,310" fill="none" stroke="#90a4ae" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="194,340 306,340" fill="none" stroke="#90a4ae" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="188,370 312,370" fill="none" stroke="#90a4ae" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="244" y="150" width="12" height="320" rx="0" fill="#b0bec5" stroke="#607d8b" stroke-width="1.5"/>
+  <polyline points="250,470 250,380" fill="none" stroke="#c05600" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="250,380 242,396 258,396" fill="#c05600"/>
+  <text x="250" y="492" font-family="Microsoft YaHei, Arial" font-size="12" font-weight="bold" fill="#c05600" text-anchor="middle">进油（含水的脏油）</text>
+  <circle cx="250" cy="172" r="17" fill="#e3f2fd" stroke="#1565c0" stroke-width="2"/>
+  <polyline points="250,172 250,157" fill="none" stroke="#1565c0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="250,172 265,172" fill="none" stroke="#1565c0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="250,172 250,187" fill="none" stroke="#1565c0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="250,172 235,172" fill="none" stroke="#1565c0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="250,150 250,108" fill="none" stroke="#2e7d32" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="250,108 243,122 257,122" fill="#2e7d32"/>
+  <text x="250" y="98" font-family="Microsoft YaHei, Arial" font-size="12" font-weight="bold" fill="#2e7d32" text-anchor="middle">净油出口（向心泵 → V4）</text>
+  <polyline points="366,300 426,268" fill="none" stroke="#1565c0" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="426,268 412.588,268.353 418.235,278.941" fill="#1565c0"/>
+  <text x="432" y="264" font-family="Microsoft YaHei, Arial" font-size="12" font-weight="bold" fill="#1565c0" text-anchor="start">出水 → V5</text>
+  <polyline points="290,250 426,190" fill="none" stroke="#78909c" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="432" y="186" font-family="Microsoft YaHei, Arial" font-size="12" font-weight="bold" fill="#263238" text-anchor="start">碟片组（锥角约 40°）</text>
+  <polyline points="154,380 100,408" fill="none" stroke="#6d4c41" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="94" y="404" font-family="Microsoft YaHei, Arial" font-size="12" font-weight="bold" fill="#6d4c41" text-anchor="end">污渣贴壁</text>
+  <polyline points="174,300 110,268" fill="none" stroke="#1565c0" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="104" y="264" font-family="Microsoft YaHei, Arial" font-size="12" font-weight="bold" fill="#1565c0" text-anchor="end">水封层</text>
+  <text x="250" y="522" font-family="Microsoft YaHei, Arial" font-size="12" font-weight="normal" fill="#78909c" text-anchor="middle">分离筒剖面：重相（水、渣）向外，轻相（净油）向内、向上</text>
+  <rect x="470" y="96" width="410" height="356" rx="8" fill="#ffffff" stroke="#b0bec5" stroke-width="1.5"/>
+  <text x="675" y="122" font-family="Microsoft YaHei, Arial" font-size="14" font-weight="bold" fill="#263238" text-anchor="middle">碟片间隙中的分离过程（放大）</text>
+  <polygon points="510,296 840,204 840,218 510,310" fill="#cfd8dc" stroke="#90a4ae" stroke-width="1.5"/>
+  <polygon points="510,364 840,272 840,286 510,378" fill="#cfd8dc" stroke="#90a4ae" stroke-width="1.5"/>
+  <polygon points="510,310 840,218 840,230 510,322" fill="#e8a33d" stroke="none" stroke-width="0" opacity="0.55"/>
+  <polygon points="510,322 840,230 840,246 510,338" fill="#4fc3f7" stroke="none" stroke-width="0" opacity="0.75"/>
+  <polygon points="510,338 840,246 840,258 510,350" fill="#6d4c41" stroke="none" stroke-width="0" opacity="0.5"/>
+  <text x="680" y="248" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="bold" fill="#8d5a12" text-anchor="middle">轻相：净油 → 向内、向上</text>
+  <text x="680" y="292" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="bold" fill="#0d47a1" text-anchor="middle">重相：水 → 向外、向下</text>
+  <text x="680" y="332" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="bold" fill="#4e342e" text-anchor="middle">固相：渣 → 贴下碟片向外甩出</text>
+  <polyline points="530,396 770,332" fill="none" stroke="#c05600" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="770,332 757.954,329.52 760.789,340.149" fill="#c05600"/>
+  <text x="534" y="412" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="normal" fill="#c05600" text-anchor="start">油从外侧进入间隙</text>
+  <polyline points="590,216 510,180" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="510,180 517.774,189.53 522.288,179.498" fill="#2e7d32"/>
+  <text x="598" y="212" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="normal" fill="#2e7d32" text-anchor="start">净油向心</text>
+  <rect x="40" y="470" width="820" height="54" rx="6" fill="#e8f5e9" stroke="#a5d6a7" stroke-width="1.5"/>
+  <text x="60" y="492" font-family="Microsoft YaHei, Arial" font-size="12.5" font-weight="bold" fill="#1b5e20" text-anchor="start">分离因数 Fr = ω²r/g ≈ 7×10³～8×10³（10680 r/min）；碟片把沉降距离压到 0.5～1 mm，</text>
+  <text x="60" y="512" font-family="Microsoft YaHei, Arial" font-size="12.5" font-weight="bold" fill="#1b5e20" text-anchor="start">同一油滴的沉降速度比自然重力沉降提高成千上万倍，因此能在筒内短短数秒内完成油、水、渣的分层。</text>
+</svg>

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="430" viewBox="0 0 900 430">
+  <rect width="900" height="430" fill="#f7f9f8"/>
+  <text x="450" y="28" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="18" font-weight="bold" fill="#263238">自锁回路的两个工作状态</text>
+
+  <!-- ═══════════ ① 按下 SB2 ═══════════ -->
+  <text x="60" y="50" font-family="Microsoft YaHei, Arial" font-size="14" font-weight="bold" fill="#c62828">① 按住 SB2：线圈得电</text>
+
+  <!-- 外框回路 -->
+  <g stroke="#37474f" stroke-width="2" fill="none">
+    <path d="M70 120 L70 300 L150 300"/>
+    <path d="M205 300 L340 300 L340 230"/>
+    <path d="M340 120 L270 120"/>
+    <path d="M215 120 L150 120"/>
+  </g>
+  <!-- SB1（常闭，闭合） -->
+  <line x1="150" y1="120" x2="215" y2="120" stroke="#37474f" stroke-width="2"/>
+  <line x1="170" y1="120" x2="170" y2="104" stroke="#546e7a" stroke-width="1.5"/>
+  <line x1="160" y1="104" x2="196" y2="104" stroke="#546e7a" stroke-width="1.5"/>
+  <text x="182" y="98" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="11" fill="#37474f">SB1</text>
+  <!-- SB2（常开，按下闭合） -->
+  <line x1="215" y1="120" x2="270" y2="120" stroke="#37474f" stroke-width="2"/>
+  <line x1="242" y1="120" x2="242" y2="132" stroke="#546e7a" stroke-width="1.5"/>
+  <line x1="232" y1="132" x2="268" y2="132" stroke="#546e7a" stroke-width="1.5"/>
+  <text x="242" y="152" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="11" fill="#c62828">SB2（按下闭合）</text>
+  <!-- KM1 常开支路（此时断开） -->
+  <path d="M215 120 L215 90 L225 90" stroke="#37474f" stroke-width="2" fill="none"/>
+  <line x1="225" y1="90" x2="262" y2="76" stroke="#37474f" stroke-width="2"/>
+  <path d="M270 90 L270 120" stroke="#37474f" stroke-width="2" fill="none"/>
+  <text x="242" y="72" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="11" fill="#37474f">KM1 常开（此时断开）</text>
+  <!-- 线圈 -->
+  <rect x="318" y="175" width="44" height="55" rx="3" fill="#e8eaf6" stroke="#3949ab" stroke-width="1.8"/>
+  <text x="340" y="208" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#283593">KM1</text>
+  <text x="368" y="208" font-family="Microsoft YaHei, Arial" font-size="11" fill="#37474f">线圈</text>
+  <!-- FR 常闭 -->
+  <line x1="150" y1="300" x2="205" y2="300" stroke="#37474f" stroke-width="2"/>
+  <text x="178" y="320" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="11" fill="#37474f">FR 常闭</text>
+  <text x="76" y="212" font-family="Microsoft YaHei, Arial" font-size="11" fill="#546e7a">TC 副边</text>
+
+  <g fill="#37474f">
+    <circle cx="150" cy="120" r="3"/><circle cx="215" cy="120" r="3"/><circle cx="270" cy="120" r="3"/>
+    <circle cx="215" cy="90" r="3"/><circle cx="270" cy="90" r="3"/>
+    <circle cx="150" cy="300" r="3"/><circle cx="205" cy="300" r="3"/>
+  </g>
+
+  <!-- 红色电流路径：经闭合的 SB2 -->
+  <path d="M70 175 L70 120 L270 120 L340 120 L340 175" stroke="#e53935" stroke-width="4" fill="none" opacity="0.85"/>
+  <text x="70" y="356" font-family="Microsoft YaHei, Arial" font-size="12" fill="#c62828">SB2 闭合 → 控制回路接通 → 线圈 KM1 得电吸合。</text>
+
+  <!-- ═══════════ ② 松开 SB2 ═══════════ -->
+  <text x="500" y="50" font-family="Microsoft YaHei, Arial" font-size="14" font-weight="bold" fill="#2e7d32">② 松开 SB2：由 KM1 常开触头自锁</text>
+
+  <g transform="translate(440,0)">
+    <g stroke="#37474f" stroke-width="2" fill="none">
+      <path d="M70 120 L70 300 L150 300"/>
+      <path d="M205 300 L340 300 L340 230"/>
+      <path d="M340 120 L270 120"/>
+      <path d="M215 120 L150 120"/>
+    </g>
+    <!-- SB1 闭合 -->
+    <line x1="150" y1="120" x2="215" y2="120" stroke="#37474f" stroke-width="2"/>
+    <line x1="170" y1="120" x2="170" y2="104" stroke="#546e7a" stroke-width="1.5"/>
+    <line x1="160" y1="104" x2="196" y2="104" stroke="#546e7a" stroke-width="1.5"/>
+    <text x="182" y="98" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="11" fill="#37474f">SB1</text>
+    <!-- SB2 松开 → 断开 -->
+    <line x1="215" y1="120" x2="262" y2="104" stroke="#37474f" stroke-width="2"/>
+    <line x1="242" y1="120" x2="242" y2="132" stroke="#546e7a" stroke-width="1.5"/>
+    <line x1="232" y1="132" x2="268" y2="132" stroke="#546e7a" stroke-width="1.5"/>
+    <text x="242" y="152" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="11" fill="#2e7d32">SB2（已松开）</text>
+    <!-- KM1 常开支路（已闭合） -->
+    <path d="M215 120 L215 90" stroke="#37474f" stroke-width="2" fill="none"/>
+    <line x1="215" y1="90" x2="270" y2="90" stroke="#37474f" stroke-width="2"/>
+    <path d="M270 90 L270 120" stroke="#37474f" stroke-width="2" fill="none"/>
+    <text x="242" y="72" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="11" fill="#2e7d32">KM1 常开（已闭合）</text>
+    <!-- 线圈 / FR -->
+    <rect x="318" y="175" width="44" height="55" rx="3" fill="#e8eaf6" stroke="#3949ab" stroke-width="1.8"/>
+    <text x="340" y="208" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#283593">KM1</text>
+    <text x="368" y="208" font-family="Microsoft YaHei, Arial" font-size="11" fill="#37474f">线圈</text>
+    <line x1="150" y1="300" x2="205" y2="300" stroke="#37474f" stroke-width="2"/>
+    <text x="178" y="320" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="11" fill="#37474f">FR 常闭</text>
+    <text x="76" y="212" font-family="Microsoft YaHei, Arial" font-size="11" fill="#546e7a">TC 副边</text>
+    <g fill="#37474f">
+      <circle cx="150" cy="120" r="3"/><circle cx="215" cy="120" r="3"/><circle cx="270" cy="120" r="3"/>
+      <circle cx="215" cy="90" r="3"/><circle cx="270" cy="90" r="3"/>
+      <circle cx="150" cy="300" r="3"/><circle cx="205" cy="300" r="3"/>
+    </g>
+  </g>
+
+  <!-- 红色电流路径：经已闭合的 KM1 常开触头 -->
+  <path d="M510 175 L510 120 L655 120 L655 90 L710 90 L710 120 L780 120 L780 175" stroke="#e53935" stroke-width="4" fill="none" opacity="0.85"/>
+  <text x="510" y="356" font-family="Microsoft YaHei, Arial" font-size="12" fill="#2e7d32">SB2 已断开，电流改经 KM1 常开触头供给线圈 → 连续运行。</text>
+
+  <text x="450" y="404" text-anchor="middle" font-family="Microsoft YaHei, Arial" font-size="12" fill="#37474f">自锁：把接触器自己的常开辅助触头与起动按钮并联，用触头代替按钮保持回路导通。</text>
+</svg>

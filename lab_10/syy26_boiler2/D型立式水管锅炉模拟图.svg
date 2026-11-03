@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024" viewBox="0 0 1536 1024">
+<defs>
+  <linearGradient id="steel" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#777f87"/><stop offset=".22" stop-color="#eef3f6"/><stop offset=".55" stop-color="#9ca6ae"/><stop offset=".82" stop-color="#f5f7f8"/><stop offset="1" stop-color="#68727b"/></linearGradient>
+  <linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#55d8ff"/><stop offset="1" stop-color="#007acb"/></linearGradient>
+  <linearGradient id="fire" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff34c"/><stop offset=".5" stop-color="#ff8a00"/><stop offset="1" stop-color="#d92700"/></linearGradient>
+  <linearGradient id="red" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ff8270"/><stop offset=".5" stop-color="#e51e0d"/><stop offset="1" stop-color="#9f1008"/></linearGradient>
+  <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3"/></filter>
+  <marker id="arrBlue" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto"><path d="M0 0L12 6L0 12Z" fill="#0879dc"/></marker>
+  <marker id="arrRed" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto"><path d="M0 0L12 6L0 12Z" fill="#e52216"/></marker>
+  <marker id="arrYellow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto"><path d="M0 0L12 6L0 12Z" fill="#e9a900"/></marker>
+  <style>
+    .pipeB{fill:none;stroke:#087bc8;stroke-width:10;stroke-linejoin:round;stroke-linecap:round}
+    .pipeR{fill:none;stroke:#df291a;stroke-width:12;stroke-linejoin:round;stroke-linecap:round}
+    .pipeY{fill:none;stroke:#e5a900;stroke-width:9;stroke-linejoin:round}
+    .metal{fill:url(#steel);stroke:#202a31;stroke-width:4}
+    .thin{fill:none;stroke:#24313a;stroke-width:3}
+    .label{font-family:"Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:27px;fill:#071b2d}
+    .small{font-family:Arial,sans-serif;font-size:22px;font-weight:bold;fill:#09264a}
+    .call{fill:#edf7ff;stroke:#0751a0;stroke-width:2.5}
+    .bubble{fill:white;stroke:#082e70;stroke-width:3}
+  </style>
+</defs>
+<rect width="1536" height="1024" fill="#fff"/>
+<!-- steam dome and boiler shell -->
+<path d="M590 320 C590 220 665 174 745 174 C830 174 906 220 906 320 L906 601 L590 601Z" class="metal"/>
+<path d="M606 318 C606 232 669 190 747 190 C827 190 890 232 890 318" fill="none" stroke="#f8fbfc" stroke-width="9"/>
+<path d="M606 317 Q748 300 890 317 L890 601 L606 601Z" fill="#0a6eae" opacity=".18"/>
+<!-- waterline -->
+<path d="M594 315 Q620 306 646 315 T698 315 T750 315 T802 315 T854 315 T906 315" fill="none" stroke="#ef4b32" stroke-width="4"/>
+<!-- steam cloud -->
+<g fill="#f8fafb" stroke="#e2e7ea" stroke-width="1.5"><ellipse cx="687" cy="253" rx="48" ry="30"/><ellipse cx="744" cy="239" rx="62" ry="39"/><ellipse cx="809" cy="255" rx="56" ry="31"/><ellipse cx="755" cy="277" rx="100" ry="28"/></g>
+<!-- water tube bank -->
+<g stroke="#003d69" stroke-width="3" fill="url(#water)">
+<rect x="598" y="329" width="12" height="266" rx="5"/><rect x="617" y="329" width="12" height="266" rx="5"/><rect x="636" y="329" width="12" height="266" rx="5"/><rect x="655" y="329" width="12" height="266" rx="5"/><rect x="674" y="329" width="12" height="266" rx="5"/><rect x="693" y="329" width="12" height="266" rx="5"/><rect x="712" y="329" width="12" height="266" rx="5"/><rect x="731" y="329" width="12" height="266" rx="5"/><rect x="750" y="329" width="12" height="266" rx="5"/><rect x="769" y="329" width="12" height="266" rx="5"/><rect x="788" y="329" width="12" height="266" rx="5"/><rect x="807" y="329" width="12" height="266" rx="5"/><rect x="826" y="329" width="12" height="266" rx="5"/><rect x="845" y="329" width="12" height="266" rx="5"/><rect x="864" y="329" width="12" height="266" rx="5"/><rect x="883" y="329" width="12" height="266" rx="5"/>
+</g>
+<!-- lower furnace casing -->
+<path d="M579 600 L919 600 L919 817 Q919 834 901 834 L598 834 Q579 834 579 817Z" class="metal"/>
+<rect x="607" y="621" width="285" height="185" rx="74" fill="#272d31" stroke="#111a20" stroke-width="5"/>
+<rect x="621" y="635" width="257" height="158" rx="62" fill="#4d1b08" stroke="#e0a04d" stroke-width="4"/>
+<!-- flames -->
+<path d="M650 783 Q626 748 660 709 Q658 679 682 657 Q683 698 700 708 Q704 667 727 641 Q723 700 746 713 Q757 676 779 653 Q779 703 799 713 Q812 681 834 674 Q823 722 852 751 L858 790 L650 790Z" fill="url(#fire)"/>
+<path d="M690 789 Q675 751 706 724 Q706 704 720 688 Q721 730 741 744 Q753 710 768 696 Q765 744 790 757 Q804 731 817 725 Q811 766 831 789Z" fill="#fff45a"/>
+<!-- chimney short vertical -->
+<rect x="704" y="62" width="78" height="112" rx="5" fill="url(#steel)" stroke="#222b31" stroke-width="4"/>
+<path d="M694 64 L792 64 L782 48 L704 48Z" class="metal"/>
+<g fill="#dfe3e6" opacity=".8"><circle cx="714" cy="35" r="20"/><circle cx="741" cy="24" r="25"/><circle cx="768" cy="33" r="22"/><circle cx="790" cy="18" r="18"/></g>
+<!-- steam outlet left upper -->
+<path d="M731 177 L731 154 L657 154 L657 110 L534 110" class="pipeR" marker-end="url(#arrRed)"/>
+<path d="M648 142 L648 165" stroke="#8f130b" stroke-width="4"/>
+<!-- right feedwater line -->
+<path d="M920 350 L1265 350" class="pipeB"/>
+<path d="M1265 350 L1317 350" stroke="#0879dc" stroke-width="7" marker-end="url(#arrBlue)"/>
+<!-- flow indicator -->
+<path d="M1038 350 L1038 285 L1050 285 L1050 350" fill="none" stroke="#1d6caa" stroke-width="4"/>
+<circle cx="1044" cy="263" r="24" class="bubble"/><text x="1044" y="271" text-anchor="middle" class="small">FI</text>
+<!-- feed control valve -->
+<path d="M1129 350 L1150 350 M1189 350 L1212 350" class="pipeB"/>
+<path d="M1150 332 L1170 350 L1150 368Z M1189 332 L1170 350 L1189 368Z" fill="#dce5ec" stroke="#17232b" stroke-width="3"/>
+<path d="M1170 332 L1170 310 L1157 300 L1183 300 L1170 310" class="thin"/>
+<path d="M1170 300 L1170 286" class="thin"/>
+<!-- left electrode chamber -->
+<rect x="472" y="329" width="91" height="260" rx="8" fill="url(#steel)" stroke="#26323a" stroke-width="4"/>
+<rect x="489" y="345" width="57" height="228" rx="5" fill="#e8f5fb" stroke="#26323a" stroke-width="2"/>
+<rect x="493" y="418" width="49" height="151" fill="url(#water)" opacity=".85"/>
+<g stroke="#1b2830" stroke-width="5" fill="none"><path d="M510 350 L510 535 Q510 550 518 550"/><path d="M531 350 L531 535 Q531 550 539 550"/></g>
+<g fill="#aeb8bf" stroke="#202a31" stroke-width="2"><circle cx="518" cy="551" r="5"/><circle cx="539" cy="551" r="5"/></g>
+<!-- equalizing connections -->
+<path d="M563 350 L590 350 M563 572 L590 572" stroke="#68747c" stroke-width="11"/>
+<!-- level markers -->
+<g class="bubble"><circle cx="408" cy="365" r="24"/><circle cx="408" cy="431" r="24"/><circle cx="408" cy="496" r="24"/><circle cx="408" cy="560" r="24"/></g>
+<g class="small" text-anchor="middle"><text x="408" y="373">HH</text><text x="408" y="439">H</text><text x="408" y="504">L</text><text x="408" y="568">LL</text></g>
+<g stroke="#5e6a72" stroke-width="3"><path d="M432 365 L472 365 M432 431 L472 431 M432 496 L472 496 M432 560 L472 560"/></g>
+<!-- burner body and fuel -->
+<rect x="360" y="660" width="120" height="76" rx="13" fill="url(#red)" stroke="#252d32" stroke-width="4"/>
+<rect x="474" y="674" width="105" height="48" rx="5" class="metal"/>
+<path d="M170 699 L360 699" class="pipeY" marker-end="url(#arrYellow)"/>
+<path d="M300 681 L321 699 L300 717Z M340 681 L321 699 L340 717Z" fill="#e9edf0" stroke="#17232b" stroke-width="3"/>
+<path d="M321 680 L321 663 L307 655 L335 655 L321 663" class="thin"/>
+<!-- burner air -->
+<path d="M378 747 L378 785 L450 785 L450 736" fill="none" stroke="#087bc8" stroke-width="8"/>
+<!-- igniter electrodes -->
+<g stroke="#242a30" stroke-width="7" fill="none"><path d="M718 744 L718 808"/><path d="M754 744 L754 808"/></g>
+<g stroke="#e0a000" stroke-width="3"><path d="M718 744 L754 744"/><path d="M722 739 L750 749"/></g>
+<!-- ignition transformer -->
+<rect x="816" y="839" width="102" height="82" rx="7" fill="#aeb7bd" stroke="#202a31" stroke-width="4"/>
+<path d="M864 851 L847 884 L864 884 L852 909 L887 873 L869 873Z" fill="#ffdc00" stroke="#202a31" stroke-width="2"/>
+<path d="M754 804 L790 835 L816 865 M718 804 L718 820 L816 885" fill="none" stroke="#d82a1b" stroke-width="4"/>
+<!-- blowdown -->
+<path d="M919 802 L950 802 L950 864 L1055 864" fill="none" stroke="#6c777e" stroke-width="10" stroke-linejoin="round"/>
+<path d="M1055 846 L1076 864 L1055 882Z M1097 846 L1076 864 L1097 882Z" fill="#e4eaee" stroke="#17232b" stroke-width="3"/>
+<path d="M1076 846 L1076 824 L1062 816 L1090 816 L1076 824" class="thin"/>
+<path d="M1076 884 L1076 952" stroke="#087bc8" stroke-width="8" marker-end="url(#arrBlue)"/>
+<!-- supports and base -->
+<path d="M609 833 L609 933 L651 933 L651 833 M865 833 L865 933 L907 933 L907 833" fill="url(#steel)" stroke="#26323a" stroke-width="4"/>
+<rect x="548" y="933" width="418" height="25" fill="url(#steel)" stroke="#202a31" stroke-width="4"/>
+<!-- labels -->
+<g>
+ <rect x="288" y="83" width="158" height="55" rx="14" fill="#fff0ef" stroke="#c51b15" stroke-width="2.5"/><text x="367" y="119" text-anchor="middle" class="label">蒸汽出口</text>
+ <rect x="820" y="72" width="118" height="52" rx="12" class="call"/><text x="879" y="107" text-anchor="middle" class="label">烟囱</text>
+ <path d="M820 99 L783 113" class="thin"/>
+ <rect x="1117" y="213" width="167" height="52" rx="12" class="call"/><text x="1200" y="248" text-anchor="middle" class="label">给水调节阀</text>
+ <path d="M1200 265 L1170 293" class="thin"/>
+ <rect x="1353" y="321" width="158" height="55" rx="12" class="call"/><text x="1432" y="357" text-anchor="middle" class="label">给水入口</text>
+ <rect x="313" y="236" width="191" height="76" rx="12" class="call"/><text x="408" y="268" text-anchor="middle" class="label">电极室</text><text x="408" y="299" text-anchor="middle" class="label">（水位测量）</text>
+ <path d="M504 275 L520 328" class="thin"/>
+ <rect x="817" y="423" width="126" height="52" rx="12" class="call"/><text x="880" y="458" text-anchor="middle" class="label">水管束</text><path d="M817 449 L758 472" class="thin"/>
+ <rect x="8" y="672" width="155" height="55" rx="12" fill="#fff8df" stroke="#d49a00" stroke-width="2.5"/><text x="85" y="708" text-anchor="middle" class="label">燃油入口</text>
+ <rect x="378" y="754" width="125" height="52" rx="12" class="call"/><text x="440" y="789" text-anchor="middle" class="label">燃烧器</text>
+ <rect x="655" y="872" width="127" height="50" rx="12" class="call"/><text x="718" y="906" text-anchor="middle" class="label">点火电极</text><path d="M718 872 L718 814" class="thin"/>
+ <rect x="767" y="966" width="167" height="50" rx="12" class="call"/><text x="850" y="1000" text-anchor="middle" class="label">点火变压器</text><path d="M850 966 L866 922" class="thin"/>
+ <rect x="1135" y="838" width="129" height="76" rx="12" class="call"/><text x="1199" y="870" text-anchor="middle" class="label">排污阀</text><text x="1199" y="900" text-anchor="middle" class="label">（常闭）</text><path d="M1135 876 L1097 864" class="thin"/>
+ <rect x="1027" y="957" width="121" height="50" rx="12" class="call"/><text x="1087" y="991" text-anchor="middle" class="label">排污口</text>
+</g>
+<!-- compact pipe and valve notes -->
+<text x="200" y="684" class="small">燃油管路</text>
+<text x="990" y="392" class="small">给水管路</text>
+</svg>

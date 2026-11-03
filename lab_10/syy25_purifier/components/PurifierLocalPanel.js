@@ -3,19 +3,21 @@ import { BaseComponent } from './BaseComponent.js';
 
 /**
  * PurifierLocalPanel — 分油机机旁控制箱
- * 主电源、机旁/遥控、起动/停止、应急停止、进油泵、加热器、工作水/空气压力、振动、报警。
+ * 主电源转换开关、控制方式转换开关（HAND / EPC）、起动/停止、应急停止、供油泵、加热器、工作水/空气压力、振动、报警。
  */
 export class PurifierLocalPanel extends BaseComponent {
     constructor(config, sys) {
         super(config, sys);
 
         this.W = Math.max(420, config.width || 500);
-        this.H = Math.max(680, config.height || 820);
+        this.H = Math.max(680, config.height || 812);
         this.type = 'purifier_local_panel';
         this.special = 'purifier_local';
         this.cache = 'fixed';
 
         this._lampTestUntil = 0;
+        this._lampTestHeld = false;
+        this._lampReleaseAt = 0;
 
         this._initGroups();
         this._recalcGeometry();
@@ -37,21 +39,22 @@ export class PurifierLocalPanel extends BaseComponent {
             chassis: { x: 0, y: 0, w: W, h: H, r: 12 },
             bezel: { x: 12, y: 12, w: W - 24, h: H - 24, r: 7 },
             ammeter: { cx: 112, cy: 138, r: 62 },
-            main: { x: 36, y: 226, w: 150, h: 58 },
-            local: { x: 216, y: 226, w: 180, h: 58 },
-            start: { x: 46, y: 314, w: 92, h: 70 },
-            stop: { x: 168, y: 314, w: 92, h: 70 },
-            emergency: { x: 306, y: 338, r: 42 },
-            feed: { x: 46, y: 414, w: 130, h: 58 },
-            heater: { x: 256, y: 414, w: 140, h: 58 },
-            temp: { x: 36, y: 500, w: 202, h: 70 },
-            tempInc: { x: 256, y: 506, w: 54, h: 54 },
-            tempDec: { x: 322, y: 506, w: 54, h: 54 },
-            waterGauge: { cx: 124, cy: 650, r: 56 },
-            airGauge: { cx: 336, cy: 650, r: 56 },
-            alarmLamp: { x: 42, y: 730, r: 14 },
-            reset: { x: 264, y: 724, w: 132, h: 46 },
-            lampTest: { x: 168, y: 724, w: 88, h: 46 },
+            main: { x: 63, y: 209, w: 74, h: 74 },
+            local: { x: 253, y: 209, w: 74, h: 74 },
+            emergency: { x: 330, y: 120, r: 34 },
+            pumpStart: { x: 30, y: 306, w: 84, h: 56 },
+            pumpStop: { x: 122, y: 306, w: 84, h: 56 },
+            heatStart: { x: 214, y: 306, w: 84, h: 56 },
+            heatStop: { x: 306, y: 306, w: 84, h: 56 },
+            motStart: { x: 30, y: 392, w: 84, h: 56 },
+            motStop: { x: 122, y: 392, w: 84, h: 56 },
+            progStart: { x: 214, y: 392, w: 84, h: 56 },
+            progStop: { x: 306, y: 392, w: 84, h: 56 },
+            waterGauge: { cx: 112, cy: 570, r: 61 },
+            airGauge: { cx: 312, cy: 570, r: 61 },
+            alarmLamp: { x: 30, y: 672, w: 84, h: 56 },
+            lampTest: { x: 168, y: 672, w: 84, h: 56 },
+            reset: { x: 306, y: 672, w: 84, h: 56 },
         };
     }
 
@@ -68,20 +71,18 @@ export class PurifierLocalPanel extends BaseComponent {
         g.add(new Konva.Circle({ x: cx, y: cy, radius: r, fill: '#f2f4f2', stroke: '#7c8280', strokeWidth: 2 }));
         for (let i = 0; i <= 10; i++) {
             const a = (-135 + (i / 10) * 270) * Math.PI / 180;
-            const x1 = cx + Math.sin(a) * (r - 18);
-            const y1 = cy - Math.cos(a) * (r - 18);
-            const x2 = cx + Math.sin(a) * (r - 10);
-            const y2 = cy - Math.cos(a) * (r - 10);
+            const x1 = cx + Math.sin(a) * (r - 12);
+            const y1 = cy - Math.cos(a) * (r - 12);
+            const x2 = cx + Math.sin(a) * (r - 6);
+            const y2 = cy - Math.cos(a) * (r - 6);
             g.add(new Konva.Line({ points: [x1, y1, x2, y2], stroke: '#37474f', strokeWidth: i % 2 === 0 ? 2 : 1 }));
             if (i % 2 === 0) {
-                const lx = cx + Math.sin(a) * (r - 32);
-                const ly = cy - Math.cos(a) * (r - 32);
-                this._label(g, lx - 14, ly - 7, String(Math.round(max * i / 10)), 9, '#37474f', false, 'center', 28);
+                const lx = cx + Math.sin(a) * (r - 25);
+                const ly = cy - Math.cos(a) * (r - 25);
+                this._label(g, lx - 18, ly - 10, String(Math.round(max * i / 10)), 13, '#37474f', false, 'center', 36);
             }
         }
-        this._label(g, cx - 50, cy + 20, unit, 9, '#78909c', false, 'center', 100);
-        this._label(g, cx - 50, cy - r - 18, labels, 10, '#455a64', true, 'center', 100);
-        g.add(new Konva.Line({ points: [cx, cy, cx + Math.sin(-135 * Math.PI / 180) * (r - 20), cy - Math.cos(-135 * Math.PI / 180) * (r - 20)], stroke: color, strokeWidth: 2 }));
+        this._label(g, cx - 75, cy - r - 18, labels, 13, '#455a64', true, 'center', 150);
     }
 
     _drawStaticParts() {
@@ -115,66 +116,102 @@ export class PurifierLocalPanel extends BaseComponent {
             const x2 = A.cx + Math.sin(a) * (A.r - 5);
             const y2 = A.cy - Math.cos(a) * (A.r - 5);
             g.add(new Konva.Line({ points: [x1, y1, x2, y2], stroke: '#37474f', strokeWidth: 1.5 }));
-            const lx = A.cx + Math.sin(a) * (A.r - 28);
-            const ly = A.cy - Math.cos(a) * (A.r - 28);
-            this._label(g, lx - 12, ly - 6, String(i * 5), 9, '#37474f', false, 'center', 24);
+            const lx = A.cx + Math.sin(a) * (A.r - 22);
+            const ly = A.cy - Math.cos(a) * (A.r - 22);
+            this._label(g, lx - 12, ly - 6, String(i * 5), 13, '#37474f', false, 'center', 24);
         }
-        this._label(g, A.cx - 50, A.cy + 26, 'A', 11, '#546e7a', false, 'center', 100);
-        this._label(g, A.cx - 60, A.cy + 42, 'MOTOR CURRENT', 9, '#78909c', false, 'center', 120);
 
         // 指示灯标签
-        this._label(g, 232, 104, 'POWER', 10, '#455a64', true);
-        this._label(g, 232, 140, 'RUN', 10, '#455a64', true);
-        this._label(g, 232, 176, 'TRIP', 10, '#455a64', true);
+        this._label(g, 216, 90, 'POWER', 13, '#455a64', true);
+        this._label(g, 216, 130, 'RUN', 13, '#455a64', true);
+        this._label(g, 216, 170, 'TRIP', 13, '#455a64', true);
 
-        // 主电源 / 机旁遥控 底板
-        this._drawSwitchBox(g, G.main, 'MAIN POWER', '主电源');
-        this._drawSwitchBox(g, G.local, 'LOCAL / REMOTE', '机旁 / 遥控');
+        // 主电源 / 控制模式 转换旋钮
+        const mcx = G.main.x + 37, mcy = G.main.y + 37;
+        const lcx = G.local.x + 37, lcy = G.local.y + 37;
+        this._drawKnobBase(g, mcx, mcy, 33);
+        this._drawKnobBase(g, lcx, lcy, 33);
+        // 档位标注
+        this._label(g, mcx - 56, mcy - 32, 'OFF', 9, '#37474f', true, 'right', 26);
+        this._label(g, mcx + 30, mcy - 32, 'ON', 9, '#37474f', true, 'left', 26);
+        this._label(g, lcx - 66, lcy - 6, 'HAND', 9, '#37474f', true, 'right', 28);
+        this._label(g, lcx - 16, lcy - 46, 'EPC', 9, '#37474f', true, 'center', 32);
+        this._label(g, lcx + 38, lcy - 6, 'AUTO', 9, '#37474f', true, 'left', 34);
+        // 静态中文标注
+        this._label(g, G.main.x + 34 - 40, G.main.y + 78, '主电源', 13, '#263238', true, 'center', 80);
+        this._label(g, G.local.x + 34 - 55, G.local.y + 78, '控制模式', 13, '#263238', true, 'center', 110);
 
-        // 起动/停止按钮
-        g.add(new Konva.Rect({ x: G.start.x, y: G.start.y, width: G.start.w, height: G.start.h, cornerRadius: 6, fill: '#1b5e20', stroke: '#0d2b12', strokeWidth: 2 }));
-        g.add(new Konva.Rect({ x: G.stop.x, y: G.stop.y, width: G.stop.w, height: G.stop.h, cornerRadius: 6, fill: '#b71c1c', stroke: '#4a0a0a', strokeWidth: 2 }));
-        this._label(g, G.start.x, G.start.y + 24, 'START', 14, '#ffffff', true, 'center', G.start.w);
-        this._label(g, G.stop.x, G.stop.y + 24, 'STOP', 14, '#ffffff', true, 'center', G.stop.w);
-        this._label(g, G.start.x, G.start.y + G.start.h + 4, '机旁起动', 9, '#455a64', false, 'center', G.start.w);
-        this._label(g, G.stop.x, G.stop.y + G.stop.h + 4, '停止', 9, '#455a64', false, 'center', G.stop.w);
-
-        // 应急停止
+        // 应急停止（移到面板右上方）
         g.add(new Konva.Circle({ x: G.emergency.x, y: G.emergency.y, radius: G.emergency.r, fill: '#c62828', stroke: '#5c0d0d', strokeWidth: 3 }));
-        g.add(new Konva.Circle({ x: G.emergency.x, y: G.emergency.y, radius: G.emergency.r - 10, fill: '#e53935', stroke: '#7f1010', strokeWidth: 1 }));
-        this._label(g, G.emergency.x - 44, G.emergency.y + G.emergency.r + 6, 'EMERGENCY STOP', 8, '#455a64', true, 'center', 88);
+        g.add(new Konva.Circle({ x: G.emergency.x, y: G.emergency.y, radius: G.emergency.r - 9, fill: '#e53935', stroke: '#7f1010', strokeWidth: 1 }));
+        this._label(g, G.emergency.x - 54, G.emergency.y + G.emergency.r + 7, 'EMER STOP', 15, '#455a64', true, 'center', 108);
 
-        // 进油泵 / 加热器
-        this._drawButtonBox(g, G.feed, 'FEED PUMP', '进油泵');
-        this._drawButtonBox(g, G.heater, 'HEATER', '加热器');
+        // 第一行：供油泵 / 加热器 起停按钮
+        this._btnLampPump = this._drawPushButton(g, G.pumpStart, '供油泵起动', '#1b5e20', true);
+        this._drawPushButton(g, G.pumpStop, '供油泵停止', '#b71c1c');
+        this._btnLampHeater = this._drawPushButton(g, G.heatStart, '加热器起动', '#1b5e20', true);
+        this._drawPushButton(g, G.heatStop, '加热器停止', '#b71c1c');
 
-        // 温度控制器
-        g.add(new Konva.Rect({ x: G.temp.x, y: G.temp.y, width: G.temp.w, height: G.temp.h, cornerRadius: 3, fill: '#263238', stroke: '#111', strokeWidth: 1.5 }));
-        this._label(g, G.temp.x + 8, G.temp.y + 5, 'TT1  TEMPERATURE', 9, '#90a4ae', true);
-        this._label(g, G.tempInc.x - 6, G.tempInc.y + 16, '+', 26, '#263238', true, 'center', 66);
-        this._label(g, G.tempDec.x - 6, G.tempDec.y + 16, '−', 26, '#263238', true, 'center', 66);
+        // 第二行：分油机电机 起停 + 分离程序 起停（I / O）
+        this._btnLampMotor = this._drawPushButton(g, G.motStart, '电机起动', '#1b5e20', true);
+        this._drawPushButton(g, G.motStop, '电机停止', '#b71c1c');
+        this._drawSquareButton(g, G.progStart, 'I', '分离起动', '#1b5e20');
+        this._drawSquareButton(g, G.progStop, 'O', '分离停止', '#b71c1c');
 
         // 压力表
         this._drawGauge(g, G.waterGauge.cx, G.waterGauge.cy, G.waterGauge.r, 10, 'OPERATING WATER', 'bar');
         this._drawGauge(g, G.airGauge.cx, G.airGauge.cy, G.airGauge.r, 10, 'CONTROL AIR', 'bar');
 
-        // 报警 / 复位 / 试灯
-        g.add(new Konva.Circle({ x: G.alarmLamp.x, y: G.alarmLamp.y, radius: G.alarmLamp.r, fill: '#3a0b0b', stroke: '#111', strokeWidth: 1.5 }));
-        this._label(g, G.alarmLamp.x + 22, G.alarmLamp.y - 8, 'ALARM', 10, '#b71c1c', true, 'left', 80);
-        this._drawButtonBox(g, G.reset, 'ALARM RESET', '报警复位');
-        this._drawButtonBox(g, G.lampTest, 'LAMP TEST', '试灯');
+        // 报警灯（圆形，与圆形按钮同尺寸）+ 试灯 / 报警复位（通用圆形按钮）
+        const AL = G.alarmLamp;
+        const acx = AL.x + AL.w / 2, acy = AL.y + 26;
+        g.add(new Konva.Circle({
+            x: acx, y: acy, radius: 26,
+            fillLinearGradientStartPoint: { x: acx, y: acy - 26 },
+            fillLinearGradientEndPoint: { x: acx, y: acy + 26 },
+            fillLinearGradientColorStops: [0, '#e4e7e7', 0.5, '#b9bebe', 1, '#8f9595'],
+            stroke: '#7f8585', strokeWidth: 1.5,
+        }));
+        this._label(g, AL.x, AL.y + 58, '报警灯', 12, '#263238', true, 'center', AL.w);
+        this._drawPushButton(g, G.lampTest, '试灯', '#78909c');
+        this._drawPushButton(g, G.reset, '报警复位', '#546e7a');
     }
 
-    _drawSwitchBox(g, b, en, cn) {
-        g.add(new Konva.Rect({ x: b.x, y: b.y, width: b.w, height: b.h, cornerRadius: 4, fill: '#d7dbdb', stroke: '#546e7a', strokeWidth: 1.5 }));
-        this._label(g, b.x + 8, b.y + 6, en, 9, '#455a64', true);
-        this._label(g, b.x + 8, b.y + b.h - 20, cn, 11, '#263238');
+    // 旋钮底座：白色外框 + 黑色填充（白色指示条在动态层）
+    _drawKnobBase(g, cx, cy, R) {
+        g.add(new Konva.Circle({ x: cx, y: cy, radius: R, fill: '#ffffff', stroke: '#9aa0a0', strokeWidth: 1.2 }));
+        g.add(new Konva.Circle({ x: cx, y: cy, radius: R - 7, fill: '#141414', stroke: '#000000', strokeWidth: 1 }));
     }
 
-    _drawButtonBox(g, b, en, cn) {
-        g.add(new Konva.Rect({ x: b.x, y: b.y, width: b.w, height: b.h, cornerRadius: 4, fill: '#d7dbdb', stroke: '#546e7a', strokeWidth: 1.5 }));
-        this._label(g, b.x + 8, b.y + 6, en, 9, '#455a64', true);
-        this._label(g, b.x + 8, b.y + b.h - 22, cn, 11, '#263238');
+    // 圆形按钮：金属外圈 + 彩色圆面；lamp=true 时整个圆面即为指示灯（动态着色）
+    _drawPushButton(g, b, text, color, lamp) {
+        const cx = b.x + b.w / 2, cy = b.y + 26, R = 26;
+        g.add(new Konva.Circle({
+            x: cx, y: cy, radius: R,
+            fillLinearGradientStartPoint: { x: cx, y: cy - R },
+            fillLinearGradientEndPoint: { x: cx, y: cy + R },
+            fillLinearGradientColorStops: [0, '#e4e7e7', 0.5, '#b9bebe', 1, '#8f9595'],
+            stroke: '#7f8585', strokeWidth: 1.5,
+        }));
+        const face = new Konva.Circle({ x: cx, y: cy, radius: R - 5, fill: color, stroke: '#0b0b0b', strokeWidth: 1 });
+        if (lamp) this._dynamicGroup.add(face); else g.add(face);
+        this._label(g, b.x, b.y + 58, text, 12, '#263238', true, 'center', b.w);
+        return face;
+    }
+
+    // 方形 I / O 按钮：金属外框 + 彩色方面，标注在按钮下方
+    _drawSquareButton(g, b, letter, cn, color) {
+        const S = 42, x = b.x + (b.w - S) / 2, y = b.y + 7;
+        g.add(new Konva.Rect({
+            x, y, width: S, height: S, cornerRadius: 7,
+            fillLinearGradientStartPoint: { x, y },
+            fillLinearGradientEndPoint: { x, y: y + S },
+            fillLinearGradientColorStops: [0, '#e4e7e7', 0.5, '#b9bebe', 1, '#8f9595'],
+            stroke: '#7f8585', strokeWidth: 1.5,
+        }));
+        g.add(new Konva.Rect({ x: x + 5, y: y + 5, width: S - 10, height: S - 10, cornerRadius: 3, fill: color, stroke: '#0b0b0b', strokeWidth: 1 }));
+        this._label(g, x, y + 9, letter, 20, '#ffffff', true, 'center', S);
+        this._label(g, b.x, b.y + 58, cn, 12, '#263238', true, 'center', b.w);
     }
 
     _createDynamicNodes() {
@@ -186,44 +223,48 @@ export class PurifierLocalPanel extends BaseComponent {
         this._ampNeedle.add(new Konva.Circle({ x: 0, y: 0, radius: 5, fill: '#37474f' }));
         d.add(this._ampNeedle);
         this._ampText = new Konva.Text({
-            x: G.ammeter.cx - 46, y: G.ammeter.cy + 30, width: 92, height: 24,
-            text: '0.0 A', fontSize: 14, align: 'center', fill: '#263238', fontFamily: 'Consolas, monospace',
+            x: G.ammeter.cx - 46, y: G.ammeter.cy + 36, width: 92, height: 24,
+            text: '0.0 A', fontSize: 16, align: 'center', fill: '#263238', fontFamily: 'Consolas, monospace',
         });
         d.add(this._ampText);
 
         // 指示灯
-        this._ledPower = new Konva.Circle({ x: 218, y: 108, radius: 6, fill: '#2b2f2f', stroke: '#111', strokeWidth: 1 });
-        this._ledRun = new Konva.Circle({ x: 218, y: 144, radius: 6, fill: '#2b2f2f', stroke: '#111', strokeWidth: 1 });
-        this._ledTrip = new Konva.Circle({ x: 218, y: 180, radius: 6, fill: '#2b2f2f', stroke: '#111', strokeWidth: 1 });
+        this._ledPower = new Konva.Circle({ x: 200, y: 96, radius: 6, fill: '#2b2f2f', stroke: '#111', strokeWidth: 1 });
+        this._ledRun = new Konva.Circle({ x: 200, y: 136, radius: 6, fill: '#2b2f2f', stroke: '#111', strokeWidth: 1 });
+        this._ledTrip = new Konva.Circle({ x: 200, y: 176, radius: 6, fill: '#2b2f2f', stroke: '#111', strokeWidth: 1 });
         d.add(this._ledPower, this._ledRun, this._ledTrip);
 
-        // 开关位置
-        this._mainKnob = new Konva.Rect({ x: G.main.x + G.main.w - 48, y: G.main.y + 14, width: 34, height: 30, cornerRadius: 3, fill: '#37474f' });
-        this._localKnob = new Konva.Rect({ x: G.local.x + G.local.w - 60, y: G.local.y + 14, width: 46, height: 30, cornerRadius: 3, fill: '#37474f' });
-        d.add(this._mainKnob, this._localKnob);
-        this._mainText = new Konva.Text({ x: G.main.x + G.main.w - 50, y: G.main.y + 20, width: 40, height: 20, text: 'OFF', fontSize: 10, align: 'center', fill: '#fff', fontFamily: 'Arial' });
-        this._localText = new Konva.Text({ x: G.local.x + G.local.w - 62, y: G.local.y + 20, width: 50, height: 20, text: 'REMOTE', fontSize: 9, align: 'center', fill: '#fff', fontFamily: 'Arial' });
-        d.add(this._mainText, this._localText);
+        // 转换开关手柄（白色拨杆，随位置旋转）
+        const mkKnob = (b, R) => {
+            const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+            const handle = new Konva.Group({ x: cx, y: cy, rotation: -45 });
+            // 白色空心指示条（如图：横贯旋钮面的长条轮廓）
+            // 白色空心长条（横贯旋钮面）
+            handle.add(new Konva.Rect({
+                x: -4, y: -(R - 6), width: 8, height: (R - 6) * 2,
+                cornerRadius: 4, fill: 'rgba(0,0,0,0)', stroke: '#ffffff', strokeWidth: 2,
+            }));
+            // 长条一端内的实心小白块，指示当前档位方向
+            handle.add(new Konva.Rect({
+                x: -2, y: -(R - 12), width: 4, height: 11,
+                cornerRadius: 1, fill: '#ffffff',
+            }));
+            d.add(handle);
+            return { cx, cy, R, handle };
+        };
+        this._mainSw = mkKnob(G.main, 33);
+        this._localSw = mkKnob(G.local, 33);
 
         // 按钮状态灯
-        this._feedLamp = new Konva.Circle({ x: G.feed.x + G.feed.w - 20, y: G.feed.y + 20, radius: 5, fill: '#2b2f2f', stroke: '#111', strokeWidth: 1 });
-        this._heaterLamp = new Konva.Circle({ x: G.heater.x + G.heater.w - 20, y: G.heater.y + 20, radius: 5, fill: '#2b2f2f', stroke: '#111', strokeWidth: 1 });
-        d.add(this._feedLamp, this._heaterLamp);
 
-        // 温度显示
-        this._tempText = new Konva.Text({
-            x: G.temp.x + 8, y: G.temp.y + 24, width: G.temp.w - 16, height: 38,
-            text: '98 °C', fontSize: 26, fontFamily: 'Consolas, monospace', fill: '#6dff9a',
-        });
-        d.add(this._tempText);
 
         // 压力表指针与数值
         this._waterNeedle = new Konva.Group({ x: G.waterGauge.cx, y: G.waterGauge.cy, rotation: -135 });
         this._waterNeedle.add(new Konva.Line({ points: [0, 6, 0, -G.waterGauge.r + 16], stroke: '#c62828', strokeWidth: 2.5 }));
         d.add(this._waterNeedle);
         this._waterText = new Konva.Text({
-            x: G.waterGauge.cx - 44, y: G.waterGauge.cy + 30, width: 88, height: 22,
-            text: '0.0 bar', fontSize: 13, align: 'center', fill: '#263238', fontFamily: 'Consolas, monospace',
+            x: G.waterGauge.cx - 50, y: G.waterGauge.cy + 68, width: 100, height: 24,
+            text: '0.0 bar', fontSize: 18, align: 'center', fill: '#263238', fontFamily: 'Consolas, monospace',
         });
         d.add(this._waterText);
 
@@ -231,57 +272,110 @@ export class PurifierLocalPanel extends BaseComponent {
         this._airNeedle.add(new Konva.Line({ points: [0, 6, 0, -G.airGauge.r + 16], stroke: '#c62828', strokeWidth: 2.5 }));
         d.add(this._airNeedle);
         this._airText = new Konva.Text({
-            x: G.airGauge.cx - 44, y: G.airGauge.cy + 30, width: 88, height: 22,
-            text: '0.0 bar', fontSize: 13, align: 'center', fill: '#263238', fontFamily: 'Consolas, monospace',
+            x: G.airGauge.cx - 50, y: G.airGauge.cy + 68, width: 100, height: 24,
+            text: '0.0 bar', fontSize: 18, align: 'center', fill: '#263238', fontFamily: 'Consolas, monospace',
         });
         d.add(this._airText);
 
-        // 报警灯
-        this._alarmLamp = new Konva.Circle({ x: G.alarmLamp.x, y: G.alarmLamp.y, radius: G.alarmLamp.r, fill: '#3a0b0b', stroke: '#111', strokeWidth: 1.5 });
+        // 报警灯（圆形，与按钮同尺寸；灯面在动态层，随报警闪烁）
+        const AL = G.alarmLamp;
+        this._alarmLamp = new Konva.Circle({
+            x: AL.x + AL.w / 2, y: AL.y + 26, radius: 21,
+            fill: '#3a0b0b', stroke: '#0b0b0b', strokeWidth: 1,
+        });
         d.add(this._alarmLamp);
+        // 报警文字：三个按钮下方整行，12 px
         this._alarmText = new Konva.Text({
-            x: 34, y: 748, width: 130, height: 40,
-            text: '', fontSize: 10, fill: '#b71c1c',
+            x: 34, y: 752, width: 352, height: 44,
+            text: '', fontSize: 12, fill: '#b71c1c',
             fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
         });
         d.add(this._alarmText);
 
-        // 振动值
-        this._vibText = new Konva.Text({
-            x: 34, y: 700, width: 220, height: 24,
-            text: 'VIB 0.0 mm/s', fontSize: 12, fill: '#37474f', fontFamily: 'Consolas, monospace',
-        });
-        d.add(this._vibText);
     }
 
     _bindInteraction() {
         const G = this._geo;
         this.addClickablePart('main-power', G.main.x, G.main.y, G.main.w, G.main.h, true)
-            .on('click tap', () => { const s = this._solver(); if (s) s.toggleMainPower(); this._syncVisuals(); });
+            .on('click tap', (e) => {
+                const s = this._solver(); if (!s) return;
+                // 两档：右半区顺时针 OFF→ON，左半区逆时针 ON→OFF
+                s.toggleMainPower();
+                this._syncVisuals();
+            });
         this.addClickablePart('local-remote', G.local.x, G.local.y, G.local.w, G.local.h, true)
-            .on('click tap', () => { const s = this._solver(); if (s) s.toggleLocal(); this._syncVisuals(); });
-        this.addClickablePart('start', G.start.x, G.start.y, G.start.w, G.start.h, true)
-            .on('click tap', () => { const s = this._solver(); if (s) s.localStart(); this._syncVisuals(); });
-        this.addClickablePart('stop', G.stop.x, G.stop.y, G.stop.w, G.stop.h, true)
-            .on('click tap', () => { const s = this._solver(); if (s) s.pressStop(); this._syncVisuals(); });
+            .on('click tap', (e) => {
+                const s = this._solver(); if (!s) return;
+                const dir = this._switchDir(e && e.target);
+                s.cycleCtrlMode(dir);
+                this._syncVisuals();
+            });
+        const bindBtn = (id, box, fn) => this.addClickablePart(id, box.x, box.y, box.w, box.h, true)
+            .on('click tap', () => { const s = this._solver(); if (!s) return; fn(s); this._syncVisuals(); });
+        bindBtn('pump-start', G.pumpStart, s => s.localPump(true));
+        bindBtn('pump-stop', G.pumpStop, s => s.localPump(false));
+        bindBtn('heater-start', G.heatStart, s => s.localHeater(true));
+        bindBtn('heater-stop', G.heatStop, s => s.localHeater(false));
+        bindBtn('start', G.motStart, s => s.localMotorStart());
+        bindBtn('stop', G.motStop, s => s.localMotorStop());
+        bindBtn('prog-start', G.progStart, s => s.localProgramStart());
+        bindBtn('prog-stop', G.progStop, s => s.localProgramStop());
         this.addClickablePart('emergency', G.emergency.x - G.emergency.r, G.emergency.y - G.emergency.r, G.emergency.r * 2, G.emergency.r * 2, true)
             .on('click tap', () => {
                 const s = this._solver(); if (!s) return;
                 if (s.m.emergency) { s.resetEmergency(); } else { s.emergencyStop(); }
                 this._syncVisuals();
             });
-        this.addClickablePart('feed-pump', G.feed.x, G.feed.y, G.feed.w, G.feed.h, true)
-            .on('click tap', () => { const s = this._solver(); if (s) s.toggleFeedPump(); this._syncVisuals(); });
-        this.addClickablePart('heater', G.heater.x, G.heater.y, G.heater.w, G.heater.h, true)
-            .on('click tap', () => { const s = this._solver(); if (s) s.toggleHeater(); this._syncVisuals(); });
-        this.addClickablePart('temp-inc', G.tempInc.x, G.tempInc.y, G.tempInc.w, G.tempInc.h, true)
-            .on('click tap', () => { const s = this._solver(); if (s) s.setParam('sepTemp', s.getParam('sepTemp') + 1); this._syncVisuals(); });
-        this.addClickablePart('temp-dec', G.tempDec.x, G.tempDec.y, G.tempDec.w, G.tempDec.h, true)
-            .on('click tap', () => { const s = this._solver(); if (s) s.setParam('sepTemp', s.getParam('sepTemp') - 1); this._syncVisuals(); });
         this.addClickablePart('reset', G.reset.x, G.reset.y, G.reset.w, G.reset.h, true)
             .on('click tap', () => { const s = this._solver(); if (s) s.pressAlarmReset(); this._syncVisuals(); });
-        this.addClickablePart('lamp-test', G.lampTest.x, G.lampTest.y, G.lampTest.w, G.lampTest.h, true)
-            .on('click tap', () => { this._lampTestUntil = (performance.now ? performance.now() : Date.now()) + 1000; this._syncVisuals(); });
+        // 试灯：按住不放 → 全部指示灯常亮；松手恢复原状
+        const lampNode = this.addClickablePart('lamp-test', G.lampTest.x, G.lampTest.y, G.lampTest.w, G.lampTest.h, true);
+        lampNode.on('mousedown touchstart', () => this._setLampTest(true));
+        lampNode.on('mouseup touchend', () => {
+            this._lampReleaseAt = (performance.now ? performance.now() : Date.now());
+            this._setLampTest(false);
+        });
+        // 程序化（演示/工作流）的单击才短促点亮；真实按压松手后的 click 不闪
+        lampNode.on('click tap', () => {
+            const t = performance.now ? performance.now() : Date.now();
+            if (this._lampTestHeld) return;
+            if (t - (this._lampReleaseAt || 0) < 600) return;   // 真实按压松手后的 click：不再闪一下
+            this._lampTestUntil = t + 400;                       // 仅程序化单击（演示/演练）短促点亮
+            this._syncVisuals();
+            if (this.sys && this.sys.requestRedraw) this.sys.requestRedraw();
+        });
+    }
+
+    /** 试灯按钮按下 / 松开 */
+    _setLampTest(on) {
+        this._lampTestHeld = !!on;
+        if (on) this._lampTestUntil = 0;                  // 按住时只用 held 状态，避免残留延时点亮
+        if (on && !this._lampUpBound) {
+            this._lampUpBound = true;
+            const up = () => {
+                this._lampReleaseAt = (performance.now ? performance.now() : Date.now());
+                this._setLampTest(false);
+            };
+            window.addEventListener('mouseup', up, true);
+            window.addEventListener('touchend', up, true);
+            window.addEventListener('blur', up, true);
+        }
+        this._syncVisuals();
+        if (this.sys && this.sys.requestRedraw) this.sys.requestRedraw();
+    }
+
+    // 判断点击落在旋钮左半区(-1)还是右半区(+1)
+    _switchDir(node) {
+        try {
+            const stage = node && node.getStage && node.getStage();
+            const ptr = stage && stage.getPointerPosition && stage.getPointerPosition();
+            if (!ptr) return 1;
+            const local = node.getAbsoluteTransform().copy().invert().point(ptr);
+            const w = node.width ? node.width() : 0;
+            return local.x >= w / 2 ? 1 : -1;
+        } catch (err) {
+            return 1;
+        }
     }
 
     _syncVisuals() {
@@ -299,16 +393,22 @@ export class PurifierLocalPanel extends BaseComponent {
         this._ledRun.fill(m.motor.on ? '#27e05a' : '#2b2f2f');
         this._ledTrip.fill(m.motor.trip || m.emergency ? '#ff2d2d' : '#2b2f2f');
 
-        this._mainText.text(m.mainPower ? 'ON' : 'OFF');
-        this._mainKnob.fill(m.mainPower ? '#1b5e20' : '#37474f');
-        this._localText.text(m.local ? 'LOCAL' : 'REMOTE');
-        this._localKnob.fill(m.local ? '#f9a825' : '#37474f');
+        // 主电源：左上 OFF / 右上 ON
+        this._mainSw.handle.rotation(m.mainPower ? 45 : -45);
+        // 控制模式：左 HAND / 上 EPC / 右 AUTO
+        const cm = m.ctrlMode || (m.local ? 'HAND' : 'EPC');
+        // 档位：左 HAND(-90°) / 上 EPC(0°) / 右 AUTO(+90°)
+        this._localSw.handle.rotation(cm === 'HAND' ? -90 : (cm === 'EPC' ? 0 : 90));
 
-        this._feedLamp.fill(m.feed.pumpOn ? '#27e05a' : '#2b2f2f');
-        this._heaterLamp.fill(m.feed.heaterOn ? '#ffb300' : '#2b2f2f');
-
-        this._tempText.text(`${m.feed.temp.toFixed(1)} °C`);
-        this._tempText.fill(m.feed.temp < 90 ? '#ff8a80' : '#6dff9a');
+        // 带灯按钮：整个按钮面亮起 / 熄灭
+        const setLamp = (face, on) => {
+            if (!face) return;
+            face.fill(on ? '#3ddc6d' : '#1b5e20');
+            face.stroke(on ? '#c8ffda' : '#0b0b0b');
+        };
+        setLamp(this._btnLampPump, !!(m.feed.pumpOn && m.mainPower));
+        setLamp(this._btnLampHeater, !!(m.feed.heaterOn && m.mainPower));
+        setLamp(this._btnLampMotor, !!m.motor.on);
 
         this._waterNeedle.rotation(-135 + clamp(m.water.supply / 10, 0, 1) * 270);
         this._waterText.text(`${m.water.supply.toFixed(1)} bar`);
@@ -318,14 +418,28 @@ export class PurifierLocalPanel extends BaseComponent {
         this._airText.text(`${m.water.air.toFixed(1)} bar`);
         this._airText.fill(m.water.air < 5 ? '#c62828' : '#263238');
 
-        this._vibText.text(`VIB ${m.bowl.vibration.toFixed(1)} mm/s`);
-        this._vibText.fill(m.bowl.vibration > m.params.vibrationTrip ? '#c62828' : (m.bowl.vibration > m.params.vibrationWarn ? '#ef6c00' : '#37474f'));
-
         const now = performance.now ? performance.now() : Date.now();
-        const test = now < this._lampTestUntil;
+        const held = !!this._lampTestHeld;                       // 按住试灯：常亮
+        const test = held || now < this._lampTestUntil;          // 程序单击：短促点亮
         const flash = Math.floor(now / 350) % 2;
+        const lit = held ? true : !!flash;
         this._alarmLamp.fill(m.alarmActive ? (m.alarmAck ? '#ff2d2d' : (flash ? '#ff2d2d' : '#3a0b0b')) : '#3a0b0b');
-        if (test) this._alarmLamp.fill(flash ? '#ffb300' : '#3a0b0b');
+        if (test) this._alarmLamp.fill(lit ? '#ffb300' : '#3a0b0b');
+
+        // 试灯：机旁控制箱上所有指示灯一起点亮（POWER/RUN/TRIP + 带灯按钮 + 报警灯）
+        if (test) {
+            const on = lit;
+            this._ledPower.fill(on ? '#27e05a' : '#2b2f2f');
+            this._ledRun.fill(on ? '#27e05a' : '#2b2f2f');
+            this._ledTrip.fill(on ? '#ff2d2d' : '#2b2f2f');
+            [this._btnLampPump, this._btnLampHeater, this._btnLampMotor].forEach(f => {
+                if (!f) return;
+                f.fill(on ? '#3ddc6d' : '#1b5e20');
+                f.stroke(on ? '#c8ffda' : '#0b0b0b');
+            });
+            this._alarmLamp.fill(on ? '#ffb300' : '#3a0b0b');
+        }
+
         const active = m.alarms.find(a => a.active);
         this._alarmText.text(active ? `${active.ack ? '' : '[未确认] '}${active.code} ${active.text}` : '');
 

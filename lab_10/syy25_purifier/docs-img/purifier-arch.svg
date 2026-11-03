@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="520" viewBox="0 0 920 520">
+  <rect width="920" height="520" fill="#f7f9f8"/>
+  <text x="460" y="32" font-family="Microsoft YaHei, Arial" font-size="18" font-weight="bold" fill="#263238" text-anchor="middle">仿真程序的三层结构与数据流</text>
+  <rect x="240" y="56" width="440" height="46" rx="8" fill="#eceff1" stroke="#546e7a" stroke-width="1.6"/>
+  <text x="460" y="84" font-family="Microsoft YaHei, Arial" font-size="13" font-weight="bold" fill="#37474f" text-anchor="middle">ControlSystem（consys.js） 20 fps 物理循环</text>
+  <rect x="240" y="140" width="440" height="92" rx="8" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+  <text x="460" y="168" font-family="Microsoft YaHei, Arial" font-size="15" font-weight="bold" fill="#1b5e20" text-anchor="middle">PurifierSolver（模型层）</text>
+  <text x="460" y="192" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="normal" fill="#2e7d32" text-anchor="middle">m：状态机 / 阀门 / 转速 / 温度 / 压力 / 报警 / 参数</text>
+  <text x="460" y="214" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="normal" fill="#2e7d32" text-anchor="middle">solve(1/20)：物理量 → 程序引擎 → 报警评估</text>
+  <rect x="40" y="292" width="250" height="92" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.8"/>
+  <text x="165" y="318" font-family="Microsoft YaHei, Arial" font-size="13.5" font-weight="bold" fill="#0d47a1" text-anchor="middle">EPC60Panel（面板）</text>
+  <text x="165" y="340" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="normal" fill="#1565c0" text-anchor="middle">按键 → 调模型方法</text>
+  <text x="165" y="360" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="normal" fill="#1565c0" text-anchor="middle">LCD 分屏只读渲染</text>
+  <rect x="336" y="292" width="250" height="92" rx="8" fill="#fff8e1" stroke="#ef6c00" stroke-width="1.8"/>
+  <text x="461" y="318" font-family="Microsoft YaHei, Arial" font-size="13.5" font-weight="bold" fill="#e65100" text-anchor="middle">EPC60SystemMimic（模拟图）</text>
+  <text x="461" y="340" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="normal" fill="#ef6c00" text-anchor="middle">_syncVisuals 派生动画</text>
+  <text x="461" y="360" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="normal" fill="#ef6c00" text-anchor="middle">水量 / 油层 / 底盘 / 流向</text>
+  <rect x="632" y="292" width="250" height="92" rx="8" fill="#f3e5f5" stroke="#6a1b9a" stroke-width="1.8"/>
+  <text x="757" y="318" font-family="Microsoft YaHei, Arial" font-size="13" font-weight="bold" fill="#4a148c" text-anchor="middle">PurifierSystem / Local（页 2）</text>
+  <text x="757" y="340" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="normal" fill="#6a1b9a" text-anchor="middle">P&amp;ID 流程 + 机旁控制箱</text>
+  <text x="757" y="360" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="normal" fill="#6a1b9a" text-anchor="middle">同一 m 的另一套视图</text>
+  <rect x="240" y="428" width="440" height="56" rx="8" fill="#eceff1" stroke="#90a4ae" stroke-width="1.6"/>
+  <text x="460" y="452" font-family="Microsoft YaHei, Arial" font-size="12.5" font-weight="bold" fill="#37474f" text-anchor="middle">Konva 画布节点（in-place 更新，不重建）</text>
+  <text x="460" y="472" font-family="Microsoft YaHei, Arial" font-size="10.5" font-weight="normal" fill="#78909c" text-anchor="middle">tick() → _syncVisuals() → node.fill()/points()/opacity()</text>
+  <polyline points="460,102 460,136" fill="none" stroke="#546e7a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="460,136 465.5,125 454.5,125" fill="#546e7a"/>
+  <text x="470" y="122" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#78909c" text-anchor="start">每帧调用一次</text>
+  <polyline points="400,232 196,288" fill="none" stroke="#1976d2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="196,288 206.967,290.174 204.32,280.531" fill="#1976d2"/>
+  <polyline points="460,232 461,288" fill="none" stroke="#ef6c00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="461,288 465.821,277.912 455.822,278.091" fill="#ef6c00"/>
+  <polyline points="500,232 757,288" fill="none" stroke="#6a1b9a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="757,288 748.294,280.986 746.165,290.756" fill="#6a1b9a"/>
+  <text x="238" y="282" font-family="Microsoft YaHei, Arial" font-size="10.5" font-weight="normal" fill="#1976d2" text-anchor="start">读 m（只读）</text>
+  <text x="461" y="270" font-family="Microsoft YaHei, Arial" font-size="10.5" font-weight="normal" fill="#ef6c00" text-anchor="middle">读 m</text>
+  <text x="640" y="258" font-family="Microsoft YaHei, Arial" font-size="10.5" font-weight="normal" fill="#6a1b9a" text-anchor="middle">读 m</text>
+  <polyline points="75,292 75,206 236,206" fill="none" stroke="#c62828" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 5"/>
+  <polygon points="236,206 226,201 226,211" fill="#c62828"/>
+  <text x="84" y="232" font-family="Microsoft YaHei, Arial" font-size="10.5" font-weight="normal" fill="#c62828" text-anchor="start">点击 → s.setValve() / s.pressStart() …</text>
+  <polyline points="165,388 240,424" fill="none" stroke="#90a4ae" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="240,424 233.148,415.165 228.821,424.18" fill="#90a4ae"/>
+  <polyline points="461,388 461,424" fill="none" stroke="#90a4ae" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="461,424 466,414 456,414" fill="#90a4ae"/>
+  <polyline points="757,388 680,424" fill="none" stroke="#90a4ae" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="680,424 691.176,424.294 686.941,415.235" fill="#90a4ae"/>
+  <text x="460" y="508" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="normal" fill="#78909c" text-anchor="middle">单向数据流：操作只调用模型公开方法；画面只读取 m，绝不直接改物理量</text>
+</svg>

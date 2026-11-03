@@ -279,8 +279,8 @@ export class PurifierStatusPanel extends BaseComponent {
         this._alarmLines = [];
         for (let i = 0; i < 8; i++) {
             const t = new Konva.Text({
-                x: A.x + 10, y: A.y + 30 + i * 32, width: A.w - 20, height: 30,
-                text: '', fontSize: 13, lineHeight: 1.2, fill: '#b71c1c',
+                x: A.x + 10, y: A.y + 28 + i * 32, width: A.w - 20, height: 31,
+                text: '', fontSize: 12, lineHeight: 1.2, fill: '#b71c1c',
                 fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
             });
             d.add(t);
@@ -314,7 +314,10 @@ export class PurifierStatusPanel extends BaseComponent {
         const [stateText, color] = stateMap[m.state] || [m.state, '#37474f'];
         this._bannerText.text(stateText);
         this._bannerRect.fill(color);
-        this._bannerSub.text(`S 936   ${m.local ? 'LOCAL' : 'REMOTE'}   ${m.epcPower ? 'EPC ON' : 'EPC OFF'}`);
+        const cmTxt = m.ctrlMode === 'HAND' ? '机旁 HAND' : (m.ctrlMode === 'AUTO' ? '全自动 AUTO' : 'EPC 远程');
+        const PH = { 1: '自动起动', 2: '起动', 3: '分离', 4: '排渣', 5: '停机', 6: '自动停机' };
+        const progTxt = m.prog ? `   阶段${m.phase} ${PH[m.phase] || ''} · ${m.timerName} ${Math.floor(m.timerT)}s` : '';
+        this._bannerSub.text(`S 936   ${cmTxt}   ${m.epcPower ? 'EPC ON' : 'EPC OFF'}${progTxt}`);
 
         const rpm = m.bowl.speed;
         this._speedText.text(String(Math.round(rpm)));
@@ -346,12 +349,15 @@ export class PurifierStatusPanel extends BaseComponent {
         this._setTank('clean', m.oil.clean);
         this._setTank('sludge', m.sludge.tank);
 
-        // 报警
-        const list = m.alarms.filter(a => a.active).slice(0, 8);
+        // 报警记录：全部历史（最新在下？——最新在最上面），已复位用绿色
+        const src = (m.alarmLog && m.alarmLog.length) ? m.alarmLog : m.alarms;
+        const list = src.slice(0, 8);
         this._alarmLines.forEach((t, i) => {
             const a = list[i];
-            t.text(a ? `${a.ack ? '  ' : '● '}${a.code} ${a.text}` : '');
-            t.fill(a ? (a.ack ? '#8e6b6b' : '#b71c1c') : '#b71c1c');
+            if (!a) { t.text(''); return; }
+            const live = !!a.active;
+            t.text(`${live ? (a.ack ? '  ' : '● ') : '✓ '}${a.code} ${a.text}`);
+            t.fill(live ? (a.ack ? '#8e6b6b' : '#b71c1c') : '#2e7d32');
         });
 
         // 底部
@@ -372,7 +378,7 @@ export class PurifierStatusPanel extends BaseComponent {
         const h = t.h * pct / 100;
         t.fill.y(t.y + (t.h - h));
         t.fill.height(h);
-        this._tankTexts[id].text(`${Math.round(pct)}%`);
+        this._tankTexts[id].text(`${pct.toFixed(1)}%`);
     }
 
     tick() {

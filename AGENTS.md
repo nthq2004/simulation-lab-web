@@ -241,3 +241,119 @@ op 的 `act()` 只需占位延时（可顺带设置仪表档位等），**不要
   `_COMP_PARTS` / `_parts` 等坐标表一律保存部件的**本地（未旋转）坐标**，由绝对变换自动计入旋转。
 - 端口定位复用 BaseComponent 的 `getAbsPortPos(portId)`；组件用 `addPort()` 定义端口后即可
   供接线演示箭头定位，无需再注册部件。
+
+## 转换开关（旋钮开关）组件规范
+
+控制面板上的主电源、控制模式等**档位开关统一做成圆形旋钮**，不要用矩形滑块或带方框的按钮。
+新建开关组件时直接复制本模式。参考实现：`lab_10/syy25_purifier/components/PurifierLocalPanel.js`
+（`_drawKnobBase()` / `_createDynamicNodes()` 内的 `mkKnob()` / `_switchDir()`），
+换档逻辑见 `lab_10/syy25_purifier/tools/PurifierSolver.js` 的 `setCtrlMode()` / `cycleCtrlMode()`。
+
+### 外观
+
+| 部位 | 规格 |
+|------|------|
+| 白色外框 | 圆，外径 `R = 33`，纯白填充，外沿 `stroke: '#9aa0a0', 1.2px` |
+| 黑色圆面 | 半径 `R - 7`（白色环宽 7px），`fill: '#141414'` |
+| 指示条 | 圆角矩形，宽 **8**、长 `2 * (R - 6)`、`stroke: '#ffffff' 2px`、内部透明，横贯圆面 |
+| 指示块 | 指示条**一端的实心小白块**（4 × 11，圆角 1），起箭头作用，指向当前档位 |
+| 文字 | **不画矩形底板、不写英文标题**；档位名标注在**对应方向**，中文名称（主电源/控制模式…）放在旋钮**正下方**，且为**静态文字**（不要动态标签） |
+
+档位名位置：
+
+- 两档：偏左 45°、偏右 45°；
+- 三档：水平向左、垂直向上、水平向右。
+
+### 旋转角度（Konva `rotation`，`0` = 指示条竖直向上，负值 = 逆时针）
+
+- 两档：左档 `-45`，右档 `+45`；
+- 三档：`-90` / `0` / `+90`。
+
+### 操作方式（所有档位开关统一）
+
+- 点击旋钮**右半区 → 顺时针**换下一档；点击**左半区 → 逆时针**换上一档；
+- **两档**开关：点任一侧即切换（OFF ⇄ ON）；
+- **三档及以上**：**到端点不循环** —— 最小档再点左侧仍停在最小档，最大档再点右侧仍停在最大档。
+
+### 代码模板
+
+```js
+// ① 底座（静态层）：白色外框 + 黑色圆面
+_drawKnobBase(g, cx, cy, R = 33) {
+    g.add(new Konva.Circle({ x: cx, y: cy, radius: R, fill: '#ffffff', stroke: '#9aa0a0', strokeWidth: 1.2 }));
+    g.add(new Konva.Circle({ x: cx, y: cy, radius: R - 7, fill: '#141414', stroke: '#000000', strokeWidth: 1 }));
+}
+
+// ② 手柄（动态层，必须放动态层，否则被静态缓存后不跟随换档）
+const handle = new Konva.Group({ x: cx, y: cy, rotation: 0 });
+handle.add(new Konva.Rect({ x: -4, y: -(R - 6), width: 8, height: (R - 6) * 2,
+                            cornerRadius: 4, fill: 'rgba(0,0,0,0)', stroke: '#ffffff', strokeWidth: 2 }));
+handle.add(new Konva.Rect({ x: -2, y: -(R - 12), width: 4, height: 11,
+                            cornerRadius: 1, fill: '#ffffff' }));   // 端部指示块（箭头）
+dyn.add(handle);
+
+// ③ 换档时只改角度
+handle.rotation(mode === 'HAND' ? -90 : (mode === 'EPC' ? 0 : 90));
+
+// ④ 判断点击落在左半区(-1)/右半区(+1)：用绝对变换求局部坐标，兼容组件旋转缩放
+_switchDir(node) {
+    const stage = node && node.getStage && node.getStage();
+    const ptr = stage && stage.getPointerPosition && stage.getPointerPosition();
+    if (!ptr) return 1;                                  // 程序化点击默认顺时针
+    const local = node.getAbsoluteTransform().copy().invert().point(ptr);
+    return local.x >= node.width() / 2 ? 1 : -1;
+}
+
+// ⑤ 换档逻辑：多档钳位、不循环
+cycleMode(dir = 1) {
+    const order = this.modes;                            // 如 ['HAND','EPC','AUTO']
+    const i = order.indexOf(this.mode);
+    const next = Math.min(order.length - 1, Math.max(0, i + (dir > 0 ? 1 : -1)));
+    if (next !== i) this.setMode(order[next]);
+}
+```
+
+### 注意
+
+- 点击部位仍用 `addClickablePart(partId, x, y, w, h)` 注册（宽高按旋钮直径留足），
+  工作流/自动演示用 `part` 定位并 `fire('click')`；自动演示的合成点击**没有指针位置**，
+  `_switchDir()` 会默认按顺时针执行，因此工作流要回到更小档位时应改用 `setMode()` 兜底，
+  或让 `_ensureXxx()` 在连点无效后直接置位。
+- 旋钮底座、档位名、中文名称放静态层；指示条/指示块放动态层。
+
+## 工作流编写：一律按「最新范式」改写
+
+- **取材**：改写/新增工作流前，先在**同级（相邻）子工程目录**里找到**最新的工程文件**，以它的
+  `PROJECT_WORKFLOWS` 作为范式模板，**不要沿用旧工程写法**。
+  当前最新参照：`lab_10/syy25_purifier/project/sys_dgdq5-4.js`，
+  其次 `lab_10/syy27_ljdq11/project/sys_cddg10.js`、`project/sys_dgdq5-3.js`。
+- **步骤形状**（缺一不可）：
+  - `find`：`{ msg:'第 n 步：识别 xxx。', mode:'find', target:'<compId>', subTarget:'<partId>' }`（说明从简）
+  - `check`：`{ msg, mode:'check', op:[{ type, target, part, msg, async act(){} }, …], check(){…} }`
+  - `quiz`：`{ msg, mode:'quiz', quizConfig:{ question, options, answer, analysis } }`
+- **逐 op 演示范式**：每个 op 自带 `act()`，演示引擎按“箭头指向 → 立即执行 → 停留观察”逐个执行；
+  **禁止**把整步动作合并进 `step.act()`。op 类型：`switch`/`btn`/`knob`/`observe`/`instrument`/
+  `fault`/`load`/`wire`（`page` 仅多页工程）；接线 op 用 `ports:[端口id…]` 指向端口。
+- **动作一律模拟真实交互**：优先 `comp.getClickablePartNode(partId).fire('click'/'mousedown'/'mouseup')`；
+  取不到命中节点才用组件公开方法（`setManualOverride()`、`close()/open()`）兜底，不得直改内部字段。
+- **等待用条件轮询** `_waitFor(sys, cond, timeout, interval)`，不要写死 `sleep(3000)` 猜时间。
+
+## 操作流程文字：从简，只讲清「做什么」
+
+- 每一步 `msg` 只写**操作对象 + 动作 + 期望现象**，一般 **1 句、不超过约 30 字**；
+  不写元件原理、不写教材段落、不写背景铺陈。
+- `op.msg` 只写这一下动作（如「按住 SB2」「合上 QF」「红表笔接 A2」），一句话以内。
+- `find` 步骤最多补一个简短限定（如「（常开）」「（A1、A2）」），不展开作用与原理。
+- `quiz` 的 `analysis` 保留必要解析，1~3 句即可。
+- 原理性、系统性内容写进教学文档（`.md`），演示界面不复述。
+
+## 单页工程必须适配成单页（不使用多页组件）
+
+工程只有一个操作页面时：
+
+- **不导出 `PROJECT_PAGES`**；`consys.js` **不导入 `PageManager`、不创建 `pageMgr`**
+  （`goHome()/goBack()/goForward()`、`_autoSwitchPageForDemo()` 已做判空，可安全不创建）。
+- **`index.html` 不保留**「主页 / 上一页 / 下一页」按钮，`main.js` 的 `actionMap` 不绑定它们。
+- 工作流中**不写** `{ type:'page', page:n }` 切页 op；全部组件同屏显示
+  （只有「选择仪表」里的仪表默认隐藏）。
+- 反之，确有多页才建 `PROJECT_PAGES`，并为组件配置 `page` 字段。

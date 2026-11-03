@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="762" viewBox="0 0 940 762">
+  <rect width="940" height="762" fill="#f7f9f8"/>
+  <text x="470" y="30" font-family="Microsoft YaHei, Arial" font-size="18" font-weight="bold" fill="#263238" text-anchor="middle">从按「I」到 Ti68：一次起动在三个层面上的同步变化</text>
+  <rect x="24" y="50" width="912" height="30" rx="4" fill="#37474f" stroke="#37474f" stroke-width="1"/>
+  <text x="34" y="71" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#ffffff" text-anchor="start">操作（人 / 面板键）</text>
+  <text x="242" y="71" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#ffffff" text-anchor="start">模型层 PurifierSolver（m 的字段变化）</text>
+  <text x="626" y="71" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#ffffff" text-anchor="start">面板屏 / 画面表现</text>
+  <rect x="24" y="80" width="912" height="58" rx="0" fill="#ffffff" stroke="#cfd8dc" stroke-width="1"/>
+  <rect x="24" y="80" width="5" height="58" rx="0" fill="#546e7a" stroke="#546e7a" stroke-width="1"/>
+  <text x="44" y="104" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#546e7a" text-anchor="start">合主电源</text>
+  <text x="44" y="122" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#78909c" text-anchor="start">转 EPC</text>
+  <text x="242" y="102" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">setPower(true)：mainPower = epcPower = true（两处同步）</text>
+  <text x="242" y="120" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">setCtrlMode("EPC")：ctrlMode="EPC"，local=false</text>
+  <text x="626" y="102" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">面板得电，LCD 由 POWER OFF 变为主界面</text>
+  <text x="626" y="120" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">页 2 电源灯亮、机旁按钮失效</text>
+  <rect x="24" y="138" width="912" height="58" rx="0" fill="#fafafa" stroke="#cfd8dc" stroke-width="1"/>
+  <rect x="24" y="138" width="5" height="58" rx="0" fill="#1565c0" stroke="#1565c0" stroke-width="1"/>
+  <text x="44" y="162" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#1565c0" text-anchor="start">按 I（1）</text>
+  <text x="242" y="160" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">_pressStart()：u.question=true，u.answer="YES"</text>
+  <text x="242" y="178" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">模型未动作（只置面板问询标志）</text>
+  <text x="626" y="160" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">屏 2「- START_QUESTIONS -」</text>
+  <text x="626" y="178" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">Has the bowl been dismantled?  YES/NO 交替闪烁</text>
+  <rect x="24" y="196" width="912" height="58" rx="0" fill="#ffffff" stroke="#cfd8dc" stroke-width="1"/>
+  <rect x="24" y="196" width="5" height="58" rx="0" fill="#1565c0" stroke="#1565c0" stroke-width="1"/>
+  <text x="44" y="220" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#1565c0" text-anchor="start">↑/↓ + ENT</text>
+  <text x="242" y="218" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">_onKey("plus") 切换 YES/NO；_onKey("enter")：</text>
+  <text x="242" y="236" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">question=false，asked=true</text>
+  <text x="626" y="218" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">闪烁项切换为 NO；确认后回到屏 1/屏 3</text>
+  <text x="626" y="236" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">I 键指示灯开始闪烁</text>
+  <rect x="24" y="254" width="912" height="58" rx="0" fill="#fafafa" stroke="#cfd8dc" stroke-width="1"/>
+  <rect x="24" y="254" width="5" height="58" rx="0" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+  <text x="44" y="278" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#2e7d32" text-anchor="start">按 I（2）</text>
+  <text x="242" y="276" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">setFeedPump(true)：feed.pumpOn=true</text>
+  <text x="242" y="294" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">（泵出口压力由 solve() 逐步逼近 0.12→0.26 MPa）</text>
+  <text x="626" y="276" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">屏 3「To start feed pump」→ 泵灯亮</text>
+  <text x="626" y="294" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">mimic 叶轮转、回油管路出现流动</text>
+  <rect x="24" y="312" width="912" height="58" rx="0" fill="#ffffff" stroke="#cfd8dc" stroke-width="1"/>
+  <rect x="24" y="312" width="5" height="58" rx="0" fill="#ef6c00" stroke="#ef6c00" stroke-width="1"/>
+  <text x="44" y="336" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#ef6c00" text-anchor="start">按 I（3）</text>
+  <text x="242" y="334" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">setHeater(true)：feed.heaterOn=true</text>
+  <text x="242" y="352" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">温度按温度一阶惯性逼近 tempSet（98 ℃）</text>
+  <text x="626" y="334" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">屏 4「To start heater」</text>
+  <text x="626" y="352" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">TT1 上升、蒸汽阀开度增大、加热器发红</text>
+  <rect x="24" y="370" width="912" height="58" rx="0" fill="#fafafa" stroke="#cfd8dc" stroke-width="1"/>
+  <rect x="24" y="370" width="5" height="58" rx="0" fill="#6a1b9a" stroke="#6a1b9a" stroke-width="1"/>
+  <text x="44" y="394" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#6a1b9a" text-anchor="start">按 I（4）</text>
+  <text x="242" y="392" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">start(true)：motor.on=true，motor.trip=false，state="STARTING"</text>
+  <text x="242" y="410" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">转速按 START_TAU=8 s 逼近 10680 r/min</text>
+  <text x="626" y="392" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">屏 5/6「To start separator / Starting Separator」</text>
+  <text x="626" y="410" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">ST 上升、电流表到约 14 A、电机中心灯亮</text>
+  <rect x="24" y="428" width="912" height="58" rx="0" fill="#ffffff" stroke="#cfd8dc" stroke-width="1"/>
+  <rect x="24" y="428" width="5" height="58" rx="0" fill="#c62828" stroke="#c62828" stroke-width="1"/>
+  <text x="44" y="452" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#c62828" text-anchor="start">按 I（5）</text>
+  <text x="242" y="450" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">_startProgram(2)：prog=true，phase=2，step=0，state="START_SEQ"</text>
+  <text x="242" y="468" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">清空 autoStopReq / stopManual / mtOn</text>
+  <text x="626" y="450" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">屏 7「- RECIRCULATION -」→ 转为运行屏</text>
+  <text x="626" y="468" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">第一行 STARTING_SEPARATION，右下显示 Ti 计时</text>
+  <rect x="24" y="486" width="912" height="58" rx="0" fill="#fafafa" stroke="#cfd8dc" stroke-width="1"/>
+  <rect x="24" y="486" width="5" height="58" rx="0" fill="#c62828" stroke="#c62828" stroke-width="1"/>
+  <text x="44" y="510" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#c62828" text-anchor="start">Ti56～Ti63</text>
+  <text x="242" y="508" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">phase 2 的 7 个步：SV15→SV16→SV10→SV15→SV16→SV10</text>
+  <text x="242" y="526" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">bowl.closed / fill / sealForm / waterSeal 依次变化</text>
+  <text x="626" y="508" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">第二行随 Ti 名称变化（Discharge/Drain water/</text>
+  <text x="626" y="526" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">Close bowl/Water seal），mimic 底盘与液层动画</text>
+  <rect x="24" y="544" width="912" height="58" rx="0" fill="#ffffff" stroke="#cfd8dc" stroke-width="1"/>
+  <rect x="24" y="544" width="5" height="58" rx="0" fill="#ef6c00" stroke="#ef6c00" stroke-width="1"/>
+  <text x="44" y="568" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#ef6c00" text-anchor="start">Ti63 结束</text>
+  <text x="242" y="566" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">_enterPhase(3)：phase=3，state="SEPARATION"</text>
+  <text x="242" y="584" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">Ti64 开 V1 进油，进油流量 0→1.5 m³/h</text>
+  <text x="626" y="566" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">第一行 SEPARATION；PT4 建立 0.2～0.3 MPa</text>
+  <text x="626" y="584" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">油层从水封向中心铺开、净油管出现流动</text>
+  <rect x="24" y="602" width="912" height="58" rx="0" fill="#fafafa" stroke="#cfd8dc" stroke-width="1"/>
+  <rect x="24" y="602" width="5" height="58" rx="0" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+  <text x="44" y="626" font-family="Microsoft YaHei, Arial" font-size="11.5" font-weight="bold" fill="#2e7d32" text-anchor="start">Ti68 分油</text>
+  <text x="242" y="624" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">每 120 s 给 SV16 一个 3 s 补偿水脉冲</text>
+  <text x="242" y="642" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#263238" text-anchor="start">水分 +2 pF/min，&gt;12 pF 开 V5，≤6 pF 关</text>
+  <text x="626" y="624" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">MT 显示 pF；V5 动作时排水管流动</text>
+  <text x="626" y="642" font-family="Microsoft YaHei, Arial" font-size="10" font-weight="normal" fill="#455a64" text-anchor="start">水封层厚度随水分变化，排渣倒计时往下走</text>
+  <rect x="24" y="668" width="912" height="46" rx="5" fill="#e8f5e9" stroke="#a5d6a7" stroke-width="1.2"/>
+  <text x="44" y="688" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="bold" fill="#1b5e20" text-anchor="start">要点：每一步「按 I」只做一件事，而且必须先满足前置条件（泵→压力、加热器→96 ℃、电机→10000 r/min），</text>
+  <text x="44" y="706" font-family="Microsoft YaHei, Arial" font-size="11" font-weight="normal" fill="#1b5e20" text-anchor="start">否则再按 I 也不前进——这就是 EPC-60 的步进联锁，在代码里体现为 _pressStart() 里的 if 判断顺序。</text>
+</svg>

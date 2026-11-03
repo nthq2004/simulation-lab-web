@@ -68,7 +68,7 @@ export const PROJECT_PAGES = [
     {
         id: 2, name: 'S 型分油机系统与机旁控制',
         comps: ['process', 'local', ...INSTRUMENTS],
-        desc: '左侧：S 型分油机系统流程（沉淀柜、进油泵、滤器、加热器、转换阀、分油机半剖、净油柜、排渣柜、工作水模块 SV10/SV15/SV16、控制空气）。右侧：机旁控制箱（主电源、起动/停止、应急停止、机旁/遥控、进油泵、加热器、压力表、振动、报警）。',
+        desc: '左侧：S 型分油机系统流程（沉淀柜、供油泵、滤器、加热器、转换阀、分油机半剖、净油柜、排渣柜、工作水模块 SV10/SV15/SV16、控制空气）。右侧：机旁控制箱（主电源转换开关 OFF/ON、控制方式转换开关 HAND/EPC、起动/停止、应急停止、供油泵、加热器、压力表、振动、报警）。',
     },
     {
         id: 3, name: 'EPC-60 面板与系统模拟图',
@@ -85,10 +85,10 @@ export const componentConfigs = [
     { Class: PurifierStatusPanel, id: 'status', x: 40, y: 20, page: 1, width: 1060, height: 840, visible: true },
 
     { Class: PurifierSystem, id: 'process', x:-160, y: 25, page: 2, width: 1190, height: 830, visible: true },
-    { Class: PurifierLocalPanel, id: 'local', x: 1250, y: 40, page: 2, width: 420, height: 820, visible: true },
+    { Class: PurifierLocalPanel, id: 'local', x: 1250, y: 40, page: 2, width: 420, height: 812, visible: true },
 
-    { Class: EPC60Panel, id: 'epc', x: 20, y: 40, page: 3, width: 780, height: 1000, visible: true },
-    { Class: EPC60SystemMimic, id: 'mimic', x: 820, y: 40, page: 3, width: 1060, height: 1000, visible: true },
+    { Class: EPC60Panel, id: 'epc', x: -200, y: 40, page: 3, width: 680, height: 730, visible: true },
+    { Class: EPC60SystemMimic, id: 'mimic', x: 510, y: 40, page: 3, width: 1060, height: 760, visible: true },
 
     { Class: Multimeter, id: 'multimeter', x: 1120, y: 200, visible: false },
     { Class: MF47Multimeter, id: 'mf47-panel', x: 1050, y: 150, visible: false },
@@ -167,12 +167,12 @@ function _mkFault(id, name, system, key) {
 }
 
 export const FAULT_CONFIGS = {
-    'vibration-high': _mkFault('vibration-high', '分油机振动高', '分油机本体', 'vibration'),
     'bowl-leak': _mkFault('bowl-leak', '分离筒密封失效 / 跑油', '分油机本体', 'leak'),
-    'discharge-fail': _mkFault('discharge-fail', '排渣失败（无排渣反馈）', '排渣系统', 'dischargeFail'),
-    'temp-low': _mkFault('temp-low', '分油温度低（加热器故障）', '加热系统', 'tempLow'),
-    'op-water-low': _mkFault('op-water-low', '工作水压力低', '工作水系统', 'opWaterLow'),
     'transducer': _mkFault('transducer', '水分传感器故障', 'ALCAP 系统', 'transducer'),
+    'temp-low': _mkFault('temp-low', '分油温度低（加热器故障）', '加热系统', 'tempLow'),
+    'vibration-high': _mkFault('vibration-high', '分油机振动高', '分油机本体', 'vibration'),
+    'discharge-fail': _mkFault('discharge-fail', '排渣失败（无排渣反馈）', '排渣系统', 'dischargeFail'),
+    'op-water-low': _mkFault('op-water-low', '工作水压力低', '工作水系统', 'opWaterLow'),
     'motor-overload': _mkFault('motor-overload', '分油机电机过载', '电机/起动器', 'motorOverload'),
 };
 
@@ -218,6 +218,8 @@ async function _ensureRemote(sys) {
         _firePartClick(_local(sys), 'local-remote');
         await _sleep(300);
     }
+    // 档位到端点不循环，兜底直接置位
+    if (s.m.local && s.setCtrlMode) s.setCtrlMode('EPC');
     return !s.m.local;
 }
 
@@ -228,6 +230,8 @@ async function _ensureLocal(sys) {
         _firePartClick(_local(sys), 'local-remote');
         await _sleep(300);
     }
+    // 档位到端点不循环（AUTO 档连续右点不动），兜底直接置位
+    if (!s.m.local && s.setCtrlMode) s.setCtrlMode('HAND');
     return !!s.m.local;
 }
 
@@ -237,6 +241,9 @@ async function _ensureSupply(sys) {
     if (!s) return false;
     for (let i = 0; i < 4 && !s.m.water.mainOpen; i++) { _firePartClick(p, 'water-inlet'); await _sleep(260); }
     for (let i = 0; i < 4 && !s.m.water.airMainOpen; i++) { _firePartClick(p, 'air-inlet'); await _sleep(260); }
+    for (let i = 0; i < 4 && !s.m.feed.steamValveOpen; i++) { _firePartClick(p, 'steam-inlet'); await _sleep(260); }
+    for (let i = 0; i < 4 && !s.m.feed.dirtyValveOpen; i++) { _firePartClick(p, 'dirty-outlet-valve'); await _sleep(260); }
+    for (let i = 0; i < 4 && !s.m.feed.returnValveOpen; i++) { _firePartClick(p, 'return-valve'); await _sleep(260); }
     await _waitFor(sys, x => _model(x).water.supply > 2 && _model(x).water.air > 5, 6000, 200);
     return s.m.water.mainOpen && s.m.water.airMainOpen;
 }
@@ -349,444 +356,532 @@ async function _resetAlarms(sys) {
     return !s.m.alarms.some(a => a.active);
 }
 
+/** 等待分油机完全静止（停机程序结束） */
+async function _waitStandstill(sys, timeout = 900000) {
+    return _waitFor(sys, x => {
+        const m = _model(x);
+        return !!(m && m.state === 'STANDSTILL' && !m.motor.on);
+    }, timeout, 500);
+}
+
+/**
+ * 按 EPC-60 五步起动把分油机送到 Ti68 正常分油（幂等：已完成的部分自动跳过）。
+ * 顺序：主电源/EPC → 水气阀 → 问答确认 → 供油泵 → 加热器(≥96℃) → 电机(≥10000 r/min) → 分离程序
+ */
+async function _startToTi68(sys) {
+    const s = _solver(sys);
+    if (!s) return false;
+    const m = s.m;
+    const epc = _epc(sys);
+    if (!epc) return false;
+    await _setEpcPower(sys, true);
+    await _ensureMainPower(sys, true);
+    await _ensureRemote(sys);
+    await _ensureSupply(sys);
+    // 起动问询（未回答过）→ 回车确认
+    if (epc._ui && !epc._ui.asked) {
+        _firePartClick(epc, 'separation'); await _sleep(650);
+        _firePartClick(epc, 'enter'); await _sleep(550);
+    }
+    if (!m.feed.pumpOn) { _firePartClick(epc, 'separation'); await _sleep(550); }
+    await _waitFor(sys, x => _model(x).feed.pumpOn, 20000, 250);
+    if (!m.feed.heaterOn) { _firePartClick(epc, 'separation'); await _sleep(550); }
+    await _waitFor(sys, x => _model(x).feed.temp >= 96, 240000, 500);
+    if (!m.motor.on) { _firePartClick(epc, 'separation'); await _sleep(550); }
+    await _waitFor(sys, x => _model(x).bowl.speed >= 10000, 240000, 500);
+    if (!m.prog) { _firePartClick(epc, 'separation'); await _sleep(800); }
+    return _waitFor(sys, x => {
+        const mm = _model(x);
+        return !!(mm && mm.prog && mm.phase === 3 && mm.step >= 4);
+    }, 600000, 500);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // 工作流
 // ═══════════════════════════════════════════════════════════════
 
 export const PROJECT_WORKFLOWS = {
-    'purifier-start': {
-        id: 'purifier-start', name: '1. 分油机自动起动与分油操作',
+    'purifier-identify': {
+        id: 'purifier-identify', name: '1. 分油机系统的认识',
+        steps: [
+            // ── 1. MIMIC 图组件 ──
+            {
+                msg: '第 1 步：切换到页 3，识别 MIMIC 图组件（EPC-60 系统模拟图）。它用 P&ID 风格把沉淀柜、供油泵、滤器、加热器、三通阀 V1、分油机、净油柜、排渣柜、工作水电磁阀组 SV10/SV15/SV16 与控制空气回路画在一张图上，并带流动动画和传感器读数。',
+                mode: 'find', target: 'mimic',
+            },
+            // ── 2. 分油机组件 ──
+            {
+                msg: '第 2 步：识别分油机组件（S 936 分离筒）。上部为分离筒及碟片组，下部为活动排渣底盘与底座，右侧为驱动电机，电机中心的绿色指示灯表示分离筒正在运行。',
+                mode: 'find', target: 'mimic', subTarget: 'separator',
+            },
+            // ── 3. 供油泵 ──
+            {
+                msg: '第 3 步：识别供油泵。它把沉淀柜的燃油升压后送经滤器与加热器；泵出口并联一只带复位弹簧的单向阀，出口阀关闭时油经单向阀内部循环，避免泵后憋压。',
+                mode: 'find', target: 'mimic', subTarget: 'pump',
+            },
+            // ── 4. 加热器 ──
+            {
+                msg: '第 4 步：识别加热器。用蒸汽把燃油加热到约 98 ℃，降低黏度、增大油水密度差以提高分离效果；蒸汽由下边缘进入，凝水由下边缘排出。',
+                mode: 'find', target: 'mimic', subTarget: 'heater',
+            },
+            // ── 5. 蒸汽电动调节阀 ──
+            {
+                msg: '第 5 步：识别蒸汽管路上的电动调节阀。M 方框表示电动执行机构，由温度控制器输出信号调节蒸汽流量，从而把燃油出口温度稳定在设定值；其右侧串联一只蒸汽截止阀，检修时可切断汽源。',
+                mode: 'find', target: 'mimic', subTarget: 'motor-valve',
+            },
+            // ── 6~7. SV1 / V1 ──
+            {
+                msg: '第 6 步：识别电磁阀 SV1。SV1 是三通阀 V1 的先导电磁阀，通电后把控制空气送入 V1 的气动膜头；只有分离程序投入、控制空气建立后它才可能得电。',
+                mode: 'find', target: 'mimic', subTarget: 'sv1',
+            },
+            {
+                msg: '第 7 步：识别三通阀 V1（供油转换阀）。得气时向分油机供油，失气时切换到回流口把油送回沉淀柜——起动与停机阶段油走回流，进入分油程序后才向分离筒进油。',
+                mode: 'find', target: 'mimic', subTarget: 'v1',
+            },
+            // ── 8~9. SV4 / V4 ──
+            {
+                msg: '第 8 步：识别电磁阀 SV4。SV4 控制净油出口阀 V4 的控制空气，分油机进入分离程序（起动/分油/排渣/停机）后 SV4 才可能通电。',
+                mode: 'find', target: 'mimic', subTarget: 'sv4',
+            },
+            {
+                msg: '第 9 步：识别净油出口阀 V4。它装在净油出口管路上，是带气动膜头的气动阀，膜头与阀体的颜色反映它当前是否得气、是否开启。',
+                mode: 'find', target: 'mimic', subTarget: 'v4',
+            },
+            // ── 10. 测试题：V4 的特征 ──
+            {
+                msg: '第 10 步：测试题——V4 的特征。',
+                mode: 'quiz',
+                quizConfig: {
+                    question: 'V4（净油出口阀）的特征是？',
+                    options: [
+                        '气开式气动阀：有控制空气时开启，失气时关闭',
+                        '气关式气动阀：有控制空气时关闭，失气时在弹簧作用下开启',
+                        '手动截止阀：必须人工转动手轮才能开关',
+                        '电动调节阀：由温度控制器输出信号调节开度',
+                    ],
+                    answer: 1,
+                    analysis: 'V4 由先导电磁阀 SV4 控制，属气关阀：SV4 通电 → 控制空气进入膜头 → V4 关闭；SV4 断电 → 失气 → 阀在弹簧力作用下开启。分油机未进入分离程序（无控制空气）时 V4 保持开启，净油出口通路畅通，避免筒内憋压。',
+                },
+            },
+            // ── 11~12. SV5 / V5 ──
+            {
+                msg: '第 11 步：识别电磁阀 SV5。SV5 通电把控制空气送入出水阀 V5 的执行机构，使 V5 打开排水。',
+                mode: 'find', target: 'mimic', subTarget: 'sv5',
+            },
+            {
+                msg: '第 12 步：识别出水阀 V5。它是气开式气动阀，装在分油机下部的出水管上：V5 打开时把分离出的水排到接水盘，排水压力由 PT5 监视。',
+                mode: 'find', target: 'mimic', subTarget: 'v5',
+            },
+            // ── 13~15. SV10 / SV15 / SV16 ──
+            {
+                msg: '第 13 步：识别水封及置换水阀 SV10。SV10 通电向分离筒送入工作水：起动时建立水封（Ti63），排渣与停机时作为置换水把筒内的油顶出（Ti71~Ti72、Ti82）。',
+                mode: 'find', target: 'mimic', subTarget: 'sv10',
+            },
+            {
+                msg: '第 14 步：识别开启水阀 SV15。SV15 通电把开启水送到活动排渣底盘的上部中央，约 3 s 泄掉底盘外缘的密封水，底盘复位、排渣口打开，污渣被离心力甩入排渣柜（每次 SV15 通电排渣柜液位上升）。',
+                mode: 'find', target: 'mimic', subTarget: 'sv15',
+            },
+            {
+                msg: '第 15 步：识别密封及补偿水阀 SV16。SV16 通电把密封水送到活动排渣底盘下部，约 5 s 形成密封水层使底盘变形压紧、封闭排渣口；正常分油期间它按设定间隔脉冲送入补偿水，维持密封。',
+                mode: 'find', target: 'mimic', subTarget: 'sv16',
+            },
+            // ── 16~21. 传感器 ──
+            {
+                msg: '第 16 步：识别燃油入口管路压力传感器 PT1。它装在供油泵出口的主进油管上，测量进油压力（约 0.28 MPa）；压力过低会触发 A17「供油泵无压力」报警。',
+                mode: 'find', target: 'mimic', subTarget: 'pt1',
+            },
+            {
+                msg: '第 17 步：识别燃油入口温度传感器 TT1。它装在加热器出口，测量进入分离筒的油温（约 98 ℃）；温度过低会触发 A05 报警并切断进油。',
+                mode: 'find', target: 'mimic', subTarget: 'tt1',
+            },
+            {
+                msg: '第 18 步：识别净油出口压力传感器 PT4。它测量净油出口压力，正常约 0.2~0.3 MPa；压力异常下降说明分离筒密封失效或跑油（A03）。',
+                mode: 'find', target: 'mimic', subTarget: 'pt4',
+            },
+            {
+                msg: '第 19 步：识别净油出口水分传感器 MT。进入程序 Ti65「水分检查」后才开始检测，读数以 pF 表示；水分超过 12 pF 时自动开启 V5 排水，降到 6 pF 时关闭。',
+                mode: 'find', target: 'mimic', subTarget: 'mt',
+            },
+            {
+                msg: '第 20 步：识别排水压力传感器 PT5。它装在水封及出水阀 V5 与接水盘之间的排水管上，用于监视排水压力。',
+                mode: 'find', target: 'mimic', subTarget: 'pt5',
+            },
+            {
+                msg: '第 21 步：识别速度传感器 ST。它装在电机端盖处，测量分离筒转速，额定 10680 r/min；转速低于额定值 90% 时不允许起动分离程序。',
+                mode: 'find', target: 'mimic', subTarget: 'st',
+            },
+            // ── 22. 测试题：密封原理 ──
+            {
+                msg: '第 22 步：测试题——分油机密封的原理。',
+                mode: 'quiz',
+                quizConfig: {
+                    question: 'S 型分油机分离筒"密封"（关闭排渣口）的原理是？',
+                    options: [
+                        '靠筒盖螺栓机械压紧实现密封',
+                        '密封水进入活动排渣底盘下部的密封水腔，使可变形底盘上移压紧，封闭排渣口',
+                        '靠重力使活动底盘自然落下密封',
+                        '靠离心力把活动底盘甩向筒壁密封',
+                    ],
+                    answer: 1,
+                    analysis: 'SV16（密封及补偿水阀）通电后，密封水约 5 s 内在活动排渣底盘的左下、右下聚集，底盘（未变形时是直线，排渣口开）变形上移压紧密封面，排渣口关闭；SV15（开启水阀）通电时开启水进入底盘上部中央，约 3 s 泄掉外缘密封水，底盘复位、排渣口重新打开。',
+                },
+            },
+            // ── 23. 测试题：分油原理 ──
+            {
+                msg: '第 23 步：测试题——分油机分油的原理。',
+                mode: 'quiz',
+                quizConfig: {
+                    question: '碟片式分油机把油中的水分与机械杂质分离出来的主要原理是？',
+                    options: [
+                        '用滤网逐级拦截机械杂质',
+                        '加热降低黏度后，利用油、水、杂质的密度差，在高速旋转产生的离心力场中分层：重相（水、杂质）向外、轻相（净油）向内，分别从出水口和净油口排出',
+                        '用真空把油中的水分蒸发掉',
+                        '加化学药剂破乳后自然沉淀分离',
+                    ],
+                    answer: 1,
+                    analysis: '燃油先经加热器加热到约 98 ℃ 降低黏度，再进入以约 10680 r/min 高速旋转的分离筒。筒内碟片把油分成许多薄层，离心力使密度大的水与杂质沿碟片向外、向下运动，在筒壁形成水封层后由出水口（V5）排出；密度小的净油向内、向上经向心泵从净油出口（V4）排出。',
+                },
+            },
+        ],
+    },
+
+    'purifier-epc-panel': {
+        id: 'purifier-epc-panel', name: '2. EPC-60 控制器面板的认识',
         steps: [
             {
-                msg: '第 1 步：认识页 1 的分油机运行状态仪与页 3 的 EPC-60 控制面板。EPC-60 面板包括 LCD、数字键盘、起动/停止、排渣、报警复位、CIP、信息键，以及电源开关、应急停止和电流表；右侧为 P&ID 风格系统模拟图；状态仪显示转速、温度、压力、水分、流量、油柜液位和报警。',
-                mode: 'find', target: ['status', 'epc', 'mimic'], demoTarget: ['status', 'epc', 'mimic'],
+                msg: '第 1 步：切换到页 3，识别 EPC-60 控制器操作面板。面板上部是液晶显示屏与数字键盘，中部是起动 I / 停止 O 与 L 形排列的功能键区（每只功能键左上角带一只状态指示灯），右侧是返回 / ▲ / ▼ / i 导航键与回车键，下部是电源开关、应急停止按钮和电机电流表。',
+                mode: 'find', target: 'epc',
             },
             {
-                msg: '第 2 步：切换到页 2，认识 S 型分油机系统流程与机旁控制箱。流程包括沉淀柜、进油泵、滤器、加热器、转换阀 V1、分油机本体、净油柜、排渣柜、工作水模块 SV10/SV15/SV16 和控制空气。',
-                mode: 'find', target: ['process', 'local'], demoTarget: ['process', 'local'],
+                msg: '第 2 步：识别起动按钮「I」（绿色）。控制模式在 EPC 位、主电源合上后按此键，EPC-60 依次执行 5 步起动程序（第 1~8 屏），指示灯在起动过程闪烁、分离程序常亮、停机程序熄灭。',
+                mode: 'find', target: 'epc', subTarget: 'separation',
             },
             {
-                msg: '第 3 步：起动前检查——打开工作水进口阀（2～8 bar）和控制空气进口阀（5～7 bar），合上机旁主电源，机旁/遥控开关置于「遥控」。',
+                msg: '第 3 步：识别停止按钮「O」（红色）。正常分油（Ti68）期间按下会先走完排渣阶段，再依次执行停机置换与自动停机程序，最后回到 STANDSTILL。',
+                mode: 'find', target: 'epc', subTarget: 'stop',
+            },
+            {
+                msg: '第 4 步：识别供油泵状态指示。主电源合上且供油泵运行时亮绿灯。',
+                mode: 'find', target: 'epc', subTarget: 'led-pump',
+            },
+            {
+                msg: '第 5 步：识别加热器状态指示。主电源合上且加热器投入时亮绿灯。',
+                mode: 'find', target: 'epc', subTarget: 'led-heater',
+            },
+            {
+                msg: '第 6 步：识别分油机电机状态指示。电机运行时亮绿灯，停止时熄灭。',
+                mode: 'find', target: 'epc', subTarget: 'led-motor',
+            },
+            {
+                msg: '第 7 步：识别手动排渣按钮。分油处于待命或分油状态、转速正常时按下可立即执行一次排渣，排渣阶段该键指示灯闪烁。',
+                mode: 'find', target: 'epc', subTarget: 'discharge',
+            },
+            {
+                msg: '第 8 步：识别排渣泵按钮（CIP 左侧的泵图标功能键）。按下后该键指示灯亮，排渣泵把排渣柜的污渣泵出，排渣柜液位逐渐下降，降到 5% 以下自动停泵。',
+                mode: 'find', target: 'epc', subTarget: 'bowl-icon',
+            },
+            {
+                msg: '第 9 步：识别返回按钮（带箭头的导航键）。在固定显示画面按一次进入参数菜单，再按一次返回运行状态显示。',
+                mode: 'find', target: 'epc', subTarget: 'back',
+            },
+            {
+                msg: '第 10 步：识别向上按钮「▲」。菜单中用于上移光标；参数编辑时用于增大设定值；起动确认画面中用于在 YES / NO 之间切换。',
+                mode: 'find', target: 'epc', subTarget: 'plus',
+            },
+            {
+                msg: '第 11 步：识别向下按钮「▼」。菜单中用于下移光标；参数编辑时用于减小设定值；起动确认画面中用于在 YES / NO 之间切换。',
+                mode: 'find', target: 'epc', subTarget: 'minus',
+            },
+            {
+                msg: '第 12 步：识别回车按钮「↵」。用于确认起动问询、进入所选菜单项、确认参数修改值。',
+                mode: 'find', target: 'epc', subTarget: 'enter',
+            },
+            {
+                msg: '第 13 步：识别液晶显示屏。它分四行显示：当前程序步骤（Ti 定时器名称与剩余时间）、运行参数、报警文字及菜单 / 参数编辑界面。',
+                mode: 'find', target: 'epc', subTarget: 'lcd',
+            },
+        ],
+    },
+    'purifier-start-stop': {
+        id: 'purifier-start-stop', name: '3. 分油机的起动和停机',
+        steps: [
+            {
+                msg: '第 1 步：切换到页 2，依次打开沉淀柜出口阀、回油阀和蒸汽进口截止阀——出口阀给供油泵供油，回油阀在起动阶段把油送回沉淀柜，蒸汽截止阀给加热器送汽。',
                 mode: 'check',
                 op: [
-                    { type: 'page', page: 2, msg: '切换到页 2（系统流程与机旁控制）' },
-                    { type: 'switch', target: 'process', part: 'water-inlet', msg: '打开工作水进口阀，观察压力升到 2 bar 以上',
-                      async act() { const s = _sysOf(this); await _ensureSupply(s); await _sleep(500); } },
-                    { type: 'switch', target: 'process', part: 'air-inlet', msg: '打开控制空气进口阀，观察压力升到 5 bar 以上',
-                      async act() { const s = _sysOf(this); await _ensureSupply(s); await _sleep(500); } },
-                    { type: 'switch', target: 'local', part: 'main-power', msg: '合上机旁主电源开关',
-                      async act() { const s = _sysOf(this); await _ensureMainPower(s, true); } },
-                    { type: 'switch', target: 'local', part: 'local-remote', msg: '机旁/遥控开关置于「遥控」',
-                      async act() { const s = _sysOf(this); await _ensureRemote(s); } },
-                    { type: 'observe', target: 'local', msg: '观察工作水压力表 2～6 bar、控制空气压力表 5～7 bar，电流表为 0',
-                      async act() { const s = _sysOf(this); await _waitFor(s, x => { const m = _model(x); return m.water.supply > 2 && m.water.air > 5; }, 8000, 250); await _sleep(1000); } },
+                    { type: 'page', page: 2, msg: '切换到页 2（S 型分油机系统与机旁控制）' },
+                    { type: 'switch', target: 'process', part: 'dirty-outlet-valve', msg: '打开沉淀柜出口阀（沉淀柜 → 供油泵）',
+                        async act() { const s = _sysOf(this); if (!_model(s).feed.dirtyValveOpen) { _firePartClick(_process(s), 'dirty-outlet-valve'); await _sleep(450); } } },
+                    { type: 'switch', target: 'process', part: 'return-valve', msg: '打开回油阀（V1 回油口 → 沉淀柜）',
+                        async act() { const s = _sysOf(this); if (!_model(s).feed.returnValveOpen) { _firePartClick(_process(s), 'return-valve'); await _sleep(450); } } },
+                    { type: 'switch', target: 'process', part: 'steam-inlet', msg: '打开蒸汽进口截止阀（供加热器用汽）',
+                        async act() { const s = _sysOf(this); if (!_model(s).feed.steamValveOpen) { _firePartClick(_process(s), 'steam-inlet'); await _sleep(450); } } },
                 ],
                 check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && m.mainPower && !m.local && m.water.mainOpen && m.water.airMainOpen
-                        && m.water.supply > 2 && m.water.air > 5);
+                    const m = _model(_sysOf(this));
+                    return !!(m && m.feed.dirtyValveOpen && m.feed.returnValveOpen && m.feed.steamValveOpen);
                 },
             },
             {
-                msg: '第 4 步：回到页 3，给 EPC-60 上电，按绿色「I」键起动分油机。',
+                msg: '第 2 步：打开控制空气进口阀（5~7 bar）和工作水进口阀（2~8 bar）——控制空气驱动 V1/V4/V5 的气动执行机构，工作水用于水封、开启水与补偿水。',
+                mode: 'check',
+                op: [
+                    { type: 'switch', target: 'process', part: 'air-inlet', msg: '打开控制空气进口阀，观察空气压力升到 5 bar 以上',
+                        async act() { const s = _sysOf(this); if (!_model(s).water.airMainOpen) { _firePartClick(_process(s), 'air-inlet'); await _sleep(450); } await _waitFor(s, x => _model(x).water.air > 5, 15000, 250); } },
+                    { type: 'switch', target: 'process', part: 'water-inlet', msg: '打开工作水进口阀，观察水压升到 2 bar 以上',
+                        async act() { const s = _sysOf(this); if (!_model(s).water.mainOpen) { _firePartClick(_process(s), 'water-inlet'); await _sleep(450); } await _waitFor(s, x => _model(x).water.supply > 2, 15000, 250); } },
+                ],
+                check() {
+                    const m = _model(_sysOf(this));
+                    return !!(m && m.water.mainOpen && m.water.airMainOpen && m.water.supply > 2 && m.water.air > 5);
+                },
+            },
+            {
+                msg: '第 3 步：合上机旁主电源开关，把控制方式转换开关打到「EPC」——主电源合上后 EPC-60 面板同步得电，此后由 EPC-60 远程控制。',
+                mode: 'check',
+                op: [
+                    { type: 'switch', target: 'local', part: 'main-power', msg: '合上机旁主电源开关（EPC-60 同步上电）',
+                        async act() { const s = _sysOf(this); await _ensureMainPower(s, true); await _sleep(400); } },
+                    { type: 'switch', target: 'local', part: 'local-remote', msg: '控制方式转换开关打到「EPC」',
+                        async act() { const s = _sysOf(this); await _ensureRemote(s); await _sleep(400); } },
+                ],
+                check() {
+                    const m = _model(_sysOf(this));
+                    return !!(m && m.mainPower && m.epcPower && m.ctrlMode === 'EPC');
+                },
+            },
+            {
+                msg: '第 4 步：切换到页 3，按绿色「I」键，液晶屏显示起动问询（START PROGRAM? YES/NO）；用「▲」键把选项改成 NO，再按「↵」回车键确认回答。',
                 mode: 'check',
                 op: [
                     { type: 'page', page: 3, msg: '切换到页 3（EPC-60 面板与系统模拟图）' },
-                    { type: 'switch', target: 'epc', part: 'power', msg: '合上 EPC-60 电源开关',
-                      async act() { const s = _sysOf(this); await _setEpcPower(s, true); } },
-                    { type: 'btn', target: 'epc', part: 'separation', msg: '按绿色「I」键起动分油机',
-                      async act() { const s = _sysOf(this); const sol = _solver(s); if (sol && sol.m.state === 'STANDSTILL') { _firePartClick(_epc(s), 'separation'); await _sleep(600); } } },
+                    { type: 'btn', target: 'epc', part: 'separation', msg: '按「I」键，观察液晶屏出现起动问询',
+                        async act() { const s = _sysOf(this); _firePartClick(_epc(s), 'separation'); await _sleep(700); } },
+                    { type: 'btn', target: 'epc', part: 'plus', msg: '按「▲」向上键，把闪烁选项由 YES 改为 NO',
+                        async act() { const s = _sysOf(this); _firePartClick(_epc(s), 'plus'); await _sleep(700); } },
+                    { type: 'btn', target: 'epc', part: 'enter', msg: '按「↵」回车键确认回答',
+                        async act() { const s = _sysOf(this); _firePartClick(_epc(s), 'enter'); await _sleep(700); } },
                 ],
                 check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && m.epcPower && m.motor.on
-                        && ['STARTING', 'START_SEQ', 'STANDBY', 'SEPARATION'].includes(m.state));
+                    const c = _epc(_sysOf(this));
+                    return !!(c && c._ui && c._ui.asked && !c._ui.question);
                 },
             },
             {
-                msg: '第 5 步：观察起动程序——分离筒升速到约 10680 r/min，4000 r/min 时关闭水脉冲；达到转速后先预排渣、再关闭分离筒并建立水封；加热器把油温升到 98 °C 后自动进油。',
+                msg: '第 5 步：再按一次「I」键，起动供油泵——泵把沉淀柜的燃油升压后经滤器、加热器送往 V1，此时 V1 在回油位，油经回流阀回到沉淀柜。',
                 mode: 'check',
                 op: [
-                    { type: 'observe', target: 'status', msg: '观察转速、振动、油温和水封状态',
-                      async act() { const s = _sysOf(this); await _waitSeparation(s, 120000); await _sleep(1500); } },
-                    { type: 'page', page: 2, msg: '切换到页 2，观察系统流程', async act() { await _sleep(400); } },
-                    { type: 'observe', target: 'process', part: 'separator', msg: '观察分离盘组旋转、水封建立、V1 打开、进油流量建立',
-                      async act() { const s = _sysOf(this); await _waitSeparation(s, 60000); await _sleep(1500); } },
+                    { type: 'btn', target: 'epc', part: 'separation', msg: '按「I」键起动供油泵',
+                        async act() { const s = _sysOf(this); _firePartClick(_epc(s), 'separation'); await _sleep(600); await _waitFor(s, x => _model(x).feed.pumpOn, 20000, 250); } },
+                    { type: 'observe', target: 'mimic', part: 'pump', msg: '观察供油泵叶轮转动、进油管路与回油管路出现流动',
+                        async act() { await _sleep(1500); } },
                 ],
                 check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && m.state === 'SEPARATION' && m.bowl.speed > 9000
-                        && m.bowl.closed && m.bowl.waterSeal && m.feed.flow > 0.3);
+                    const m = _model(_sysOf(this));
+                    return !!(m && m.feed.pumpOn);
                 },
             },
             {
-                msg: '第 6 步：思考题——分油机排渣前为什么要先加置换水？',
-                mode: 'quiz',
-                quizConfig: {
-                    question: 'S 型分油机排渣前先加入置换水的主要目的是什么？',
-                    options: [
-                        '把分离筒内的净油赶出，减少排渣时随渣排掉的油损失',
-                        '降低分离筒转速',
-                        '提高进油温度',
-                        '清洗工作水滤器',
-                    ],
-                    answer: 0,
-                    analysis: '排渣前关闭进油阀 V1，经 SV10 加入置换水，把筒内净油置换到净油出口，然后再用开启水 SV15 打开排渣口。这样可显著减少排渣带油损失。',
-                },
-            },
-            {
-                msg: '第 7 步：观察自动排渣程序——关闭进油阀 → SV10 加置换水 → SV15 开启水打开排渣口 → 等待 → SV16 关闭水关闭分离筒 → SV10 补水封 → 恢复进油。',
+                msg: '第 6 步：再按一次「I」键，起动加热器，等待进油温度升到 96 ℃ 以上（额定 98 ℃）。',
                 mode: 'check',
                 op: [
-                    { type: 'page', page: 2, msg: '切换到页 2（系统流程）' },
-                    { type: 'observe', target: 'process', part: 'separator', msg: '观察排渣时滑动底盘下移、排渣口打开、渣流入排渣柜',
-                      async act() {
-                          const s = _sysOf(this);
-                          const before = _model(s).counters.dischargeCount;
-                          await _waitFor(s, x => _model(x).counters.dischargeCount > before, 420000, 300);
-                          this._projFlag = this._projFlag || {};
-                          if (_model(s).counters.dischargeCount > before) this._projFlag.purifierDischarged = true;
-                          await _sleep(1500);
-                      } },
+                    { type: 'btn', target: 'epc', part: 'separation', msg: '按「I」键起动加热器',
+                        async act() { const s = _sysOf(this); _firePartClick(_epc(s), 'separation'); await _sleep(600); } },
+                    { type: 'observe', target: 'mimic', part: 'tt1', msg: '观察 TT1 进油温度上升，蒸汽调节阀开度增大、蒸汽管路出现流动',
+                        async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).feed.temp >= 96, 180000, 500); await _sleep(800); } },
                 ],
                 check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && (m.counters.dischargeCount > 0 || (this._projFlag && this._projFlag.purifierDischarged)));
+                    const m = _model(_sysOf(this));
+                    return !!(m && m.feed.heaterOn && m.feed.temp >= 96);
                 },
             },
             {
-                msg: '第 8 步：正常停机——按 EPC-60 的「STOP」，系统自动完成断油、置换水、排渣、停电机、降速，最后显示 STANDSTILL。',
+                msg: '第 7 步：再按一次「I」键，起动分油机电机，等待分离筒转速升到 10000 r/min 以上（额定 10680 r/min）。',
                 mode: 'check',
                 op: [
-                    { type: 'page', page: 3, msg: '切换到页 3（EPC-60 面板）' },
-                    { type: 'btn', target: 'epc', part: 'stop', msg: '按红色「O」键停止，观察停机程序',
-                      async act() { const s = _sysOf(this); _firePartClick(_epc(s), 'stop'); await _sleep(800); } },
-                    { type: 'observe', target: 'status', msg: '观察转速下降、程序结束后显示 STANDSTILL',
-                      async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).state === 'STANDSTILL', 900000, 300); await _sleep(1200); } },
+                    { type: 'btn', target: 'epc', part: 'separation', msg: '按「I」键起动分油机电机',
+                        async act() { const s = _sysOf(this); _firePartClick(_epc(s), 'separation'); await _sleep(600); } },
+                    { type: 'observe', target: 'mimic', part: 'st', msg: '观察 ST 转速上升、电机运行指示灯亮、电流表指示上升',
+                        async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).bowl.speed >= 10000, 180000, 500); await _sleep(800); } },
                 ],
                 check() {
-                    const s = _sysOf(this), m = _model(s);
+                    const m = _model(_sysOf(this));
+                    return !!(m && m.motor.on && m.bowl.speed >= 10000);
+                },
+            },
+            {
+                msg: '第 8 步：再按一次「I」键，开始分离程序。观察液晶屏上的程序流程：排渣（Ti56）→ 放残（Ti57）→ 密封（Ti58）→ 流量校验（Ti59）→ 排渣（Ti60）→ 放残（Ti61）→ 密封（Ti62）→ 水封（Ti63）→ 进油（Ti64）→ 含水量检查（Ti65）→ 检漏（Ti66）→ 水分稳定基准（Ti67）→ 分油（Ti68）。稳定分油超过 240 s，期间注意密封水补偿（SV16 脉冲）与 V5 排水现象。',
+                mode: 'check',
+                op: [
+                    { type: 'btn', target: 'epc', part: 'separation', msg: '按「I」键开始分离程序',
+                        async act() { const s = _sysOf(this); _firePartClick(_epc(s), 'separation'); await _sleep(800); } },
+                    { type: 'observe', target: 'epc', part: 'lcd', msg: '观察液晶屏逐步显示 Ti56~Ti68 各程序步骤',
+                        async act() { const s = _sysOf(this); await _waitFor(s, x => { const m = _model(x); return !!(m && m.prog && m.phase === 3 && m.step >= 4); }, 600000, 500); await _sleep(1000); } },
+                    { type: 'observe', target: 'mimic', part: 'sv16', msg: '观察分油期间密封水补偿脉冲（SV16）与 V5 排水阀动作',
+                        async act() {
+                            const s = _sysOf(this);
+                            const flags = this._projFlag || (this._projFlag = {});
+                            await _waitFor(s, x => { const m = _model(x); return !!(m && m.prog && m.phase === 3 && m.step >= 4 && m.timerT > 240); }, 600000, 500);
+                            flags.stable240 = true;
+                            await _sleep(800);
+                        } },
+                ],
+                check() {
+                    const m = _model(_sysOf(this));
+                    if (this._projFlag && this._projFlag.stable240) return true;
+                    return !!(m && m.prog && m.phase === 3 && m.step >= 4 && m.timerT > 240);
+                },
+            },
+            {
+                msg: '第 9 步：手动按下「排渣」按钮（水流图标键），观察手动排渣过程：断油（Ti70）→ 进置换水（Ti71）→ 置换（Ti72）→ 冲洗向心管（Ti73）→ 排渣（Ti74）→ 放残（Ti75），随后自动重新进入分离程序，稳定分油超过 30 s。',
+                mode: 'check',
+                op: [
+                    { type: 'btn', target: 'epc', part: 'discharge', msg: '按「排渣」键执行一次手动排渣',
+                        async act() { const s = _sysOf(this); _firePartClick(_epc(s), 'discharge'); await _sleep(800); } },
+                    { type: 'observe', target: 'mimic', part: 'sv15', msg: '观察 SV15 通电打开排渣口、排渣管流动、排渣柜液位上升',
+                        async act() { await _sleep(2500); } },
+                    { type: 'observe', target: 'epc', part: 'lcd', msg: '观察排渣结束后程序重新进入分油（Ti68）并稳定运行',
+                        async act() {
+                            const s = _sysOf(this);
+                            const flags = this._projFlag || (this._projFlag = {});
+                            await _waitFor(s, x => { const m = _model(x); return !!(m && m.prog && m.phase === 3 && m.step >= 4 && m.timerT > 30); }, 600000, 500);
+                            flags.dischargeDone = true;
+                            await _sleep(800);
+                        } },
+                ],
+                check() {
+                    const m = _model(_sysOf(this));
+                    if (this._projFlag && this._projFlag.dischargeDone) return true;
+                    return !!(m && m.prog && m.phase === 3 && m.step >= 4 && m.timerT > 30 && m.counters.dischargeCount > 0);
+                },
+            },
+            {
+                msg: '第 10 步：按下红色「O」键，开始分离停止程序——先执行阶段四排渣（Ti70~Ti75），再执行阶段五置换与密封（Ti81~Ti83），最后进入阶段六自动停机（Ti85 停电机 → Ti86 降速 → Ti87 停泵 → Ti89 静止），液晶屏最终显示 STANDSTILL。',
+                mode: 'check',
+                op: [
+                    { type: 'btn', target: 'epc', part: 'stop', msg: '按「O」键开始分离停止程序',
+                        async act() { const s = _sysOf(this); _firePartClick(_epc(s), 'stop'); await _sleep(800); } },
+                    { type: 'observe', target: 'epc', part: 'lcd', msg: '观察排渣、置换与自动停机各阶段，转速逐渐下降',
+                        async act() { const s = _sysOf(this); await _waitFor(s, x => { const m = _model(x); return !!(m && m.state === 'STANDSTILL' && !m.motor.on); }, 900000, 500); await _sleep(1000); } },
+                ],
+                check() {
+                    const m = _model(_sysOf(this));
                     return !!(m && m.state === 'STANDSTILL' && !m.motor.on && m.bowl.speed < 100);
                 },
             },
         ],
     },
-
-    'purifier-params': {
-        id: 'purifier-params', name: '2. EPC-60 参数设置与手动排渣',
-        steps: [
-            {
-                msg: '第 1 步：点击工具栏「起动系统」，快速进入正常分油状态（教学快捷）。',
-                mode: 'check',
-                op: [
-                    { type: 'page', page: 1, msg: '切换到页 1（分油机运行状态）' },
-                    { type: 'wire', button: 'btnStartSys', msg: '箭头指向工具栏「起动系统」按钮', flashMs: 2200, holdMs: 900,
-                      async act() { const btn = document.getElementById('btnStartSys'); if (btn) btn.click(); await _sleep(1000); } },
-                    { type: 'observe', target: 'status', msg: '观察系统进入 SEPARATION 正常分油',
-                      async act() { const s = _sysOf(this); await _waitSeparation(s, 90000); await _sleep(1000); } },
-                ],
-                check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && m.state === 'SEPARATION' && m.feed.flow > 0.3);
-                },
-            },
-            {
-                msg: '第 2 步：通过 EPC-60 面板菜单修改参数——排渣间隔改为 10 min，进油流量改为 1.2 m³/h，水分触发值改为 12 pF。操作顺序：↵ 进入菜单 → 参数设置 → 选择条目 → ↵ 修改 → ▲▼ 调整或数字键输入 → ↵ 保存。',
-                mode: 'check',
-                op: [
-                    { type: 'knob', target: 'epc', part: 'enter', msg: '进入 EPC-60 参数菜单，修改排渣间隔',
-                      async act() { const s = _sysOf(this); await _epcSetParam(s, 'dischargeInterval', 10); await _sleep(500); } },
-                    { type: 'knob', target: 'epc', part: 'plus', msg: '修改进油流量为 1.2 m³/h',
-                      async act() { const s = _sysOf(this); await _epcSetParam(s, 'flow', 1.2); await _sleep(500); } },
-                    { type: 'knob', target: 'epc', part: 'plus', msg: '修改水分触发值为 12 pF',
-                      async act() { const s = _sysOf(this); await _epcSetParam(s, 'waterTrigger', 12); await _sleep(500); } },
-                ],
-                check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && Math.abs(m.params.dischargeInterval - 10) < 0.5
-                        && Math.abs(m.params.flow - 1.2) < 0.06
-                        && Math.abs(m.params.waterTrigger - 12) < 0.5);
-                },
-            },
-            {
-                msg: '第 3 步：查看 EPC-60 的运行信息与时间页——确认 TT1、PT4、MT、转速、运行时间和下次排渣倒计时。',
-                mode: 'check',
-                op: [
-                    { type: 'knob', target: 'epc', part: 'info', msg: '按 INFO 查看运行信息',
-                      async act() { const s = _sysOf(this); const epc = _epc(s); for (let i = 0; i < 3; i++) { _firePartClick(epc, 'info'); await _sleep(300); } } },
-                    { type: 'observe', target: 'status', msg: '观察状态仪上的温度、压力、水分、流量与排渣倒计时', async act() { await _sleep(1200); } },
-                ],
-                check() {
-                    const s = _sysOf(this), m = _model(s);
-                    const epc = _comp(s, 'epc');
-                    return !!(m && epc && epc._ui.page === 'info' && m.state === 'SEPARATION' && m.feed.temp > 90);
-                },
-            },
-            {
-                msg: '第 4 步：按 EPC-60 的「DISCHARGE」执行一次手动排渣，观察排渣程序与排渣次数增加。',
-                mode: 'check',
-                op: [
-                    { type: 'btn', target: 'epc', part: 'discharge', msg: '按「DISCHARGE」手动排渣',
-                      async act() {
-                          const s = _sysOf(this);
-                          const before = _model(s).counters.dischargeCount;
-                          _firePartClick(_epc(s), 'discharge');
-                          await _waitFor(s, x => _model(x).counters.dischargeCount > before, 60000, 300);
-                          this._projFlag = this._projFlag || {};
-                          if (_model(s).counters.dischargeCount > before) this._projFlag.manualDischarged = true;
-                          await _sleep(800);
-                      } },
-                ],
-                check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && (m.counters.dischargeCount > 0 || (this._projFlag && this._projFlag.manualDischarged)));
-                },
-            },
-            {
-                msg: '第 5 步：填空题——S 型分油机的正常工作水压力范围是（ ）bar，控制空气压力范围是（ ）bar。',
-                mode: 'fill',
-                fields: [
-                    { label: '工作水压力下限', unit: 'bar', answer: 2, tolerance: 0.05 },
-                    { label: '工作水压力上限', unit: 'bar', answer: 8, tolerance: 0.05 },
-                    { label: '控制空气压力下限', unit: 'bar', answer: 5, tolerance: 0.05 },
-                ],
-            },
-        ],
-    },
-
     'purifier-fault': {
-        id: 'purifier-fault', name: '3. 分油机常见故障判断与处理',
+        id: 'purifier-fault', name: '4. 分油机故障的处理',
         steps: [
             {
-                msg: '第 1 步：点击工具栏「起动系统」，进入正常分油状态，作为故障演示的基础。',
+                msg: '第 1 步：按流程 3 的方法起动分油机——打开沉淀柜出口阀、回油阀、蒸汽截止阀与控制空气、工作水截止阀，合上主电源并把控制方式打到 EPC，然后在页 3 用「I」键依次完成问答确认、供油泵、加热器（≥96 ℃）、电机（≥10000 r/min）与分离程序，一直等到进入 Ti68 正常分油。',
                 mode: 'check',
                 op: [
-                    { type: 'page', page: 1, msg: '切换到页 1' },
-                    { type: 'wire', button: 'btnStartSys', msg: '箭头指向工具栏「起动系统」按钮', flashMs: 2200, holdMs: 900,
-                      async act() { const btn = document.getElementById('btnStartSys'); if (btn) btn.click(); await _sleep(1000); } },
-                    { type: 'observe', target: 'status', msg: '观察进入 SEPARATION',
-                      async act() { const s = _sysOf(this); await _waitSeparation(s, 90000); await _sleep(800); } },
-                ],
-                check() { const s = _sysOf(this), m = _model(s); return !!(m && m.state === 'SEPARATION'); },
-            },
-            {
-                msg: '第 2 步：设置「排渣失败（无排渣反馈）」故障，然后按 EPC-60 的「DISCHARGE」或等待自动排渣。分油机排渣时收不到排渣口打开反馈，EPC-60 会重试一次；仍失败则报警并停机。',
-                mode: 'check',
-                op: [
-                    { type: 'page', page: 2, msg: '切换到页 2（系统流程）' },
-                    { type: 'fault', fault: 'discharge-fail', msg: '打开故障设置界面，勾选「排渣失败」并应用', async act() { await _sleep(400); } },
-                    { type: 'btn', target: 'epc', part: 'discharge', msg: '按「DISCHARGE」触发排渣，观察无反馈后的重试与报警',
-                      async act() { const s = _sysOf(this); const sol = _solver(s); if (sol && ['SEPARATION', 'STANDBY'].includes(sol.m.state)) { _firePartClick(_epc(s), 'discharge'); await _sleep(600); } } },
-                    { type: 'observe', target: 'process', part: 'separator', msg: '观察排渣失败与报警',
-                      async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).alarms.some(a => a.active && a.code === 'A04'), 60000, 300); await _sleep(1200); } },
-                ],
-                check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && m.faults.dischargeFail && m.alarms.some(a => a.active && a.code === 'A04'));
-                },
-            },
-            {
-                msg: '第 3 步：在故障设置界面取消「排渣失败」，按 EPC-60 的「ALARM RESET」确认并复位报警，然后重新起动分油机。',
-                mode: 'check',
-                op: [
-                    { type: 'fault', fault: 'discharge-fail', repair: true, msg: '取消「排渣失败」故障并应用', async act() { await _sleep(400); } },
-                    { type: 'btn', target: 'epc', part: 'alarm-reset', msg: '按「ALARM RESET」确认/复位报警',
-                      async act() { const s = _sysOf(this); await _resetAlarms(s); } },
-                    { type: 'observe', target: 'status', msg: '确认报警消失后重新起动',
-                      async act() { const s = _sysOf(this); await _ensureStarted(s); await _waitSeparation(s, 90000); await _sleep(800); } },
-                ],
-                check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && !m.faults.dischargeFail && !m.alarms.some(a => a.active) && m.state === 'SEPARATION');
-                },
-            },
-            {
-                msg: '第 4 步：设置「分离筒密封失效 / 跑油」故障。净油压力 PT4 迅速下降，EPC-60 报警并切断进油、执行停机程序。',
-                mode: 'check',
-                op: [
-                    { type: 'page', page: 2, msg: '切换到页 2' },
-                    { type: 'fault', fault: 'bowl-leak', msg: '勾选「分离筒密封失效 / 跑油」并应用', async act() { await _sleep(400); } },
-                    { type: 'observe', target: 'process', part: 'pt4', msg: '观察 PT4 下降、跑油痕迹与 OIL LEAKING 报警',
-                      async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).alarms.some(a => a.active && a.code === 'A03'), 30000, 250); await _sleep(1200); } },
-                ],
-                check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && m.faults.leak && m.alarms.some(a => a.active && a.code === 'A03'));
-                },
-            },
-            {
-                msg: '第 5 步：修复跑油故障并复位报警，重新起动进入正常分油；再设置「分油机振动高」故障，观察振动超限停机与 HIGH VIBRATION 报警。',
-                mode: 'check',
-                op: [
-                    { type: 'fault', fault: 'bowl-leak', repair: true, msg: '取消跑油故障并应用', async act() { await _sleep(400); } },
-                    { type: 'btn', target: 'epc', part: 'alarm-reset', msg: '复位报警', async act() { const s = _sysOf(this); await _resetAlarms(s); } },
-                    { type: 'observe', target: 'status', msg: '重新起动并进入正常分油，为振动故障演示做准备',
-                      async act() { const s = _sysOf(this); await _ensureStarted(s); await _waitSeparation(s, 90000); await _sleep(800); } },
-                    { type: 'fault', fault: 'vibration-high', msg: '勾选「分油机振动高」并应用', async act() { await _sleep(400); } },
-                    { type: 'observe', target: 'status', msg: '观察振动值超限、电机停转与 HIGH VIBRATION - SHUTDOWN 报警',
-                      async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).alarms.some(a => a.active && a.code === 'A01'), 20000, 250); await _sleep(1200); } },
-                ],
-                check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && m.faults.vibration && m.alarms.some(a => a.active && a.code === 'A01'));
-                },
-            },
-        ],
-    },
-
-    'purifier-stop': {
-        id: 'purifier-stop', name: '4. 正常停机与应急停机',
-        steps: [
-            {
-                msg: '第 1 步：点击工具栏「起动系统」，进入正常分油状态。',
-                mode: 'check',
-                op: [
-                    { type: 'page', page: 1, msg: '切换到页 1' },
-                    { type: 'wire', button: 'btnStartSys', msg: '箭头指向工具栏「起动系统」按钮', flashMs: 2200, holdMs: 900,
-                      async act() { const btn = document.getElementById('btnStartSys'); if (btn) btn.click(); await _sleep(1000); } },
-                    { type: 'observe', target: 'status', msg: '观察进入 SEPARATION',
-                      async act() { const s = _sysOf(this); await _waitSeparation(s, 90000); await _sleep(800); } },
-                ],
-                check() { const s = _sysOf(this), m = _model(s); return !!(m && m.state === 'SEPARATION'); },
-            },
-            {
-                msg: '第 2 步：按 EPC-60 的「STOP」执行正常停机——断油、加置换水、排渣、停电机、降速，最后显示 STANDSTILL。',
-                mode: 'check',
-                op: [
-                    { type: 'btn', target: 'epc', part: 'stop', msg: '按「STOP」执行停机程序',
-                      async act() { const s = _sysOf(this); _firePartClick(_epc(s), 'stop'); await _sleep(800); } },
-                    { type: 'observe', target: 'status', msg: '观察停机程序与转速下降',
-                      async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).state === 'STANDSTILL', 900000, 300); await _sleep(1200); } },
-                ],
-                check() { const s = _sysOf(this), m = _model(s); return !!(m && m.state === 'STANDSTILL' && m.bowl.speed < 100); },
-            },
-            {
-                msg: '第 3 步：重新起动分油机，等待进入正常分油，为应急停机演示做准备。',
-                mode: 'check',
-                op: [
-                    { type: 'btn', target: 'epc', part: 'separation', msg: '再次按「SEPARATION」起动',
-                      async act() { const s = _sysOf(this); const sol = _solver(s); if (sol && sol.m.state === 'STANDSTILL') { _firePartClick(_epc(s), 'separation'); await _sleep(600); } } },
-                    { type: 'observe', target: 'status', msg: '等待重新进入 SEPARATION',
-                      async act() { const s = _sysOf(this); await _waitSeparation(s, 120000); await _sleep(800); } },
-                ],
-                check() { const s = _sysOf(this), m = _model(s); return !!(m && m.state === 'SEPARATION'); },
-            },
-            {
-                msg: '第 4 步：切换到页 2，按下机旁控制箱的「EMERGENCY STOP」蘑菇按钮。电机、加热器、进油泵立即停止，EPC-60 发出应急停止报警。',
-                mode: 'check',
-                op: [
-                    { type: 'page', page: 2, msg: '切换到页 2（机旁控制箱）' },
-                    { type: 'btn', target: 'local', part: 'emergency', msg: '按下应急停止蘑菇按钮',
-                      async act() { const s = _sysOf(this); _firePartClick(_local(s), 'emergency'); await _sleep(800); } },
-                    { type: 'observe', target: 'status', msg: '观察电机停转、报警灯亮、EMERGENCY STOP 报警',
-                      async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).emergency, 8000, 200); await _sleep(1200); } },
-                ],
-                check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && m.emergency && !m.motor.on && m.alarms.some(a => a.active && a.code === 'A14'));
-                },
-            },
-            {
-                msg: '第 5 步：等待分离筒完全静止（转速 < 100 r/min），再旋转复位应急停止按钮，报警复位后系统回到 STANDSTILL。',
-                mode: 'check',
-                op: [
-                    { type: 'observe', target: 'local', msg: '等待分离筒完全静止',
-                      async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).bowl.speed < 100, 900000, 300); await _sleep(800); } },
-                    { type: 'btn', target: 'local', part: 'emergency', msg: '旋转复位应急停止按钮',
-                      async act() { const s = _sysOf(this); _firePartClick(_local(s), 'emergency'); await _sleep(500); } },
-                    { type: 'btn', target: 'epc', part: 'alarm-reset', msg: '按「ALARM RESET」复位报警',
-                      async act() { const s = _sysOf(this); await _resetAlarms(s); } },
-                ],
-                check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && !m.emergency && m.state === 'STANDSTILL' && !m.alarms.some(a => a.active));
-                },
-            },
-        ],
-    },
-
-    'purifier-local': {
-        id: 'purifier-local', name: '5. 机旁控制与应急操作',
-        steps: [
-            {
-                msg: '第 1 步：在页 3 给 EPC-60 上电；切换到页 2，打开工作水与控制空气进口阀，合上机旁主电源，机旁/遥控开关置于「LOCAL」。',
-                mode: 'check',
-                op: [
+                    { type: 'page', page: 2, msg: '切换到页 2（S 型分油机系统与机旁控制）' },
+                    { type: 'switch', target: 'process', part: 'dirty-outlet-valve', msg: '打开沉淀柜出口阀、回油阀与蒸汽进口截止阀',
+                        async act() {
+                            const s = _sysOf(this);
+                            const m = _model(s);
+                            const pairs = [['dirty-outlet-valve', 'dirtyValveOpen'], ['return-valve', 'returnValveOpen'], ['steam-inlet', 'steamValveOpen']];
+                            for (const [part, key] of pairs) {
+                                if (!m.feed[key]) { _firePartClick(_process(s), part); await _sleep(400); }
+                            }
+                            await _ensureSupply(s);
+                        } },
+                    { type: 'switch', target: 'process', part: 'air-inlet', msg: '确认控制空气（>5 bar）与工作水（>2 bar）截止阀已打开',
+                        async act() { const s = _sysOf(this); await _ensureSupply(s); await _sleep(500); } },
+                    { type: 'switch', target: 'local', part: 'main-power', msg: '合上机旁主电源，控制方式转换开关打到「EPC」',
+                        async act() { const s = _sysOf(this); await _ensureMainPower(s, true); await _ensureRemote(s); await _sleep(500); } },
                     { type: 'page', page: 3, msg: '切换到页 3（EPC-60 面板）' },
-                    { type: 'switch', target: 'epc', part: 'power', msg: '给 EPC-60 上电',
-                      async act() { const s = _sysOf(this); await _setEpcPower(s, true); } },
-                    { type: 'page', page: 2, msg: '切换到页 2（机旁控制）' },
-                    { type: 'switch', target: 'process', part: 'water-inlet', msg: '打开工作水进口阀',
-                      async act() { const s = _sysOf(this); await _ensureSupply(s); } },
-                    { type: 'switch', target: 'process', part: 'air-inlet', msg: '打开控制空气进口阀',
-                      async act() { const s = _sysOf(this); await _ensureSupply(s); } },
-                    { type: 'switch', target: 'local', part: 'main-power', msg: '合上机旁主电源',
-                      async act() { const s = _sysOf(this); await _ensureMainPower(s, true); } },
-                    { type: 'switch', target: 'local', part: 'local-remote', msg: '机旁/遥控开关置于「LOCAL」',
-                      async act() { const s = _sysOf(this); await _ensureLocal(s); } },
+                    { type: 'btn', target: 'epc', part: 'separation', msg: '按「I」键完成五步起动，直到进入 Ti68 正常分油',
+                        async act() { const s = _sysOf(this); await _startToTi68(s); await _sleep(1000); } },
                 ],
                 check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && m.epcPower && m.mainPower && m.local
-                        && m.water.mainOpen && m.water.airMainOpen);
+                    const m = _model(_sysOf(this));
+                    return !!(m && m.prog && m.phase === 3 && m.step >= 4);
                 },
             },
             {
-                msg: '第 2 步：按机旁控制箱的「START」按钮起动机电，观察电流表与转速上升。',
+                msg: '第 2 步：设置「分离筒密封失效 / 跑油」故障。现象：A03 OIL LEAKING FROM BOWL 报警，净油出口压力 PT4 迅速下降，控制器立即切断进油（V1 切回油位、V4 关闭）并按停机程序停机。处理措施：停车检查活动排渣底盘密封面与密封水系统，检查开启水／密封水电磁阀 SV15、SV16 是否动作到位，密封水压力是否正常，缺陷消除后复位报警再重新起动。',
                 mode: 'check',
                 op: [
-                    { type: 'btn', target: 'local', part: 'start', msg: '按机旁「START」按钮',
-                      async act() { const s = _sysOf(this); _firePartClick(_local(s), 'start'); await _sleep(600); } },
-                    { type: 'observe', target: 'local', msg: '观察电流表上升、运行指示灯亮、转速升到 4000 r/min 以上',
-                      async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).bowl.speed > 4000, 120000, 250); await _sleep(1000); } },
+                    { type: 'fault', fault: 'bowl-leak', msg: '勾选「分离筒密封失效 / 跑油」并应用设置',
+                        async act() { await _sleep(600); } },
+                    { type: 'observe', target: 'epc', part: 'lcd', msg: '观察液晶屏上的 A03 报警与随之进入的停机程序',
+                        async act() { const s = _sysOf(this); await _waitFor(s, x => { const m = _model(x); return !!(m && m.alarms.some(a => a.code === 'A03' && a.active)); }, 20000, 300); await _sleep(2000); } },
+                    { type: 'observe', target: 'mimic', part: 'pt4', msg: '观察 PT4 净油出口压力迅速下降、V1 切到回流位、V4 关闭，转速电流随排渣/停机过程变化',
+                        async act() { await _sleep(3000); } },
                 ],
                 check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && m.motor.on && m.bowl.speed > 4000);
+                    const m = _model(_sysOf(this));
+                    return !!(m && m.faults.leak && m.alarms.some(a => a.code === 'A03' && a.active));
                 },
             },
             {
-                msg: '第 3 步：把机旁/遥控开关切回「遥控」，EPC-60 在 AUTO 下自动完成预排渣、水封、加热与进油，进入正常分油。',
+                msg: '第 3 步：复位「分离筒密封失效」故障并重新起动。先取消该故障、按「ALARM RESET」复位报警，等停机程序走完分油机完全静止后，再按「I」键依次起动到 Ti68 正常分油，确认故障已消除。',
                 mode: 'check',
                 op: [
-                    { type: 'switch', target: 'local', part: 'local-remote', msg: '机旁/遥控开关切回「遥控」',
-                      async act() { const s = _sysOf(this); await _ensureRemote(s); } },
-                    { type: 'observe', target: 'status', msg: '观察系统自动进入 SEPARATION',
-                      async act() { const s = _sysOf(this); await _waitSeparation(s, 600000); await _sleep(800); } },
+                    { type: 'fault', fault: 'bowl-leak', repair: true, msg: '取消勾选「分离筒密封失效 / 跑油」并应用设置',
+                        async act() { await _sleep(600); } },
+                    { type: 'btn', target: 'epc', part: 'alarm-reset', msg: '按「ALARM RESET」键复位报警',
+                        async act() { const s = _sysOf(this); await _resetAlarms(s); await _sleep(400); } },
+                    { type: 'observe', target: 'epc', part: 'lcd', msg: '等待停机程序结束、分离筒完全静止（STANDSTILL）',
+                        async act() { const s = _sysOf(this); await _waitStandstill(s); await _sleep(600); } },
+                    { type: 'btn', target: 'epc', part: 'separation', msg: '重新起动分油机，直到进入 Ti68 正常分油',
+                        async act() { const s = _sysOf(this); await _startToTi68(s); await _sleep(1000); } },
                 ],
                 check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && !m.local && m.state === 'SEPARATION' && m.feed.flow > 0.3);
+                    const m = _model(_sysOf(this));
+                    return !!(m && !m.faults.leak && m.prog && m.phase === 3 && m.step >= 4);
                 },
             },
             {
-                msg: '第 4 步：按下机旁控制箱的「EMERGENCY STOP」蘑菇按钮，电机、加热器、进油泵立即停止，EPC-60 发出应急停止报警。',
+                msg: '第 4 步：设置「水分传感器故障」。现象：A11 TRANSDUCER - NO RESPONSE 报警，MT 液晶显示 NC（无读数），控制器无法自动判断净油含水量，V5 自动排水失去依据。处理措施：加强人工取样化验与手动排水，检查 ALCAP 水分传感器（MT）的接线与测量腔是否污染、堵塞，检修或更换后复位报警。',
                 mode: 'check',
                 op: [
-                    { type: 'btn', target: 'local', part: 'emergency', msg: '按下应急停止蘑菇按钮',
-                      async act() { const s = _sysOf(this); _firePartClick(_local(s), 'emergency'); await _sleep(800); } },
-                    { type: 'observe', target: 'status', msg: '观察电机停转、报警灯亮、EMERGENCY STOP 报警',
-                      async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).emergency, 8000, 200); await _sleep(1200); } },
+                    { type: 'fault', fault: 'transducer', msg: '勾选「水分传感器故障」并应用设置',
+                        async act() { await _sleep(600); } },
+                    { type: 'observe', target: 'mimic', part: 'mt', msg: '观察 MT 显示 NC、A11 报警灯亮起，分油仍继续但水分无法监视',
+                        async act() { const s = _sysOf(this); await _waitFor(s, x => { const m = _model(x); return !!(m && m.alarms.some(a => a.code === 'A11' && a.active)); }, 20000, 300); await _sleep(2500); } },
                 ],
                 check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && m.emergency && !m.motor.on && m.alarms.some(a => a.active && a.code === 'A14'));
+                    const m = _model(_sysOf(this));
+                    return !!(m && m.faults.transducer && m.alarms.some(a => a.code === 'A11' && a.active));
                 },
             },
             {
-                msg: '第 5 步：等待分离筒完全静止（转速 < 100 r/min），旋转复位应急停止按钮，按 EPC-60 的「ALARM RESET」复位报警。',
+                msg: '第 5 步：复位「水分传感器故障」，冲洗后重新起动。取消故障、复位报警，等分油机静止后按「I」键重新起动到 Ti68，观察 MT 恢复正常读数（Ti65 水分检查后显示 pF 值）。',
                 mode: 'check',
                 op: [
-                    { type: 'observe', target: 'local', msg: '等待分离筒完全静止',
-                      async act() { const s = _sysOf(this); await _waitFor(s, x => _model(x).bowl.speed < 100, 900000, 300); await _sleep(800); } },
-                    { type: 'btn', target: 'local', part: 'emergency', msg: '旋转复位应急停止按钮',
-                      async act() { const s = _sysOf(this); _firePartClick(_local(s), 'emergency'); await _sleep(500); } },
-                    { type: 'btn', target: 'epc', part: 'alarm-reset', msg: '按「ALARM RESET」复位报警',
-                      async act() { const s = _sysOf(this); await _resetAlarms(s); } },
+                    { type: 'fault', fault: 'transducer', repair: true, msg: '取消勾选「水分传感器故障」并应用设置',
+                        async act() { await _sleep(600); } },
+                    { type: 'btn', target: 'epc', part: 'alarm-reset', msg: '按「ALARM RESET」键复位报警',
+                        async act() { const s = _sysOf(this); await _resetAlarms(s); await _sleep(400); } },
+                    { type: 'btn', target: 'epc', part: 'stop', msg: '按「O」键停止当前分离程序（冲洗后重新起动）',
+                        async act() { const s = _sysOf(this); const m = _model(s); if (m && m.prog) _firePartClick(_epc(s), 'stop'); await _sleep(700); } },
+                    { type: 'observe', target: 'epc', part: 'lcd', msg: '等待分油机静止（STANDSTILL）',
+                        async act() { const s = _sysOf(this); await _waitStandstill(s); await _sleep(600); } },
+                    { type: 'btn', target: 'epc', part: 'separation', msg: '重新起动分油机，直到进入 Ti68 正常分油',
+                        async act() { const s = _sysOf(this); await _startToTi68(s); await _sleep(1000); } },
                 ],
                 check() {
-                    const s = _sysOf(this), m = _model(s);
-                    return !!(m && !m.emergency && m.state === 'STANDSTILL' && !m.alarms.some(a => a.active));
+                    const m = _model(_sysOf(this));
+                    return !!(m && !m.faults.transducer && m.prog && m.phase === 3 && m.step >= 4);
+                },
+            },
+            {
+                msg: '第 6 步：设置「分油温度低（加热器故障）」。现象：加热器停止投入，A05 OIL FEED TEMPERATURE - LOW 报警，TT1 油温下降；油温低于分离温度后控制器切断进油并停机（低温保护，防止分离效果恶化、跑油）。处理措施：检查蒸汽截止阀开度、蒸汽压力与电动调节阀、温度控制器及加热器疏水，恢复加热后复位报警再重新起动。',
+                mode: 'check',
+                op: [
+                    { type: 'fault', fault: 'temp-low', msg: '勾选「分油温度低（加热器故障）」并应用设置',
+                        async act() { await _sleep(600); } },
+                    { type: 'observe', target: 'mimic', part: 'tt1', msg: '观察 TT1 油温下降、A05 报警，进油被切断后分油程序转入停机',
+                        async act() { const s = _sysOf(this); await _waitFor(s, x => { const m = _model(x); return !!(m && m.alarms.some(a => a.code === 'A05' && a.active)); }, 20000, 300); await _sleep(3000); } },
+                ],
+                check() {
+                    const m = _model(_sysOf(this));
+                    return !!(m && m.faults.tempLow && m.alarms.some(a => a.code === 'A05' && a.active));
                 },
             },
         ],
