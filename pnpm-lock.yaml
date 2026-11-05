@@ -2601,6 +2601,188 @@ importers:
         specifier: ^2.3.3
         version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
 
+  lab_10/syy29_ljdq21:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy30_ljdq221:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy31_ljdq222:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy32_ljdq31:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy33_ljdq32:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy34_ljdq33:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy35_ljdq4:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy36_ljdq521:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy37_ljdq522:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy38_ljdq53:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy39_ljdq54:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy40_ljdq55:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy41_ljdq61:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
+  lab_10/syy42_ljdq62:
+    dependencies:
+      konva:
+        specifier: ^10.2.5
+        version: 10.3.2
+    devDependencies:
+      vite:
+        specifier: ^8.0.9
+        version: 8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0)
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.2.2(esbuild@0.28.2)(jiti@1.21.7)(yaml@2.9.0))
+
   lastproj:
     dependencies:
       konva:

@@ -10,7 +10,7 @@
 - 编写工程教学文档一律使用 **Markdown** 格式（`.md`）。
 - 文档**文件名与 `index.html` 中的 `<title>` 标题同名**。
 - 配图统一放入工程下的 `docs-img/` 文件夹，文档内用相对路径引用（如 `![图 1 组成原理图](docs-img/xxx.svg)`）。
-- 配图**文件名统一带「特征前缀」**：以**该工程仿真内容的英文概要**作为所有配图的统一前缀（如本工程为电气线路图 → `circuit-`），前缀后用 `-` 连接图名，例如 `circuit-main.svg`、`circuit-control.svg`、`circuit-panel.svg`、`circuit-sequence.svg`、`circuit-faults.svg`。目的：同一工程的配图统一可检索、可归类、可跨工程复用。
+- 配图**文件名统一带「特征前缀」**：以**该工程仿真内容的英文概要**作为所有配图的统一前缀（如本工程为电子元器件识别 → `electronics-`），前缀后用 `-` 连接图名，例如 `electronics-panel.svg`、`electronics-dmm.svg`、`electronics-mf47.svg`、`electronics-flow.svg`。目的：同一工程的配图统一可检索、可归类、可跨工程复用。
 - 文档字数一般**不超过 2000 字**（用户另有明确要求时从其要求）。
 
 ## 命令

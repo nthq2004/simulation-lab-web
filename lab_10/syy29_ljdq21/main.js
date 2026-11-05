@@ -66,7 +66,8 @@ function initGateway() {
 
 
 // 1. 定义按钮 ID 与对应操作的映射表
-
+// 本工程没有接线 / 起动 / 5 点步进功能，index.html 中不保留这三个按钮，
+// 下面统一判空，缺失的按钮直接跳过（不影响其余按钮绑定）。
 const actionMap = {
     'btnUndo': () => sys.history.undo(),
     'btnRedo': () => sys.history.redo(),
@@ -86,18 +87,22 @@ Object.entries(actionMap).forEach(([id, action]) => {
 
 
 // 2. 故障设置，统一 UI 交互逻辑
+// 本工程 FAULT_CONFIGS 为空（没有故障设置项），index.html 中也不再保留故障弹窗，
+// 因此这里整体判空：界面不存在时静默跳过，不影响后面演示/演练按钮的绑定。
 const faultUI = {
     modal: document.getElementById('faultModal'),
     form:  document.getElementById('faultForm'),
 
     // 打开/关闭 弹窗
     toggle: (visible) => {
+        if (!faultUI.modal) return;
         if (visible) faultUI.sync();
         faultUI.modal.style.display = visible ? 'flex' : 'none';
     },
 
     // 同步系统状态到 UI
     sync: () => {
+        if (!faultUI.form) return;
         faultUI.form.querySelectorAll('input[type="checkbox"]').forEach(cb => {
             const cfg = sys.FAULT_CONFIG[cb.value];
             if (cfg) cb.checked = cfg.check( );
@@ -106,6 +111,7 @@ const faultUI = {
 
     // 应用 UI 勾选到系统
     apply: () => {
+        if (!faultUI.form) return;
         faultUI.form.querySelectorAll('input[type="checkbox"]').forEach(cb => {
             const code = cb.value;
             const cfg = sys.FAULT_CONFIG[code];
@@ -118,15 +124,21 @@ const faultUI = {
     }
 };
 
-// 简洁的事件绑定
-document.getElementById('faultBtn').onclick  = () => faultUI.toggle(true);
-document.getElementById('cancelBtn').onclick = () => faultUI.toggle(false);
-document.getElementById('applyBtn').onclick  = () => faultUI.apply();
+// 简洁的事件绑定（按钮/弹窗不存在时跳过）
+const _faultBtn = document.getElementById('faultBtn');
+if (_faultBtn) _faultBtn.onclick = () => faultUI.toggle(true);
+const _faultCancelBtn = document.getElementById('cancelBtn');
+if (_faultCancelBtn) _faultCancelBtn.onclick = () => faultUI.toggle(false);
+const _faultApplyBtn = document.getElementById('applyBtn');
+if (_faultApplyBtn) _faultApplyBtn.onclick = () => faultUI.apply();
 
 // 仪表菜单关闭按钮
-document.getElementById('instrumentCancelBtn').onclick = () => {
-    document.getElementById('instrumentModal').style.display = 'none';
-};
+const _instrumentCancelBtn = document.getElementById('instrumentCancelBtn');
+if (_instrumentCancelBtn) {
+    _instrumentCancelBtn.onclick = () => {
+        document.getElementById('instrumentModal').style.display = 'none';
+    };
+}
 
 
 

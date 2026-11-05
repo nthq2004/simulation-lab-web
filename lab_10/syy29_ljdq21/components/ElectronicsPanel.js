@@ -178,8 +178,14 @@ export class ElectronicsPanel extends BaseComponent {
             entry.node.height(ih);
             entry.node.x(r.x + (r.w - iw) / 2);
             entry.node.y(r.y + (r.h - ih) / 2);
-            // 强制刷新 Konva cache 以显示新图片
-            this._forceCacheFlush();
+            // 图片是异步加载的：静态层在 init 阶段就已建立位图缓存，且 cache='fixed'
+            // 之后运行时不再自动重建。这里必须传 forceStatic=true 强制重建一次，
+            // 否则面板 6 个格子始终显示空白（图片已存在节点上但不在缓存位图里）。
+            this._forceCacheFlush(true);
+            if (this.sys && typeof this.sys.requestRedraw === 'function') this.sys.requestRedraw();
+        };
+        img.onerror = () => {
+            console.warn('[ElectronicsPanel] 元器件图片加载失败：', url);
         };
         img.src = url;
     }
@@ -210,7 +216,8 @@ export class ElectronicsPanel extends BaseComponent {
             this._staticGroup.destroyChildren();
             this._drawStaticParts();
             this._createImageCells();
-            this._forceCacheFlush();
+            // 静态层内容已重建（且图片重新异步加载），强制重建位图缓存
+            this._forceCacheFlush(true);
         }
     }
 }
