@@ -76,8 +76,8 @@
     <line x1="300" y1="238" x2="300" y2="220" stroke="#c0392b" stroke-width="2"/>
     <line x1="280" y1="220" x2="360" y2="220" stroke="#34495e" stroke-width="3"/>
     <text x="320" y="212" font-size="10" fill="#34495e" text-anchor="middle">汇流排 A / B / C</text>
-    <text x="380" y="242" font-size="9.5" fill="#7f8c8d" text-anchor="middle">逐相换接</text>
-    <text x="380" y="258" font-size="9.5" fill="#7f8c8d" text-anchor="middle">L 端</text>
+    <text x="368" y="242" font-size="9.5" fill="#7f8c8d" text-anchor="middle">逐相换接</text>
+    <text x="368" y="258" font-size="9.5" fill="#7f8c8d" text-anchor="middle">L 端</text>
   </g>
 
   <!-- 结论 -->

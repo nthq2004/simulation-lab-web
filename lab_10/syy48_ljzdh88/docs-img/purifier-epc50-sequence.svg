@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" width="900" height="520" font-family="Arial, Microsoft YaHei, sans-serif">
+  <rect x="0" y="0" width="900" height="520" fill="#fbfbfb"/>
+
+  <!-- 起动流程 -->
+  <text x="24" y="34" font-size="17" font-weight="bold" fill="#0b4a9c">起动程序（SEPARATOR MODE = AUT）</text>
+
+  <g>
+    <rect x="24" y="52" width="150" height="54" rx="6" fill="#fff" stroke="#0b4a9c" stroke-width="1.6"/>
+    <text x="99" y="74" font-size="13" font-weight="bold" fill="#1b2a38" text-anchor="middle">① 按 SEPARATOR</text>
+    <text x="99" y="94" font-size="12" fill="#455a64" text-anchor="middle">起动问询 Start?</text>
+    <path d="M178 79 H214" stroke="#455a64" stroke-width="1.6" marker-end="url(#a)"/>
+
+    <rect x="218" y="52" width="150" height="54" rx="6" fill="#fff" stroke="#0b4a9c" stroke-width="1.6"/>
+    <text x="293" y="74" font-size="13" font-weight="bold" fill="#1b2a38" text-anchor="middle">② OPERATIVE 确认</text>
+    <text x="293" y="94" font-size="12" fill="#455a64" text-anchor="middle">回答 YES / NO</text>
+    <path d="M372 79 H408" stroke="#455a64" stroke-width="1.6" marker-end="url(#a)"/>
+
+    <rect x="412" y="52" width="150" height="54" rx="6" fill="#fff" stroke="#0b4a9c" stroke-width="1.6"/>
+    <text x="487" y="74" font-size="13" font-weight="bold" fill="#1b2a38" text-anchor="middle">③ SEPARATOR</text>
+    <text x="487" y="94" font-size="12" fill="#455a64" text-anchor="middle">起动供油泵</text>
+    <path d="M566 79 H602" stroke="#455a64" stroke-width="1.6" marker-end="url(#a)"/>
+
+    <rect x="606" y="52" width="150" height="54" rx="6" fill="#fff" stroke="#0b4a9c" stroke-width="1.6"/>
+    <text x="681" y="74" font-size="13" font-weight="bold" fill="#1b2a38" text-anchor="middle">④ SEPARATOR</text>
+    <text x="681" y="94" font-size="12" fill="#455a64" text-anchor="middle">起动加热器 ≥96℃</text>
+    <path d="M760 79 H796" stroke="#455a64" stroke-width="1.6" marker-end="url(#a)"/>
+
+    <rect x="24" y="126" width="150" height="54" rx="6" fill="#fff" stroke="#0b4a9c" stroke-width="1.6"/>
+    <text x="99" y="148" font-size="13" font-weight="bold" fill="#1b2a38" text-anchor="middle">⑤ SEPARATOR</text>
+    <text x="99" y="168" font-size="12" fill="#455a64" text-anchor="middle">起动电机 ≥10000 r/min</text>
+    <path d="M178 153 H214" stroke="#455a64" stroke-width="1.6" marker-end="url(#a)"/>
+
+    <rect x="218" y="126" width="150" height="54" rx="6" fill="#e8f5e9" stroke="#1b5e20" stroke-width="1.6"/>
+    <text x="293" y="148" font-size="13" font-weight="bold" fill="#1b5e20" text-anchor="middle">⑥ OPERATIVE</text>
+    <text x="293" y="168" font-size="12" fill="#2e7d32" text-anchor="middle">投入分离程序</text>
+    <path d="M372 153 H408" stroke="#455a64" stroke-width="1.6" marker-end="url(#a)"/>
+
+    <rect x="412" y="126" width="344" height="54" rx="6" fill="#0b4a9c" stroke="#07356f" stroke-width="1.6"/>
+    <text x="584" y="148" font-size="13" font-weight="bold" fill="#fff" text-anchor="middle">分离程序 Ti56 → Ti68</text>
+    <text x="584" y="168" font-size="12" fill="#cfe0f2" text-anchor="middle">排渣 → 放残 → 密封 → 水封 → 进油 → 分油</text>
+  </g>
+
+  <!-- 停机流程 -->
+  <text x="24" y="222" font-size="17" font-weight="bold" fill="#0b4a9c">停止程序（STOP 键）</text>
+  <g>
+    <rect x="24" y="240" width="150" height="54" rx="6" fill="#fff" stroke="#b71c1c" stroke-width="1.6"/>
+    <text x="99" y="262" font-size="13" font-weight="bold" fill="#1b2a38" text-anchor="middle">正常分油 Ti68</text>
+    <text x="99" y="282" font-size="12" fill="#455a64" text-anchor="middle">按 STOP 键</text>
+    <path d="M178 267 H214" stroke="#455a64" stroke-width="1.6" marker-end="url(#a)"/>
+
+    <rect x="218" y="240" width="170" height="54" rx="6" fill="#fff" stroke="#b71c1c" stroke-width="1.6"/>
+    <text x="303" y="262" font-size="13" font-weight="bold" fill="#1b2a38" text-anchor="middle">阶段四 排渣</text>
+    <text x="303" y="282" font-size="12" fill="#455a64" text-anchor="middle">Ti70 → Ti75</text>
+    <path d="M392 267 H428" stroke="#455a64" stroke-width="1.6" marker-end="url(#a)"/>
+
+    <rect x="432" y="240" width="170" height="54" rx="6" fill="#fff" stroke="#b71c1c" stroke-width="1.6"/>
+    <text x="517" y="262" font-size="13" font-weight="bold" fill="#1b2a38" text-anchor="middle">阶段五 置换密封</text>
+    <text x="517" y="282" font-size="12" fill="#455a64" text-anchor="middle">Ti81 → Ti83</text>
+    <path d="M606 267 H642" stroke="#455a64" stroke-width="1.6" marker-end="url(#a)"/>
+
+    <rect x="646" y="240" width="180" height="54" rx="6" fill="#fff" stroke="#b71c1c" stroke-width="1.6"/>
+    <text x="736" y="262" font-size="13" font-weight="bold" fill="#1b2a38" text-anchor="middle">阶段六 自动停机</text>
+    <text x="736" y="282" font-size="12" fill="#455a64" text-anchor="middle">Ti85 → Ti89</text>
+    <path d="M736 298 V330" stroke="#455a64" stroke-width="1.6" marker-end="url(#a)"/>
+
+    <rect x="646" y="334" width="180" height="46" rx="6" fill="#eceff1" stroke="#607d8b" stroke-width="1.6"/>
+    <text x="736" y="362" font-size="13" font-weight="bold" fill="#37474f" text-anchor="middle">Standst（停机）</text>
+  </g>
+
+  <!-- 模式对照 -->
+  <text x="24" y="418" font-size="17" font-weight="bold" fill="#0b4a9c">SEPARATOR MODE 三档与控制权分配</text>
+  <g>
+    <rect x="24" y="436" width="270" height="64" rx="6" fill="#fff" stroke="#9aa3ab" stroke-width="1.6"/>
+    <text x="40" y="460" font-size="13" font-weight="bold" fill="#b71c1c">OFF</text>
+    <text x="40" y="480" font-size="12" fill="#455a64">系统停止，控制指令不响应</text>
+    <text x="40" y="494" font-size="11" fill="#78909c">（仍可操作 POWER SWITCH 与 EMCY STOP）</text>
+
+    <rect x="315" y="436" width="270" height="64" rx="6" fill="#fff" stroke="#9aa3ab" stroke-width="1.6"/>
+    <text x="331" y="460" font-size="13" font-weight="bold" fill="#e07b00">MAN</text>
+    <text x="331" y="480" font-size="12" fill="#455a64">机旁手动：起动箱按钮直接操作</text>
+    <text x="331" y="494" font-size="11" fill="#78909c">供油泵 / 电机起停、OP 功能键无效</text>
+
+    <rect x="606" y="436" width="270" height="64" rx="6" fill="#e8f5e9" stroke="#1b5e20" stroke-width="1.6"/>
+    <text x="622" y="460" font-size="13" font-weight="bold" fill="#1b5e20">AUT</text>
+    <text x="622" y="480" font-size="12" fill="#2e7d32">远程自动：OP 面板功能键接管</text>
+    <text x="622" y="494" font-size="11" fill="#78909c">五步起动 / 手动排渣 / 报警复位</text>
+  </g>
+
+  <defs>
+    <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0 0 L9 4.5 L0 9 Z" fill="#455a64"/>
+    </marker>
+  </defs>
+</svg>
