@@ -66,11 +66,11 @@ function initGateway() {
 
 
 // 1. 定义按钮 ID 与对应操作的映射表
-// 本工程为船舶分油机（S 936 / EPC-50 控制器）自动控制仿真，**单页工程**：
-//   画布同屏只有 EPC-50 控制器（epc）与分油机系统模拟图（mimic）两台设备。
+// 本工程为船舶辅锅炉（PLC 控制）自动控制仿真，**多页工程**：
+//   页 0 索引 / 页 1 锅炉系统图 + 机旁操纵台 / 页 2 CPU、I/O 端子与上位机。
 // 「自动接线」按项目配置 applyAllPresets 投用阀门与气源；
-// 「起动系统」复位台架后快速进入分油运行；
-// 「5 点步进」按停止 → 升速 → 水封 → 分油 → 排渣逐级推进。
+// 「起动系统」复位台架后快速进入自动起动；
+// 「5 点步进」按停炉 → 预扫风 → 点火 → 小火 → 大火逐级推进。
 // 缺失的按钮统一判空跳过（不影响其余按钮绑定）。
 const actionMap = {
     'btnUndo': () => sys.history.undo(),
@@ -80,6 +80,9 @@ const actionMap = {
     'btnFiveStep': ()=> sys.fiveStep(),
     'btnReset': () => location.reload(),
     'btnInstrument':()=>sys.showInstrument(),
+    'btnHome': () => sys.goHome(),
+    'btnBack': () => sys.goBack(),
+    'btnForward': () => sys.goForward(),
 
 };
 // 统一遍历并绑定事件

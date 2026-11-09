@@ -918,7 +918,7 @@ export class BoilerSystemDiagram extends BaseComponent {
 
         // 重油加热器后的燃油温度读数
         this._oilTempTxt = new Konva.Text({
-            x: G.heater.x + 68, y: G.heater.y + 6, width: 54, text: '108℃',
+            x: G.heater.x + 68, y: G.heater.y + 6, width: 54, text: '115℃',
             fontSize: 12, fill: '#e65100', fontStyle: 'bold',
             fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
         });

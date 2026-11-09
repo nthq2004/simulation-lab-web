@@ -45,12 +45,14 @@ import { CurrentTransformer, ACVoltmeter, PotentialTransformer, SinglePhaseFuse,
 import { DistributionBox, ShorePowerMainSwitch, ShorePowerBox, NegativeSeqRelay } from './export.js';
 
 import {
-    PurifierSolver, EPC50Controller, EPC60SystemMimic, PurifierStatusPanel, PurifierSystem, PurifierLocalPanel
+    PurifierSolver, EPC50Controller, EPC60SystemMimic, PurifierStatusPanel, PurifierSystem, PurifierLocalPanel,
+    BoilerSolver
 } from './export.js';
 
 import { MotorControlBox, GroundBusBar, ThreePhaseMotor3D, InductionMotorExploded, T568BCableBench, CableTypesBench, LowVoltageGroundCable, PC, NetworkSwitch, L3Switch, Router, NetServer } from './export.js';
 
-import { componentConfigs, initSlider, applyAllPresets } from './project/sys_ljdq8-7.js';
+import { componentConfigs, initSlider, applyAllPresets, PROJECT_PAGES } from './project/sys_ljdq8-7.js';
+import { PageManager } from './lib/PageManager.js';
     
 /**
  * ControlSystem - 控制系统仿真引擎
@@ -90,6 +92,7 @@ export class ControlSystem {
         this.digitalSolver = null;
         this.mcuSolver = null;
         this.s7200Solver = null;
+        this.boilerSolver = null;
         this.showComp = null;
 
         // 5. 性能优化：重绘控制标记
@@ -208,6 +211,11 @@ export class ControlSystem {
         this.thermalSolver = new ThermalSolver(this);
         this.purifierSolver = new PurifierSolver(this);
 
+        // ── 辅锅炉（PLC 控制）过程模型 + 虚拟 I/O 桥 ──
+        //    构造时把自身注册为 sys.ioBridge：S7200Solver 每次扫描读取输入后调用
+        //    applyInputs()，把面板开关量与过程开关量写入 I 过程映像（跨页无法接线）。
+        this.boilerSolver = new BoilerSolver(this);
+
         // ── 复合设备管理器 ──
         this.deviceManager = new DeviceManager(this);
         Object.values(this.comps).forEach(comp => {
@@ -251,7 +259,11 @@ export class ControlSystem {
         // ── 工具栏滑块（由项目配置实现）──
         initSlider(this);
 
-        // ── 单页工程：不做多页面管理（不使用 PageManager，全部组件同屏显示）──
+        // ── 多页面管理（页面定义来自工程配置）──
+        if (typeof PROJECT_PAGES !== 'undefined' && PROJECT_PAGES && PROJECT_PAGES.length) {
+            this.pageMgr = new PageManager(this, PROJECT_PAGES);
+            this.pageMgr.navigateTo(0);   // 初始显示索引页
+        }
 
         this._scheduleNextPhysics();
     }
@@ -960,8 +972,17 @@ export class ControlSystem {
         // 依赖电路求解器刚刷新的节点电压；Q 位经拓扑层驱动 DO 端口（下一帧生效）
         if (this.s7200Solver) {
             const startPLC = performance.now();
-            this.s7200Solver.update(1 / 20);
+            // 仿真时间倍率（锅炉工程可在系统图参数里调整，1 = 实时）
+            const simSpeed = this.boilerSolver ? Math.max(1, this.boilerSolver.cfg.timeScale || 1) : 1;
+            this.s7200Solver.update((1 / 20) * simSpeed);
             perfMonitor.recordMetric('plcScan', performance.now() - startPLC);
+        }
+
+        // ── 辅锅炉过程模型（读取 Q 输出，推进汽压/水位/油温/火焰）──
+        if (this.boilerSolver) {
+            const startBoiler = performance.now();
+            this.boilerSolver.solve(1 / 20);
+            perfMonitor.recordMetric('boilerSolve', performance.now() - startBoiler);
         }
 
         // ── 只有存在管路连线时才运行气路求解器 ──

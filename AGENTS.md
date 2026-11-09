@@ -357,3 +357,31 @@ cycleMode(dir = 1) {
 - 工作流中**不写** `{ type:'page', page:n }` 切页 op；全部组件同屏显示
   （只有「选择仪表」里的仪表默认隐藏）。
 - 反之，确有多页才建 `PROJECT_PAGES`，并为组件配置 `page` 字段。
+
+## 多页工程必须适配成多页（启用 PageManager）
+
+工程确实分多页（如 页 1 系统图/操纵台、页 2 CPU/接线图/上位机）时，**四项必须齐全，缺一页就会「多页组件全挤在一屏」或「工具栏切不了页」**：
+
+1. **项目文件**：导出 `PROJECT_PAGES`（`{ id:0, name:'索引', type:'index' }` + 各电路页
+   `{ id, name, comps:[组件id…], desc }`）；每个组件配置带 `page: n`，且 `page` 与
+   `comps` 列表**必须一致**（`pageOf()` 用 comps 反查页码，不一致会让自动演示切错页）。
+2. **`consys.js`**：`import { …, PROJECT_PAGES }` + `import { PageManager } from './lib/PageManager.js'`；
+   `init()` 中 `initSlider(this)` 之后创建
+   `this.pageMgr = new PageManager(this, PROJECT_PAGES); this.pageMgr.navigateTo(0)`；
+   创建组件时把 `visible:false` 的仪表标记 `comp._isInstrument = true`
+   （否则切页会按 comps 强制显示/隐藏仪表）。
+3. **`index.html` / `main.js`**：工具栏保留「主页 / 上一页 / 下一页」三个 `class="nav-btn"` 按钮，
+   `actionMap` 绑定 `sys.goHome()/goBack()/goForward()`。
+4. **连线刷新**：新增接线（自动接线、演示接线、网线等）后调 `sys.pageMgr.refresh()`
+   （或 `sys.refreshPage()`），否则新连线在当前页不显示。
+
+另外：
+
+- 导航代理与演示钩子 `navigateTo/goHome/goBack/goForward/refreshPage/_autoSwitchPageForDemo`
+  在 `consys.js` 已内置（均做 `pageMgr` 判空），无需重复实现。
+- 工作流需要**显式**切页时写 `{ type:'page', page:n, msg:'切换到第 n 页' }`
+  （`Workflow._introPage()` 先指示索引页卡片再切页）；其余 op 由演示引擎按
+  `target` / `instrument` / `ports` 自动切页，不必每步都写。
+- `check()` 中若验收点含「在某页看到某现象」，需同时校验 `sys.pageMgr.currentPage === n`。
+- 跨页无法拉真实导线：面板↔CPU 之类的信号改走虚拟 I/O 桥（如 `BoilerSolver.applyInputs()`）。
+- 组件尺寸不随画布缩放（只缩放 x/y），各页仍按 1920×1080 基准坐标排布，页内不得重叠。

@@ -719,7 +719,7 @@ export const PROJECT_WORKFLOWS = {
                     msg: '小火稳定 20 s 后 2# 电磁阀打开，转入大火全负荷',
                     async act() {
                         const s = _bsOf(this);
-                        await _waitFor(() => s && s.m.out.highFire, 70000);
+                        await _waitFor(() => s && s.m.out.highFire, 120000);
                     },
                 }],
                 check() { const s = _bsOf(this); return !!(s && s.m.out.highFire); },
@@ -731,7 +731,7 @@ export const PROJECT_WORKFLOWS = {
                     msg: '观察蒸汽压力升高 → 大小火转换 → 达上限自动停炉与后扫风',
                     async act() {
                         const s = _bsOf(this);
-                        await _waitFor(() => s && s.m.pressure >= s.cfg.pHighLow, 120000);
+                        await _waitFor(() => s && s.m.pressure >= s.cfg.pHighLow, 300000);
                         await _waitFor(() => s && !s.m.out.fan, 180000);
                         await _sleep(1500);
                     },
@@ -854,17 +854,58 @@ export const PROJECT_WORKFLOWS = {
                 check() { const s = _bsOf(this); return !!(s && s.m.out.highFire); },
             },
             {
-                msg: '6. 停炉：按「燃烧停止」按钮（I1.0），Q2.1 断电、进油切断，风机后扫风 20 s（T104）后停炉。',
-                op: [{
-                    type: 'switch', target: 'local', part: 'btn-stop',
-                    msg: '按下「燃烧停止」按钮，观察后扫风 20 s 后风机停止',
-                    async act() {
-                        const s = _bsOf(this), c = _compOf(this, 'local');
-                        await _clickUntil(c, 'btn-stop', () => s && !s.m.out.ready, 3, 500);
-                        await _waitFor(() => s && !s.m.out.fan, 90000);
+                msg: '6. 停炉：旋钮转「扫风」后扫风约 20 s → 转「停止」→ 按「燃烧停止」复位。',
+                op: [
+                    {
+                        type: 'switch', target: 'local', part: 'burner-knob',
+                        msg: '旋钮转到「扫风」：进油切断、风机继续运行，后扫风约 20 s',
+                        async act() {
+                            const s = _bsOf(this), c = _compOf(this, 'local');
+                            await _clickUntil(c, 'burner-knob', () => s && s.m.burnerKnob === 'sweep', 5, 320, -1);
+                            await _waitFor(() => s && s.m.out.fan, 8000);
+                            await _sleep(20000);          // 后扫风约 20 s（与自动 T104 一致）
+                        },
                     },
-                }],
-                check() { const s = _bsOf(this); return !!(s && !s.m.out.ready); },
+                    {
+                        type: 'switch', target: 'local', part: 'burner-knob',
+                        msg: '后扫风结束，旋钮转到「停止」，风机停止',
+                        async act() {
+                            const s = _bsOf(this), c = _compOf(this, 'local');
+                            await _clickUntil(c, 'burner-knob', () => s && s.m.burnerKnob === 'stop', 3, 320, -1);
+                            await _waitFor(() => s && !s.m.out.fan, 8000);
+                        },
+                    },
+                    {
+                        type: 'switch', target: 'local', part: 'btn-stop',
+                        msg: '按下「燃烧停止」按钮，Q2.1 断电复位',
+                        async act() {
+                            const s = _bsOf(this), c = _compOf(this, 'local');
+                            await _clickUntil(c, 'btn-stop', () => s && !s.m.out.ready, 3, 500);
+                            await _sleep(800);
+                        },
+                    },
+                ],
+                check() {
+                    const s = _bsOf(this);
+                    return !!(s && s.m.postSweep && s.m.burnerKnob === 'stop'
+                        && !s.m.out.ready && !s.m.out.fan);
+                },
+            },
+            {
+                mode: 'quiz',
+                msg: '7. 停炉时序知识题',
+                quizConfig: {
+                    question: '手动停炉时，燃烧控制旋钮要先从「大火 / 小火」转到「扫风」停一会儿，再转到「停止」，原因是：',
+                    options: [
+                        '后扫风把炉膛内未燃尽的燃油和可燃气抽走，避免再次点火时爆燃或结焦',
+                        '给锅炉降压，防止蒸汽压力突然下降',
+                        '让给水泵继续向锅炉补水',
+                        '让点火变压器继续散热',
+                    ],
+                    answer: 0,
+                    isMultiple: false,
+                    analysis: '停炉瞬间炉膛内仍有未燃尽的油雾和可燃气，先转到「扫风」让风机继续运行约 20 s（后扫风，与自动方式的 T104 20 s 对应），把残油与可燃气排入烟囱，再转到「停止」停风机；最后按「燃烧停止」复位起动就绪（Q2.1）。',
+                },
             },
             {
                 mode: 'quiz',

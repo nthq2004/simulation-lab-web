@@ -51,19 +51,19 @@ pnpm run preview  # 预览构建产物
   `PROJECT_WORKFLOWS` 作为范式模板，**不要沿用旧工程的写法**。
   当前最新参照：`lab_10/syy39_ljdq54/project/sys_ljdq5-4.js`（同族双机工程，含完整模拟点击辅助函数、参数界面演示、故障界面 op），
   其次 `lab_10/syy38_ljdq53/project/sys_ljdq5-3.js`、`project/sys_cddg10.js`。
-  本工程当前项目文件：`project/sys_ljdq8-8.js`（船舶分油机 S 936 + **EPC-50 控制器**
-  自动控制仿真，**单页工程**：画布同屏只有 EPC-50 控制器（OP 操作面板 + 电机起动控制箱）
-  与分油机系统模拟图两台设备；
-  四条流程：分油机系统的认识、EPC-50 控制器的认识、分油机的起动和停机、分油机故障的处理），
-  前一项目为 `project/sys_ljdq8-2.js`（自动控制系统各模块的功能测试，单页工程）。
+  本工程当前项目文件：`project/sys_ljdq8-7.js`（船舶**辅锅炉 PLC 控制**仿真，
+  **多页工程**：页 0 索引 / 页 1 锅炉系统图 + 机旁操纵台 / 页 2 CPU、I/O 端子与上位机；
+  三条流程：辅锅炉自动起动与运行、手动起动辅锅炉和停炉、锅炉安保功能测试），
+  前一项目为 `project/sys_ljdq8-8.js`（船舶分油机 S 936 + EPC-50 控制器，单页工程，
+  文件与组件均保留，需要时可切回）。
 - **步骤基本形状**：
   - `find`：`{ msg:'第 n 步：识别 xxx。', mode:'find', target:'<compId>', subTarget:'<partId>' }`（说明从简，见下节文字要求）
   - `check`：`{ msg, mode:'check', op:[ { type, target, part, msg, async act(){} }, … ], check(){…} }`
     —— 每个子操作自带 `act()`，逐个“箭头指向 → 立即执行 → 停留观察”；**禁止**把所有动作塞进 `step.act()`。
   - `quiz`：`{ msg, mode:'quiz', quizConfig:{ question, options, answer, analysis } }`，`analysis` 必须讲清原理。
 - **op 类型**：`switch`（开关/刀闸/阀门手柄）、`btn`（按钮）、`knob`（旋钮）、`observe`（观察现象）、
-  `instrument`（走「选择仪表」界面）、`fault`（走故障设置界面）、`load`、`wire`（`page` 仅多页工程用，本工程不用）；
-  接线 op 用 `ports:[端口id…]` 指向端口，不指向组件中心。
+  `instrument`（走「选择仪表」界面）、`fault`（走故障设置界面）、`load`、`wire`、
+  `page`（切页，仅多页工程用，本工程可用）；接线 op 用 `ports:[端口id…]` 指向端口，不指向组件中心。
 - **动作一律模拟真实交互**：优先 `comp.getClickablePartNode(partId).fire('click'/'mousedown'/'mouseup')`，
   让组件自身的点击处理逻辑执行；取不到命中节点时才用组件公开方法（`setManualOverride()`、
   `close()/open()` 等）兜底，**不得直改内部字段**。
@@ -80,22 +80,44 @@ pnpm run preview  # 预览构建产物
 - `quiz` 的 `analysis` 保留必要解析，1~3 句即可。
 - 原理性、系统性内容写进教学文档（`.md`），演示界面不复述。
 
-## 本工程为单页工程（不使用 PageManager）
+## 本工程为多页工程（PageManager + PROJECT_PAGES）
 
-画布同屏只有两台设备：`epc`（EPC-50 控制器）+ `mimic`（分油机系统模拟图）。
+`project/sys_ljdq8-7.js` 导出 `PROJECT_PAGES`，共 3 页：
 
-- 项目文件**不导出 `PROJECT_PAGES`**；`consys.js` **不导入 `PageManager`、不创建 `pageMgr`**
-  （`goHome()/goBack()/goForward()`、`_autoSwitchPageForDemo()` 已做 `pageMgr` 判空，可安全不创建）。
-- **`index.html` 不保留**「主页 / 上一页 / 下一页」按钮，`main.js` 的 `actionMap` 不绑定它们。
-- 工作流中**不写** `{ type:'page', page:n }` 切页 op。
-- 每个组件**不带 `page` 字段**；全部组件同屏显示（仅「选择仪表」中的仪表默认隐藏）。
-- 组件的**位置不随画布缩放**（画布只缩放组件的 x/y 坐标，不缩放组件尺寸），
-  因此同屏组件必须按 **1920×1080 基准坐标**排布，保证不重叠。
-  EPC-50 控制器为 **650×760**（`x:90, y:150`），与右侧系统模拟图
-  （1060×760，`x:820, y:150`）**同高并列**：两者都在 y=150 起、高 760，水平方向 90…740 与 820…1880 互不遮挡。
-- 原页 1「运行状态仪」、页 2「系统流程 + 机旁控制箱」的组件
-  （`PurifierStatusPanel` / `PurifierSystem` / `PurifierLocalPanel`）**本工程不再使用**，
-  组件文件与 `export.js` 导出均保留，需要时可另行启用。
+| 页 | 内容 | 组件（`page` 字段） |
+|---|---|---|
+| 0 | 索引页（DOM 浮层卡片，`type:'index'`） | — |
+| 1 | 锅炉系统图 + 机旁操纵台 | `boiler`、`local`、7 种仪表 |
+| 2 | PLC CPU、I/O 端子、上位机、外部接线图、镜像操纵台 | `plc-1`、`em-dq08`、`step7pc-1`、`wiring`、`m-monitor`、`local2`、`ground-1`、7 种仪表 |
+
+适配要点（各项缺一不可）：
+
+- **项目文件**：导出 `PROJECT_PAGES`；每个组件配置带 `page: n`，且页码必须与
+  `PROJECT_PAGES[i].comps` 列表一致（`PageManager` 以 comps 列表控制显隐，
+  `pageOf()` 以 comps 反查页码，两处不一致会导致演示切页切错）。
+- **`consys.js`**：`import { …, PROJECT_PAGES }` + `import { PageManager } from './lib/PageManager.js'`；
+  `init()` 中 `initSlider(this)` 之后创建
+  `this.pageMgr = new PageManager(this, PROJECT_PAGES); this.pageMgr.navigateTo(0)`；
+  创建组件时把 `visible:false` 的仪表标记 `_isInstrument = true`
+  （否则切页会按 comps 把它强制显示/隐藏）。
+- **`index.html`**：工具栏保留「主页 / 上一页 / 下一页」三个 `class="nav-btn"` 按钮
+  （`.nav-btn` 样式在 `style.css` 已有，勿删）。
+- **`main.js`**：`actionMap` 绑定 `btnHome/btnBack/btnForward → sys.goHome()/goBack()/goForward()`。
+- **导航代理**（`consys.js` 已内置，无需改）：`navigateTo/goHome/goBack/goForward/refreshPage`，
+  以及演示钩子 `_autoSwitchPageForDemo(compId)`（按 `pageMgr.pageOf()` 自动切页）。
+- **连线显隐**：连线两端组件都在当前页才显示。新增接线（自动接线、演示接线、`_ensureLan` 等）
+  之后必须 `sys.pageMgr.refresh()`（或 `sys.refreshPage()`），否则新连线可能不出现在当前页。
+- **工作流**：需要让学员看到另一页时写 `{ type:'page', page:n, msg:'切换到第 n 页' }`
+  （`Workflow._introPage()` 会先指向索引页对应卡片再切页）；
+  其余 op 只要 `target` / `instrument` / `ports` 指向正确，演示引擎会按目标自动切页
+  （`Workflow._switchPageForStep()`），不必每步都写 page op。
+- **跨页不能接线**：页 1 面板与页 2 CPU 之间通过虚拟 I/O 桥
+  （`BoilerSolver.applyInputs()`，`sys.ioBridge`）传递开关量，不要试图画真实导线。
+- 组件尺寸不随画布缩放（只缩放 x/y），各页仍按 **1920×1080 基准坐标**排布，页内不得重叠。
+
+> 若要把本工程改回**单页**：删除 `PROJECT_PAGES` 导出与组件 `page` 字段、
+> 不导入/不创建 `pageMgr`、去掉 `index.html` 的三个导航按钮与 `main.js` 绑定、
+> 工作流删掉 `type:'page'` op，并把原各页组件按 1920×1080 同屏重排（不重叠）。
 
 ## EPC-50 控制器组件（本工程使用；旧 EPC-60 面板保留但不用）
 

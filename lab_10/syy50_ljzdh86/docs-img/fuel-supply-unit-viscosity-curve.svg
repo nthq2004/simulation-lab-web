@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="430" viewBox="0 0 720 430" font-family="'Microsoft YaHei','Source Han Sans SC',sans-serif">
+  <rect width="720" height="430" fill="#ffffff"/>
+  <text x="360" y="28" font-size="16" font-weight="bold" fill="#1f2d3d" text-anchor="middle">燃油黏度—温度特性曲线（ν = f(T)）</text>
+
+  <!-- 坐标轴 -->
+  <path d="M70 350 L690 350" fill="none" stroke="#4a5b6b" stroke-width="1.8"/>
+  <path d="M70 350 L70 55" fill="none" stroke="#4a5b6b" stroke-width="1.8"/>
+  <text x="632" y="342" font-size="12" fill="#28455e" text-anchor="end">T / ℃</text>
+  <text x="46" y="52" font-size="11" fill="#28455e" text-anchor="end">ν / cSt</text>
+
+  <!-- 刻度 -->
+  <g font-size="11" fill="#4a6572">
+    <text x="70" y="368" text-anchor="middle">0</text>
+    <text x="203" y="368" text-anchor="middle">40</text>
+    <text x="337" y="368" text-anchor="middle">80</text>
+    <text x="470" y="368" text-anchor="middle">120</text>
+    <text x="603" y="368" text-anchor="middle">160</text>
+    <text x="64" y="304" text-anchor="end">10</text>
+    <text x="64" y="229" text-anchor="end">20</text>
+    <text x="64" y="154" text-anchor="end">30</text>
+    <text x="64" y="79" text-anchor="end">40</text>
+  </g>
+  <g stroke="#e3e9ef" stroke-width="1">
+    <path d="M70 300 L690 300"/>
+    <path d="M70 225 L690 225"/>
+    <path d="M70 150 L690 150"/>
+    <path d="M70 75 L690 75"/>
+  </g>
+
+  <!-- 曲线：HFO 三种油品 + DO -->
+  <path d="M370 136 Q470 200 570 270 Q600 292 625 300" fill="none" stroke="#c98a5a" stroke-width="2.4"/>
+  <path d="M270 79 Q370 190 470 247 Q520 268 620 303" fill="none" stroke="#2e6fa3" stroke-width="2.6"/>
+  <path d="M270 136 Q370 215 470 270 Q560 308 620 318" fill="none" stroke="#8aa9c0" stroke-width="2.4"/>
+  <path d="M203 261 Q270 301 340 313 Q380 318 404 322" fill="none" stroke="#3d8f66" stroke-width="2.4"/>
+
+  <!-- 图例 -->
+  <rect x="556" y="66" width="150" height="96" rx="5" fill="#ffffff" stroke="#d3dde5" stroke-width="1.2"/>
+  <g font-size="11">
+    <path d="M564 82 L590 82" stroke="#c98a5a" stroke-width="2.4"/><text x="596" y="86" fill="#a8663a">HFO G3（150 ℃）</text>
+    <path d="M564 106 L590 106" stroke="#2e6fa3" stroke-width="2.6"/><text x="596" y="110" fill="#2e6fa3">HFO G2（135 ℃）</text>
+    <path d="M564 130 L590 130" stroke="#8aa9c0" stroke-width="2.4"/><text x="596" y="134" fill="#5b7f9e">HFO G1（120 ℃）</text>
+    <path d="M564 154 L590 154" stroke="#3d8f66" stroke-width="2.4"/><text x="596" y="158" fill="#2f5d2f">DO（柴油）</text>
+  </g>
+
+  <!-- Pr20 与 Pr30 关系 -->
+  <path d="M70 270 L690 270" fill="none" stroke="#d9534f" stroke-width="1.6" stroke-dasharray="7 5"/>
+  <text x="686" y="262" font-size="12" fill="#a13b39" text-anchor="end">Pr20 = 12 cSt（黏度设定值）</text>
+  <path d="M520 350 L520 270" fill="none" stroke="#d9534f" stroke-width="1.6" stroke-dasharray="7 5"/>
+  <circle cx="520" cy="270" r="5" fill="#d9534f"/>
+  <text x="512" y="392" font-size="12" fill="#a13b39" text-anchor="middle">Pr30 = 135 ℃</text>
+  <text x="512" y="410" font-size="11" fill="#7a8b99" text-anchor="middle">（同一黏度对应的 HFO 目标温度）</text>
+
+  <text x="86" y="180" font-size="11" fill="#4a6572">油温升高 → 黏度按指数下降</text>
+  <text x="86" y="200" font-size="11" fill="#4a6572">不同油品同一黏度所需的温度不同</text>
+  <text x="86" y="220" font-size="11" fill="#4a6572">→ 换油后必须重设 Pr30（或改 Pr24 油品等级）</text>
+</svg>

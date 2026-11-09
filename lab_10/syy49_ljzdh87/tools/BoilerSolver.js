@@ -72,13 +72,14 @@ export class BoilerSolver {
             pump1Mode: 'stop',       // 1# 给水泵选择：stop | auto | manual
             pump2Mode: 'stop',       // 2# 给水泵选择：stop | auto | manual
             // 过程量
-            pressure: 0.55,
+            pressure: 0,             // 冷炉初始压力 0 MPa
             level: 56,
-            oilTemp: 108,
+            oilTemp: 115,
             airPressure: 0,          // 0~1（风压建立程度）
             airPressureOk: false,
             flame: 0,                // 0~1（火焰强度）
             flameOn: false,
+            postSweep: false,        // 本轮是否执行过后扫风（停炉步骤验收用）
             // 输出镜像（Q 过程映像）
             out: {},
         };
@@ -132,13 +133,14 @@ export class BoilerSolver {
         m.oilPumpKnob = 'stop';
         m.pump1Mode = 'stop';
         m.pump2Mode = 'stop';
-        m.pressure = 0.55;
+        m.pressure = 0;
         m.level = 56;
-        m.oilTemp = 108;
+        m.oilTemp = 115;
         m.airPressure = 0;
         m.airPressureOk = false;
         m.flame = 0;
         m.flameOn = false;
+        m.postSweep = false;
         m.safetyOpen = false;
         m.blowdown = false;
         m.i23Grounded = false;
@@ -349,12 +351,16 @@ export class BoilerSolver {
         m.level = clamp(m.level + dLevel * dt, 0, 100);
 
         // ── 重油温度（蒸汽加热器；加热器故障时自然冷却）──
+        // 断电（锅炉停用）时视为保温柜保温，油温保持在初始 115 ℃；
+        // 通电但加热器故障时按 0.12 ℃/s 冷却，直至油温过低报警。
         const heaterOn = powered && !this.faults.oilTempLowFault;
-        m.oilTemp = approach(m.oilTemp, heaterOn ? this.cfg.oilTempTarget : 25, dt, heaterOn ? 0.30 : 0.12);
+        const oilRate = heaterOn ? 0.30 : (powered ? 0.12 : 0);
+        m.oilTemp = approach(m.oilTemp, heaterOn ? this.cfg.oilTempTarget : 25, dt, oilRate);
 
         // ── 运行阶段（供面板 / 状态显示）──
         m.stage = this._stageText();
         m.countdown = this._countdownText();
+        if (m.stage === '后扫风') m.postSweep = true;   // 记录本轮确已执行后扫风
         m.alarms = this.getAlarms();
     }
 
