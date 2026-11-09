@@ -51,6 +51,11 @@ import {
 
 import { MotorControlBox, GroundBusBar, ThreePhaseMotor3D, InductionMotorExploded, T568BCableBench, CableTypesBench, LowVoltageGroundCable, PC, NetworkSwitch, L3Switch, Router, NetServer } from './export.js';
 
+// ── 主机高温冷却水（缸套淡水）温度控制系统：MIMIC + LDCL 控制器 + 过程模型 ──
+import { CoolingWaterMimic } from './components/CoolingWaterMimic.js';
+import { CoolingWaterPID } from './components/CoolingWaterPID.js';
+import { CoolingWaterSolver } from './tools/CoolingWaterSolver.js';
+
 import { componentConfigs, initSlider, applyAllPresets, PROJECT_PAGES } from './project/sys_ljdq8-3.js';
 import { PageManager } from './lib/PageManager.js';
     
@@ -218,6 +223,9 @@ export class ControlSystem {
 
         // ── FCM 燃油供油单元过程模型（EPC-50B 控制器）──
         this.fuelSolver = new FuelSupplySolver(this);
+
+        // ── 主机高温冷却水温度控制过程模型（LDCL 控制器 + MIMIC 图）──
+        this.coolingSolver = new CoolingWaterSolver(this);
 
         // ── 复合设备管理器 ──
         this.deviceManager = new DeviceManager(this);
@@ -1031,6 +1039,13 @@ export class ControlSystem {
             const start = performance.now();
             this.fuelSolver.solve(1 / 20);
             perfMonitor.recordMetric('fuelSolve', performance.now() - start);
+        }
+
+        // ── 主机冷却水温度控制求解（syy51_ljzdh83）──
+        if (this.coolingSolver) {
+            const start = performance.now();
+            this.coolingSolver.solve(1 / 20);
+            perfMonitor.recordMetric('coolingSolve', performance.now() - start);
         }
 
         // ── 复合设备更新（preUpdate + commit） ──

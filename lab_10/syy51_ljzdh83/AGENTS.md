@@ -51,10 +51,29 @@ pnpm run preview  # 预览构建产物
   `PROJECT_WORKFLOWS` 作为范式模板，**不要沿用旧工程的写法**。
   当前最新参照：`lab_10/syy50_ljzdh86/project/sys_ljdq8-6.js`（本工程的燃油供油单元单页工程），
   其次 `lab_10/syy39_ljdq54/project/sys_ljdq5-4.js`、`lab_10/syy38_ljdq53/project/sys_ljdq5-3.js`。
-  本工程当前项目文件：`project/sys_ljdq8-6.js`（船舶**燃油供油单元 FCM + EPC-50B**，**单页工程**；
-  两条设备：`epc`（EPC-50B 控制器，左右结构）+ `mimic`（供油单元 P&ID））。
-  前一项目 `project/sys_ljdq8-7.js`（辅锅炉 PLC，多页）与 `project/sys_ljdq8-8.js`（分油机 EPC-50）
-  文件与组件均保留，需要时可切回。
+  本工程当前项目文件：`project/sys_ljdq8-9.js`（船舶**主机高温冷却水（缸套淡水）温度控制系统**，**单页工程**；
+  两条设备：`mimic`（冷却水系统 MIMIC 图）+ `ldcl`（LDCL 冷却水温度控制器））。
+  前一项目 `project/sys_ljdq8-6.js`（燃油供油单元 FCM + EPC-50B）及更早的 `sys_ljdq8-7.js`（辅锅炉 PLC）、
+  `sys_ljdq8-8.js`（分油机 EPC-50）文件与组件均保留，需要时可切回。
+
+## 冷却水温度控制系统（`sys_ljdq8-9.js`）
+
+- 组件：`components/CoolingWaterMimic.js`（MIMIC）、`components/CoolingWaterController.js`（LDCL 盘）；
+  过程模型 `tools/CoolingWaterSolver.js`（`sys.coolingSolver`，在 `consys.js` 每帧 `solve(1/20)`）。
+- **控制量 Ctrl = 冷却水旁通阀开度（0~100 %）**：0 % 全经高温淡水冷却器（最冷），100 % 全旁通（最热）；
+  TEMP = TC 实测缸套水出口温度。自动方式为"负荷前馈 + PI + 积分分离"，85 ℃ 处灵敏度约 0.3 ℃/%。
+- **LDCL 盘部件 id**：`mode-knob` / `mode-knob-ccw`（Automatic / Manual）、`ldcl-state`、
+  `temp-auto` `temp-manu` `ctrl-auto` `ctrl-manu`（TEMP / Ctrl 行）、`key-minus` `key-plus` `key-set`、
+  `set-minus` `set-plus`、`alarm-reset` `alarm-ack` `lamp-test`。
+- **MIMIC 部件 id**：设备 `engine heater distiller cooler tank deaerator`；阀门 `wb-v4 wb-v28s wb-v5
+  wb-v25s wb-v27s wb-v6s wb-v7s wb-v8 wb-v9 wb-v502 wb-v12s wb-v13s wb-v15s wb-v26s`；
+  冷却泵 `cw1 cw2`（点击起动/停止）及面板按钮 `cw1-start cw1-stop cw2-start cw2-stop`；
+  调节阀 `rv-cooler` `rv-bypass`（上半区开大 / 下半区关小）；`mode-knob`（面板方式 MAN→STOP→AUTO）、
+  `panel1`（主电源）、`ldcl-mode temp-tag ctrl-tag`、仪表 `tc pt ps gauge`。
+- 泵"起动"按钮只会把方式改为 MAN 并运行（再点一次不会停），停止须点"停止"按钮或方式旋钮；工作流里
+  起动写 `_clickUntil(... 'cw1-start', p.run && p.mode==='MAN')`。
+- 主机保护：两台泵全停或出口压力 < 0.3 bar 持续约 5 s → PS 断开、主机停车，随后缸套水升温触发 A 11。
+- 故障走故障界面：`tt-fault` `pump1-fault` `pump2-fault` `valve-stuck` `controller-fault` `tank-leak`。
 - **步骤基本形状**：
   - `find`：`{ msg:'第 n 步：识别 xxx。', mode:'find', target:'<compId>', subTarget:'<partId>' }`（说明从简，见下节文字要求）
   - `check`：`{ msg, mode:'check', op:[ { type, target, part, msg, async act(){} }, … ], check(){…} }`
