@@ -38,8 +38,8 @@ const _ldcl = (sys) => _comp(sys, 'ldcl');
 // ═══════════════════════════════════════════════════════════════
 
 export const componentConfigs = [
-    { Class: CoolingWaterMimic, id: 'mimic', x: 26, y: 16, width: 1360, height: 750, visible: true },
-    { Class: CoolingWaterPID, id: 'ldcl', x: 1420, y: 120, width: 330, height: 330, visible: true },
+    { Class: CoolingWaterMimic, id: 'mimic', x: -150, y: 50, width: 1360, height: 750, visible: true },
+    { Class: CoolingWaterPID, id: 'ldcl', x: 1300, y: 550, width: 330, height: 290, visible: true },
 
     { Class: Multimeter, id: 'multimeter', x: 1120, y: 200, visible: false },
     { Class: MF47Multimeter, id: 'mf47-panel', x: 1050, y: 150, visible: false },
@@ -76,8 +76,11 @@ export function applyAllPresets(opts) {
     m.mode = 'AUTO';
     m.tempCtrl = 'AUTO';
     m.panelMain = true;
-    s.startPump('cw1');
-    s.startPump('cw2');
+    s.startPump('cw1');            // 只起动 1 台水泵
+    s.setPumpMode('cw2', 'AUTO');  // 2 号泵方式旋钮置「自动」作备用（PS 低压力延时 3 s 自动投入）
+    s.m.autoTimer = 0;
+    s.m.autoLead = null;
+    s.m.engineSw = true;   // 柴油机起停开关置于运行位（PS 建立后由联锁逻辑自动起动）
     if (sys.redrawAll) sys.redrawAll();
     s._tip('自动投用：2 台高温冷却淡水泵手动起动，控制方式 Automatic，温度定值控制投入');
 }
@@ -90,24 +93,29 @@ export async function applyStartSystem() {
     // 复位工艺状态，但保留「故障设置」里已设置的故障
     const keepFaults = { ...s.m.faults };
     Object.assign(s.m.sw, {
-        wbV25S: true, wbV27S: false, wbV6S: true, wbV7S: false,
-        wbV4: false, wbV26S: false, wbV28S: true, wbV5: true,
+        wbV25S: false, wbV27S: false, wbV6S: true, wbV7S: false,   // 预热器出口截止阀保持截止
+        wbV4: true, wbV26S: false, wbV28S: true, wbV5: true,       // 预热器并联阀保持导通
         wbV8: true, wbV9: true, wbV502: true, wbV12S: true, wbV13S: true, wbV15S: true,
     });
     s.m.mode = 'AUTO';
     s.m.tempCtrl = 'AUTO';
-    s.m.manualOut = 30;
+    s.m.manualOut = 70;
     s.m.integral = 0;
     s.m.loadNom = null;
     s.m.heatherOn = false;
     s.m.tank = Math.max(45, s.m.tank || 0);
     s.m.alarms.forEach(a => { a.active = false; a.ack = true; a.timer = 0; });
     Object.assign(s.m.faults, keepFaults);
-    s.startPump('cw1');
-    s.startPump('cw2');
+    // 两台泵方式旋钮都打到「自动」，不直接给起动信号；
+    // 由自动控制逻辑（PS 压力低 → 延时 3 s → 自动起动信号）自行起动一台，另一台备用
+    s.setPumpMode('cw1', 'AUTO');
+    s.setPumpMode('cw2', 'AUTO');
+    s.m.autoTimer = 0;
+    s.m.autoLead = null;
+    s.m.engineSw = true;   // 柴油机起停开关置于运行位（PS 建立后由联锁逻辑自动起动）
     await _sleep(600);
     if (sys.redrawAll) sys.redrawAll();
-    s._tip('起动系统：冷却水泵运行、Automatic 温度定值控制投入，等待水温回到设定值');
+    s._tip('起动系统：两台泵均置「自动」，Automatic 温度定值控制投入；PS 压力低将延时 3 s 自动起动一台（另一台备用）');
 }
 
 /** 工具栏「5 点步进」：起泵 → 手动加大操作量 → 自动回收 → 投蒸汽加热 → 报警复位 */
@@ -149,12 +157,10 @@ function _mkFault(id, name, system, key, alarm) {
 }
 
 export const FAULT_CONFIGS = {
-    'tt-fault': _mkFault('tt-fault', 'TC 温度变送器故障（读数为 ***）', '温度检测', 'tt', ''),
+    'tt-fault': _mkFault('tt-fault', 'TT 温度变送器故障（读数为 ***）', '温度检测', 'tt', ''),
     'pump1-fault': _mkFault('pump1-fault', '1 号冷却泵电机故障', '冷却水泵', 'pump1', 'A 21'),
     'pump2-fault': _mkFault('pump2-fault', '2 号冷却泵电机故障', '冷却水泵', 'pump2', 'A 21'),
     'valve-stuck': _mkFault('valve-stuck', '冷却水调节阀卡涩', '温度调节', 'valve', 'A 11'),
-    'controller-fault': _mkFault('controller-fault', 'LDCL 控制器故障（输出固定）', '控制器', 'controller', ''),
-    'tank-leak': _mkFault('tank-leak', '膨胀水柜泄漏', '淡水系统', 'leak', 'A 31'),
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -214,11 +220,15 @@ async function _pumpStop(sys, id) {
     return _clickUntil(sys, 'mimic', id + '-stop', s => !_m(s).pumps[id].run, 4);
 }
 
-/** 控制方式：旋钮点右半区 = Automatic，左半区 = Manual */
+/** 控制方式：A/M 单键切换（点按 'am'，直到方式与目标一致） */
 async function _setMode(sys, auto) {
-    _firePartClick(_ldcl(sys), auto ? 'mode-knob' : 'mode-knob-ccw');
-    await _sleep(350);
-    return _m(sys).mode === (auto ? 'AUTO' : 'MANU');
+    const want = auto ? 'AUTO' : 'MANU';
+    for (let i = 0; i < 4; i++) {
+        if (_m(sys).mode === want) return true;
+        _firePartClick(_ldcl(sys), 'am');
+        await _sleep(250);
+    }
+    return _m(sys).mode === want;
 }
 
 /** 调节阀：LDCL 面板 Ctrl 行 → 手动 / 自动 */
@@ -249,6 +259,29 @@ async function _startAll(sys) {
     await _pumpStart(sys, 'cw2');
     await _setRegAuto(sys);
     return _waitFor(sys, s => _m(s).psUp, 20000, 200);
+}
+
+/** 泵方式旋钮：点按直到方式为目标值（MAN / AUTO） */
+async function _pumpMode(sys, id, mode) {
+    const comp = sys.comps.mimic;
+    for (let i = 0; i < 3; i++) {
+        const p = _m(sys).pumps[id];
+        if (!p || p.mode === mode) return true;
+        _firePartClick(comp, id + '-mode');
+        await _sleep(260);
+    }
+    return !!(_m(sys) && _m(sys).pumps[id].mode === mode);
+}
+
+/** LDCL 的 SET 长按（mousedown → 800 ms → mouseup） */
+async function _setLong(ldcl) {
+    const hit = ldcl && ldcl.getClickablePartNode && ldcl.getClickablePartNode('set');
+    if (!hit) return false;
+    hit.fire('mousedown');
+    await _sleep(980);
+    hit.fire('mouseup');
+    if (ldcl) ldcl._longFired = false;   // 复位，避免影响后续短按
+    return true;
 }
 
 /** 手动把操作量调到目标附近（点 LDCL 的 M / P 键） */
@@ -295,26 +328,24 @@ export const PROJECT_WORKFLOWS = {
         steps: [
             { msg: '第 1 步：识别主机高温冷却水系统模拟图。', mode: 'find', target: 'mimic' },
             { msg: '第 2 步：识别主机（柴油机）与缸套水出口。', mode: 'find', target: 'mimic', subTarget: 'engine' },
-            { msg: '第 3 步：识别 TC 温度变送器（缸套水出口温度）。', mode: 'find', target: 'mimic', subTarget: 'tc' },
+            { msg: '第 3 步：识别 TT 温度变送器（缸套水出口温度）。', mode: 'find', target: 'mimic', subTarget: 'tt' },
             { msg: '第 4 步：识别 1# 高温冷却淡水泵。', mode: 'find', target: 'mimic', subTarget: 'cw1' },
             { msg: '第 5 步：识别 2# 高温冷却淡水泵（备用）。', mode: 'find', target: 'mimic', subTarget: 'cw2' },
             { msg: '第 6 步：识别高温淡水冷却器。', mode: 'find', target: 'mimic', subTarget: 'cooler' },
-            { msg: '第 7 步：识别冷却器支路调节阀（WB-V502）。', mode: 'find', target: 'mimic', subTarget: 'rv-cooler' },
-            { msg: '第 8 步：识别旁通支路调节阀（WB-V12S）。', mode: 'find', target: 'mimic', subTarget: 'rv-bypass' },
-            { msg: '第 9 步：识别除气柜。', mode: 'find', target: 'mimic', subTarget: 'deaerator' },
-            { msg: '第 10 步：识别高温冷却水膨胀水柜。', mode: 'find', target: 'mimic', subTarget: 'tank' },
-            { msg: '第 11 步：识别主机缸套水加热器。', mode: 'find', target: 'mimic', subTarget: 'heater' },
-            { msg: '第 12 步：识别造水机（用缸套水做热源）。', mode: 'find', target: 'mimic', subTarget: 'distiller' },
-            { msg: '第 13 步：识别 PT 压力变送器（泵吸入侧）。', mode: 'find', target: 'mimic', subTarget: 'pt' },
-            { msg: '第 14 步：识别 PS 水流开关。', mode: 'find', target: 'mimic', subTarget: 'ps' },
-            { msg: '第 15 步：识别高温冷却淡水泵面板（起动 / 停止）。', mode: 'find', target: 'mimic', subTarget: 'panel1' },
-            { msg: '第 16 步：识别 LDCL 冷却水温度控制器。', mode: 'find', target: 'ldcl' },
-            { msg: '第 17 步：识别 TEMP 温度显示（TC 实测值）。', mode: 'find', target: 'ldcl', subTarget: 'temp-auto' },
-            { msg: '第 18 步：识别 Ctrl 操作量显示（旁通阀开度 %）。', mode: 'find', target: 'ldcl', subTarget: 'ctrl-auto' },
-            { msg: '第 19 步：识别 LDCL 控制方式旋钮（Automatic / Manual）。', mode: 'find', target: 'ldcl', subTarget: 'mode-knob' },
-            { msg: '第 20 步：识别报警复位按钮与报警灯排。', mode: 'find', target: 'ldcl', subTarget: 'alarm-reset' },
+            { msg: '第 7 步：识别三通调节阀（冷却口 / 旁通口）。', mode: 'find', target: 'mimic', subTarget: 'rv-3way' },
+            { msg: '第 8 步：识别除气柜。', mode: 'find', target: 'mimic', subTarget: 'deaerator' },
+            { msg: '第 9 步：识别高温冷却水膨胀水柜。', mode: 'find', target: 'mimic', subTarget: 'tank' },
+            { msg: '第 10 步：识别主机缸套水加热器。', mode: 'find', target: 'mimic', subTarget: 'heater' },
+            { msg: '第 11 步：识别造水机（用缸套水做热源）。', mode: 'find', target: 'mimic', subTarget: 'distiller' },
+            { msg: '第 12 步：识别 PS 压力开关。', mode: 'find', target: 'mimic', subTarget: 'ps' },
+            { msg: '第 13 步：识别高温冷却淡水泵面板（起动 / 停止）。', mode: 'find', target: 'mimic', subTarget: 'panel1' },
+            { msg: '第 14 步：识别冷却水温度PID调节器。', mode: 'find', target: 'ldcl' },
+            { msg: '第 15 步：识别温度测量值显示（TT 实测值）。', mode: 'find', target: 'ldcl', subTarget: 'temp-auto' },
+            { msg: '第 16 步：识别操作量显示（调节器输出 %）。', mode: 'find', target: 'ldcl', subTarget: 'ctrl-auto' },
+            { msg: '第 17 步：识别PID调节器控制方式按键 A/M（Automatic / Manual）。', mode: 'find', target: 'ldcl', subTarget: 'am' },
+            { msg: '第 18 步：识别报警复位按钮与报警灯排。', mode: 'find', target: 'ldcl', subTarget: 'alarm-reset' },
             {
-                msg: '第 21 步：测试题——冷却水温度的控制手段。',
+                msg: '第 19 步：测试题——冷却水温度的控制手段。',
                 mode: 'quiz',
                 quizConfig: {
                     question: '主机缸套水温度偏高时，冷却水温度控制系统应如何动作？',
@@ -335,85 +366,76 @@ export const PROJECT_WORKFLOWS = {
         id: 'cw-manual', name: '2. 冷却水系统的手动操作',
         steps: [
             {
-                msg: '第 1 步：把控制方式放在 Manual，确认调节阀由人工给定。',
+                msg: '第 1 步：手动起动 1 号高温淡水泵。',
                 mode: 'check',
                 op: [
-                    { type: 'knob', target: 'ldcl', part: 'mode-knob-ccw', msg: '控制方式旋钮 → Manual', async act() { const s = _sysOf(this); await _setMode(s, false); } },
-                    { type: 'observe', target: 'ldcl', part: 'ldcl-state', msg: '确认状态显示 Manual', async act() { const s = _sysOf(this); await _waitFor(s, x => _m(x).mode === 'MANU', 5000, 150); } },
-                ],
-                check() { return !!(_m(_sysOf(this)) && _m(_sysOf(this)).mode === 'MANU'); },
-            },
-            {
-                msg: '第 2 步：打开冷却水泵吸入阀 WB-V8、WB-V9 与主管阀 WB-V5。',
-                mode: 'check',
-                op: [
-                    { type: 'switch', target: 'mimic', part: 'wb-v8', msg: '打开 1# 泵吸入阀 WB-V8', async act() { await _setValve(_sysOf(this), 'mimic', 'wb-v8', 'wbV8', true); } },
-                    { type: 'switch', target: 'mimic', part: 'wb-v9', msg: '打开 2# 泵吸入阀 WB-V9', async act() { await _setValve(_sysOf(this), 'mimic', 'wb-v9', 'wbV9', true); } },
-                    { type: 'switch', target: 'mimic', part: 'wb-v5', msg: '打开主管截止阀 WB-V5', async act() { await _setValve(_sysOf(this), 'mimic', 'wb-v5', 'wbV5', true); } },
-                ],
-                check() {
-                    const m = _m(_sysOf(this));
-                    return !!(m && m.sw.wbV8 && m.sw.wbV9 && m.sw.wbV5);
-                },
-            },
-            {
-                msg: '第 3 步：按起动按钮起动 1#、2# 高温冷却淡水泵，观察排出压力升高。',
-                mode: 'check',
-                op: [
+                    { type: 'knob', target: 'mimic', part: 'cw1-mode', msg: '1 号泵方式 → 手动', async act() {
+                        const s = _sysOf(this);
+                        for (let i = 0; i < 3; i++) {
+                            if (_m(s).pumps.cw1.mode === 'MAN') break;
+                            _firePartClick(s.comps.mimic, 'cw1-mode');
+                            await _sleep(260);
+                        }
+                    } },
                     { type: 'btn', target: 'mimic', part: 'cw1-start', msg: '按 1 号泵 [起动]', async act() { const s = _sysOf(this); await _pumpStart(s, 'cw1'); } },
-                    { type: 'btn', target: 'mimic', part: 'cw2-start', msg: '按 2 号泵 [起动]', async act() { const s = _sysOf(this); await _pumpStart(s, 'cw2'); } },
-                    { type: 'observe', target: 'mimic', part: 'ps', msg: '观察 PS 水流开关接通、压力建立', async act() { const s = _sysOf(this); await _waitFor(s, x => _m(x).psUp, 20000, 200); } },
+                    { type: 'observe', target: 'mimic', part: 'ps', msg: 'PS 闭合、排出压力建立', async act() { const s = _sysOf(this); await _waitFor(s, x => _m(x).psUp, 20000, 200); } },
                 ],
                 check() {
                     const m = _m(_sysOf(this));
-                    return !!(m && m.pumps.cw1.run && m.pumps.cw2.run && m.psUp && m.pressOut > 0.8);
+                    return !!(m && m.pumps.cw1.run && m.pumps.cw1.mode === 'MAN' && m.psUp);
                 },
             },
             {
-                msg: '第 4 步：打开冷却器支路 WB-V502 与旁通支路 WB-V12S、WB-V13S，建立水循环。',
+                msg: '第 2 步：起动柴油机，观察温度上升。',
                 mode: 'check',
                 op: [
-                    { type: 'switch', target: 'mimic', part: 'wb-v502', msg: '打开 WB-V502', async act() { await _setValve(_sysOf(this), 'mimic', 'wb-v502', 'wbV502', true); } },
-                    { type: 'switch', target: 'mimic', part: 'wb-v12s', msg: '打开旁通阀 WB-V12S', async act() { await _setValve(_sysOf(this), 'mimic', 'wb-v12s', 'wbV12S', true); } },
-                    { type: 'switch', target: 'mimic', part: 'wb-v13s', msg: '打开除气柜入口阀 WB-V13S', async act() { await _setValve(_sysOf(this), 'mimic', 'wb-v13s', 'wbV13S', true); } },
-                    { type: 'switch', target: 'mimic', part: 'wb-v15s', msg: '打开膨胀水柜出口阀 WB-V15S', async act() { await _setValve(_sysOf(this), 'mimic', 'wb-v15s', 'wbV15S', true); } },
-                ],
-                check() {
-                    const m = _m(_sysOf(this));
-                    return !!(m && m.sw.wbV502 && m.sw.wbV12S && m.sw.wbV13S && m.sw.wbV15S);
-                },
-            },
-            {
-                msg: '第 5 步：手动用 Ctrl 键把操作量加到约 40 %（开大旁通），观察温度上升。',
-                mode: 'check',
-                op: [
-                    { type: 'btn', target: 'ldcl', part: 'key-minus', msg: '点 [−] 把关小旁通', async act() { const s = _sysOf(this); await _manipTo(s, 20); } },
-                    { type: 'btn', target: 'ldcl', part: 'key-plus', msg: '点 [+] 把操作量加到约 40 %', async act() { const s = _sysOf(this); await _manipTo(s, 40); } },
-                    { type: 'observe', target: 'mimic', part: 'gauge', msg: '观察缸套水温度随旁通开大而上升', async act() {
+                    { type: 'switch', target: 'mimic', part: 'engine-start', msg: '柴油机起停开关 → 运转', async act() {
+                        const s = _sysOf(this);
+                        if (!_m(s).engineSw) _firePartClick(s.comps.mimic, 'engine-start');
+                        await _waitFor(s, x => _m(x).engineOn, 12000, 200);
+                    } },
+                    { type: 'observe', target: 'mimic', part: 'gauge', msg: '观察缸套水温度上升', async act() {
                         const s = _sysOf(this);
                         const t0 = _m(s).temp;
-                        await _waitFor(s, x => _m(x).temp > t0 + 1, 60000, 250);
+                        await _waitFor(s, x => _m(x).temp > t0 + 3, 180000, 250);
                     } },
                 ],
                 check() {
                     const m = _m(_sysOf(this));
-                    return !!(m && m.manip >= 35 && m.manip <= 45);
+                    return !!(m && m.engineOn && m.temp > 62);
                 },
             },
             {
-                msg: '第 6 步：手动把操作量减到约 20 %（关小旁通），观察温度下降。',
+                msg: '第 3 步：手动调节阀门冷却口开度到 70 %，观察温度下降。',
                 mode: 'check',
                 op: [
-                    { type: 'btn', target: 'ldcl', part: 'key-minus', msg: '点 [−] 把关小旁通', async act() { const s = _sysOf(this); await _manipTo(s, 20); } },
-                    { type: 'observe', target: 'mimic', part: 'gauge', msg: '观察缸套水温度随冷却器支路开大而下降', async act() {
+                    { type: 'knob', target: 'ldcl', part: 'am', msg: 'A/M → 手动（MANU）', async act() { const s = _sysOf(this); await _setMode(s, false); } },
+                    { type: 'btn', target: 'ldcl', part: 'key-plus', msg: '▲ 把冷却口开度加到 70 %', async act() { const s = _sysOf(this); await _manipTo(s, 70); } },
+                    { type: 'observe', target: 'mimic', part: 'gauge', msg: '观察温度随冷却口开大而下降', async act() {
                         const s = _sysOf(this);
                         const t0 = _m(s).temp;
-                        await _waitFor(s, x => _m(x).temp < t0 - 0.5, 120000, 250);
+                        await _waitFor(s, x => _m(x).temp < t0 - 1.5, 300000, 300);
                     } },
                 ],
                 check() {
                     const m = _m(_sysOf(this));
-                    return !!(m && m.manip >= 15 && m.manip <= 25);
+                    return !!(m && m.mode === 'MANU' && m.manip >= 65 && m.manip <= 75);
+                },
+            },
+            {
+                msg: '第 4 步：手动调节阀门冷却口开度到 50 %，观察温度上升。',
+                mode: 'check',
+                op: [
+                    { type: 'btn', target: 'ldcl', part: 'key-minus', msg: '▼ 把冷却口开度减到 50 %', async act() { const s = _sysOf(this); await _manipTo(s, 50); } },
+                    { type: 'observe', target: 'mimic', part: 'gauge', msg: '观察温度随冷却口关小而上升', async act() {
+                        const s = _sysOf(this);
+                        const t0 = _m(s).temp;
+                        await _waitFor(s, x => _m(x).temp > t0 + 1, 300000, 300);
+                    } },
+                ],
+                check() {
+                    const m = _m(_sysOf(this));
+                    return !!(m && m.manip >= 46 && m.manip <= 54);
                 },
             },
         ],
@@ -423,174 +445,136 @@ export const PROJECT_WORKFLOWS = {
         id: 'cw-auto', name: '3. 冷却水温度的自动控制',
         steps: [
             {
-                msg: '第 1 步：起动两台冷却泵，控制方式旋钮放到 Automatic。',
+                msg: '第 1 步：将两台泵的操作方式改为自动，观察 1 号泵自动起动。',
                 mode: 'check',
                 op: [
-                    { type: 'btn', target: 'mimic', part: 'cw1-start', msg: '按 1 号泵 [起动]', async act() { const s = _sysOf(this); await _pumpStart(s, 'cw1'); } },
-                    { type: 'btn', target: 'mimic', part: 'cw2-start', msg: '按 2 号泵 [起动]', async act() { const s = _sysOf(this); await _pumpStart(s, 'cw2'); } },
-                    { type: 'knob', target: 'ldcl', part: 'mode-knob', msg: '控制方式旋钮 → Automatic', async act() { const s = _sysOf(this); await _setMode(s, true); } },
-                    { type: 'observe', target: 'ldcl', part: 'temp-tag', msg: '确认调节阀 TEMP 行切到 AUTO', async act() { const s = _sysOf(this); await _setRegAuto(s); } },
+                    { type: 'knob', target: 'mimic', part: 'cw1-mode', msg: '1 号泵方式 → 自动', async act() { const s = _sysOf(this); await _pumpMode(s, 'cw1', 'AUTO'); } },
+                    { type: 'knob', target: 'mimic', part: 'cw2-mode', msg: '2 号泵方式 → 自动（备用）', async act() { const s = _sysOf(this); await _pumpMode(s, 'cw2', 'AUTO'); } },
+                    { type: 'observe', target: 'mimic', part: 'cw1', msg: 'PS 低压力延时 3 s，1 号泵自动起动', async act() { const s = _sysOf(this); await _waitFor(s, x => _m(x).pumps.cw1.run && _m(x).psUp, 30000, 200); } },
                 ],
                 check() {
                     const m = _m(_sysOf(this));
-                    const s = _solver(_sysOf(this));
-                    return !!(m && m.pumps.cw1.run && m.pumps.cw2.run && m.mode === 'AUTO' && s.autoActive());
+                    return !!(m && m.pumps.cw1.mode === 'AUTO' && m.pumps.cw2.mode === 'AUTO'
+                        && m.pumps.cw1.run && !m.pumps.cw2.run && m.psUp);
                 },
             },
             {
-                msg: '第 2 步：把设定值改为 84.0 ℃，观察操作量 Ctrl 调节、温度跟随设定值。',
+                msg: '第 2 步：起动柴油机，观察温度逐渐上升。',
                 mode: 'check',
                 op: [
-                    { type: 'btn', target: 'ldcl', part: 'set-minus', msg: '点 SP [−] 把设定值改为 84.0 ℃', async act() { const s = _sysOf(this); await _setpointTo(s, 84.0); } },
-                    { type: 'observe', target: 'ldcl', part: 'ctrl-manu', msg: '观察 Ctrl 输出随偏差变化', async act() { const s = _sysOf(this); await _waitFor(s, x => Math.abs(_m(x).tcMeas - 84) < 1.2, 180000, 300); } },
-                ],
-                check() {
-                    const m = _m(_sysOf(this));
-                    return !!(m && Math.abs(m.setTemp - 84.0) < 0.01 && Math.abs(m.tcMeas - 84) < 1.5);
-                },
-            },
-            {
-                msg: '第 3 步：主机负荷变化后，观察控制器自动把温度调回设定值。',
-                mode: 'check',
-                op: [
-                    { type: 'observe', target: 'mimic', part: 'engine', msg: '主机负荷由 64 % 增至 85 %（热负荷增大）', async act() { const s = _sysOf(this); _m(s).load = 85; await _sleep(1500); } },
-                    { type: 'observe', target: 'ldcl', part: 'ctrl-auto', msg: '观察 Ctrl 自动增大后再稳定，温度回到设定值', async act() {
+                    { type: 'switch', target: 'mimic', part: 'engine-start', msg: '柴油机起停开关 → 运转', async act() {
                         const s = _sysOf(this);
-                        await _waitFor(s, x => Math.abs(_m(x).tcMeas - _m(x).setTemp) < 1.2, 180000, 300);
+                        if (!_m(s).engineSw) _firePartClick(s.comps.mimic, 'engine-start');
+                        await _waitFor(s, x => _m(x).engineOn, 12000, 200);
+                    } },
+                    { type: 'observe', target: 'mimic', part: 'gauge', msg: '观察缸套水温度上升', async act() {
+                        const s = _sysOf(this);
+                        const t0 = _m(s).temp;
+                        await _waitFor(s, x => _m(x).temp > t0 + 3, 180000, 250);
                     } },
                 ],
                 check() {
                     const m = _m(_sysOf(this));
-                    return !!(m && m.load === 85 && Math.abs(m.tcMeas - m.setTemp) < 1.5);
+                    return !!(m && m.engineOn && m.temp > 63);
                 },
             },
             {
-                msg: '第 4 步：把设定值改回 85.0 ℃，温度重新稳定。',
+                msg: '第 3 步：将 PID 调节器打到自动，观察温度调节过程。',
                 mode: 'check',
                 op: [
-                    { type: 'btn', target: 'ldcl', part: 'set-plus', msg: '点 SP [+] 把设定值改回 85.0 ℃', async act() { const s = _sysOf(this); await _setpointTo(s, 85.0); } },
-                    { type: 'observe', target: 'mimic', part: 'gauge', msg: '观察温度回到 85 ℃ 附近', async act() {
+                    { type: 'knob', target: 'ldcl', part: 'am', msg: '按 A/M 键 → Automatic', async act() { const s = _sysOf(this); await _setMode(s, true); } },
+                    { type: 'observe', target: 'ldcl', part: 'display', msg: '观察调节器输出动作、温度向设定值靠近', async act() {
                         const s = _sysOf(this);
-                        await _waitFor(s, x => Math.abs(_m(x).tcMeas - 85) < 1.2, 180000, 300);
+                        await _waitFor(s, x => Math.abs(_m(x).temp - _m(x).setTemp) < 3, 300000, 400);
                     } },
                 ],
                 check() {
                     const m = _m(_sysOf(this));
-                    return !!(m && Math.abs(m.setTemp - 85) < 0.01 && Math.abs(m.tcMeas - 85) < 1.5);
+                    return !!(m && m.mode === 'AUTO' && Math.abs(m.temp - m.setTemp) < 4);
                 },
             },
             {
-                msg: '第 5 步：测试题——为何调节阀要投"自动"。',
-                mode: 'quiz',
-                quizConfig: {
-                    question: '冷却水泵全开、负荷变化时，温度控制为什么必须投 Automatic？',
-                    options: [
-                        '负荷与海水温度变化使热平衡不断改变，人工难以及时跟随；Automatic 下控制器按 TEMP 偏差自动调节 Ctrl，使温度稳定在设定值',
-                        'Automatic 可以提高冷却水泵的扬程',
-                        'Automatic 会关闭旁通阀，让水全部进入冷却器',
-                        '自动控制只用于起动阶段，运行中不需要',
-                    ],
-                    answer: 0,
-                    analysis: '负荷增加时主机放热量增加、温度上升，控制器按偏差增大旁通开度（Ctrl 增大）以减小冷却量；负荷减小则相反。人工调节滞后、误差大，自动控制才能保证缸套水温度稳定在设定值。',
-                },
-            },
-        ],
-    },
-
-    'cw-fault': {
-        id: 'cw-fault', name: '4. 冷却水温度控制系统的故障处理',
-        steps: [
-            {
-                msg: '第 1 步：起动系统，进入 Automatic 温度定值控制，复位报警。',
+                msg: '第 4 步：增大柴油机负荷到 80 %，观察温度上升、PID 调节、温度稳定。',
                 mode: 'check',
                 op: [
-                    { type: 'wire', button: 'btnStartSys', msg: '点击工具栏「起动系统」', flashMs: 1600, holdMs: 800,
-                      async act() { const s = _sysOf(this); await s.applyStartSystem(); await _sleep(800); } },
-                    { type: 'observe', target: 'ldcl', part: 'ldcl-state', msg: '等待温度稳定到设定值', async act() {
-                        const s = _sysOf(this);
-                        await _waitFor(s, x => _m(x).psUp && Math.abs(_m(x).tcMeas - _m(x).setTemp) < 1.5, 180000, 300);
+                    { type: 'btn', target: 'mimic', part: 'engine-load-inc', msg: '负荷旋钮右半区，逐级加到 80 %', async act() {
+                        const s = _sysOf(this), c = s.comps.mimic;
+                        for (let i = 0; i < 8 && _m(s).load < 80; i++) { _firePartClick(c, 'engine-load-inc'); await _sleep(320); }
                     } },
-                    { type: 'btn', target: 'ldcl', part: 'alarm-reset', msg: '按「报警复位」', async act() { const s = _sysOf(this); await _resetAlarms(s); } },
-                ],
-                check() {
-                    const m = _m(_sysOf(this));
-                    return !!(m && m.mode === 'AUTO' && m.psUp && Math.abs(m.tcMeas - m.setTemp) < 2);
-                },
-            },
-            {
-                msg: '第 2 步：设置「1 号冷却泵电机故障」，观察备用泵与报警。',
-                mode: 'check',
-                op: [
-                    { type: 'fault', fault: 'pump1-fault', msg: '勾选「1 号冷却泵电机故障」并应用设置', async act() { await _sleep(600); } },
-                    { type: 'observe', target: 'mimic', part: 'cw1', msg: '1 号泵停转', async act() { const s = _sysOf(this); await _waitFor(s, x => !_m(x).pumps.cw1.run, 15000, 200); } },
-                    { type: 'observe', target: 'mimic', part: 'cw2', msg: '2 号泵维持冷却水供应（压力不中断）', async act() { const s = _sysOf(this); await _waitFor(s, x => _m(x).pumps.cw2.run && _m(x).psUp, 15000, 200); } },
-                    { type: 'observe', target: 'ldcl', part: 'alarm-reset', msg: '观察 LDCL 报警灯排', async act() { await _sleep(1200); } },
-                ],
-                check() {
-                    const m = _m(_sysOf(this));
-                    return !!(m && m.faults.pump1 && !m.pumps.cw1.run && m.pumps.cw2.run && m.psUp);
-                },
-            },
-            {
-                msg: '第 3 步：修复泵故障，起动 1 号泵，复位报警。',
-                mode: 'check',
-                op: [
-                    { type: 'fault', fault: 'pump1-fault', repair: true, msg: '取消「1 号冷却泵电机故障」', async act() { await _sleep(600); } },
-                    { type: 'btn', target: 'mimic', part: 'cw1-start', msg: '按 1 号泵 [起动]', async act() { const s = _sysOf(this); await _pumpStart(s, 'cw1'); } },
-                    { type: 'btn', target: 'ldcl', part: 'alarm-reset', msg: '按「报警复位」', async act() { const s = _sysOf(this); await _resetAlarms(s); } },
-                ],
-                check() {
-                    const m = _m(_sysOf(this));
-                    return !!(m && !m.faults.pump1 && m.pumps.cw1.run && !m.alarms.some(a => a.active));
-                },
-            },
-            {
-                msg: '第 4 步：设置「TC 温度变送器故障」，观察 TEMP 显示 ***、自动调节切除。',
-                mode: 'check',
-                op: [
-                    { type: 'fault', fault: 'tt-fault', msg: '勾选「TC 温度变送器故障」并应用设置', async act() { await _sleep(600); } },
-                    { type: 'observe', target: 'ldcl', part: 'temp-tag', msg: 'TEMP 显示 ***，调节阀转 MANU 保持开度', async act() {
+                    { type: 'observe', target: 'ldcl', part: 'display', msg: '负荷增加后温度上升，PID 自动加大冷却口开度', async act() {
                         const s = _sysOf(this);
-                        await _waitFor(s, x => !Number.isFinite(_solver(x).showValue()) && !_solver(x).autoActive(), 10000, 150);
+                        await _waitFor(s, x => _m(x).temp > _m(x).setTemp + 1, 120000, 300);
                     } },
-                    { type: 'observe', target: 'ldcl', part: 'ctrl-manu', msg: 'Ctrl 保持故障前开度', async act() { await _sleep(1500); } },
-                ],
-                check() {
-                    const s = _solver(_sysOf(this));
-                    const m = _m(_sysOf(this));
-                    return !!(s && m && m.faults.tt && !Number.isFinite(s.showValue()) && !s.autoActive());
-                },
-            },
-            {
-                msg: '第 5 步：修复 TC 故障，恢复自动控制并复位报警。',
-                mode: 'check',
-                op: [
-                    { type: 'fault', fault: 'tt-fault', repair: true, msg: '取消「TC 温度变送器故障」', async act() { await _sleep(600); } },
-                    { type: 'btn', target: 'ldcl', part: 'ctrl-auto', msg: '调节阀 Ctrl → AUTO', async act() { const s = _sysOf(this); await _setRegAuto(s); } },
-                    { type: 'btn', target: 'ldcl', part: 'alarm-reset', msg: '按「报警复位」', async act() { const s = _sysOf(this); await _resetAlarms(s); } },
-                ],
-                check() {
-                    const s = _solver(_sysOf(this));
-                    const m = _m(_sysOf(this));
-                    return !!(s && m && !m.faults.tt && s.autoActive() && !m.alarms.some(a => a.active));
-                },
-            },
-            {
-                msg: '第 6 步：两台泵全停，观察冷却水中断导致主机保护停车。',
-                mode: 'check',
-                op: [
-                    { type: 'btn', target: 'mimic', part: 'cw1-stop', msg: '按 1 号泵 [停止]', async act() { const s = _sysOf(this); await _pumpStop(s, 'cw1'); } },
-                    { type: 'btn', target: 'mimic', part: 'cw2-stop', msg: '按 2 号泵 [停止]', async act() { const s = _sysOf(this); await _pumpStop(s, 'cw2'); } },
-                    { type: 'observe', target: 'mimic', part: 'ps', msg: 'PS 水流开关断开', async act() { const s = _sysOf(this); await _waitFor(s, x => !_m(x).psUp, 20000, 200); } },
-                    { type: 'observe', target: 'mimic', part: 'engine', msg: '主机保护停车（缸套水温度持续上升）', async act() {
+                    { type: 'observe', target: 'ldcl', part: 'display', msg: 'PID 调节后温度重新稳定', async act() {
                         const s = _sysOf(this);
-                        await _waitFor(s, x => _m(x).tripped, 30000, 200);
-                        await _waitFor(s, x => _m(x).tcMeas > _m(x).setTemp + 10 && _m(x).alarms.some(a => a.active && a.code === 'A11'), 600000, 500);
+                        await _waitFor(s, x => Math.abs(_m(x).temp - _m(x).setTemp) < 1.5, 300000, 400);
                     } },
                 ],
                 check() {
                     const m = _m(_sysOf(this));
-                    return !!(m && m.tripped && !m.psUp && m.alarms.some(a => a.active && a.code === 'A11'));
+                    return !!(m && m.load >= 80 && Math.abs(m.temp - m.setTemp) < 2);
+                },
+            },
+            {
+                msg: '第 5 步：在 PID 面板把温度设定值调整为 80 ℃，观察调节过程。',
+                mode: 'check',
+                op: [
+                    { type: 'btn', target: 'ldcl', part: 'set-minus', msg: '▼ 把设定值降到 80.0 ℃', async act() { const s = _sysOf(this); await _setpointTo(s, 80); } },
+                    { type: 'observe', target: 'ldcl', part: 'display', msg: '观察 PID 调节、温度跟随到 80 ℃', async act() {
+                        const s = _sysOf(this);
+                        await _waitFor(s, x => Math.abs(_m(x).temp - 80) < 1.5, 300000, 400);
+                    } },
+                ],
+                check() {
+                    const m = _m(_sysOf(this));
+                    return !!(m && Math.abs(m.setTemp - 80) < 0.05 && Math.abs(m.temp - 80) < 2);
+                },
+            },
+            {
+                msg: '第 6 步：长按 SET 进入参数界面，短按 SET 进入 P，按 ▲ 把 P 设为 7，短按 SET 保存，长按 SET 返回。',
+                mode: 'check',
+                op: [
+                    { type: 'btn', target: 'ldcl', part: 'set', msg: '长按 SET 进入参数组', async act() { const s = _sysOf(this); await _setLong(s.comps.ldcl); } },
+                    { type: 'btn', target: 'ldcl', part: 'set', msg: '短按 SET 进入 P 参数', async act() { const s = _sysOf(this); _firePartClick(s.comps.ldcl, 'set'); await _sleep(300); } },
+                    { type: 'btn', target: 'ldcl', part: 'up', msg: '按 ▲ 两次，把 P 调到 7.0', async act() {
+                        const s = _sysOf(this), c = s.comps.ldcl;
+                        for (let i = 0; i < 2; i++) { _firePartClick(c, 'up'); await _sleep(220); }
+                    } },
+                    { type: 'btn', target: 'ldcl', part: 'set', msg: '短按 SET 保存 P', async act() { const s = _sysOf(this); _firePartClick(s.comps.ldcl, 'set'); await _sleep(300); } },
+                    { type: 'btn', target: 'ldcl', part: 'set', msg: '长按 SET 返回主界面', async act() { const s = _sysOf(this); await _setLong(s.comps.ldcl); } },
+                ],
+                check() {
+                    const s = _sysOf(this);
+                    const m = _m(s);
+                    const c = s.comps.ldcl;
+                    return !!(m && m.bandP === 7 && c && c._mnu && c._mnu.level === 0);
+                },
+            },
+            {
+                msg: '第 7 步：长按 SET 进入参数组，按 ▲ 切到 ALARM 组，短按 SET 依次查看 L、H、HH 三个报警值，最后长按 SET 返回主界面。',
+                mode: 'check',
+                op: [
+                    { type: 'btn', target: 'ldcl', part: 'set', msg: '长按 SET 进入参数组', async act() { const s = _sysOf(this); await _setLong(s.comps.ldcl); } },
+                    { type: 'btn', target: 'ldcl', part: 'up', msg: '▲ 切到 ALARM 参数组', async act() {
+                        const s = _sysOf(this), c = s.comps.ldcl;
+                        for (let i = 0; i < 4 && c._menuValue.text() !== 'ALARM'; i++) { _firePartClick(c, 'up'); await _sleep(250); }
+                    } },
+                    { type: 'btn', target: 'ldcl', part: 'set', msg: '短按 SET 进入报警限参数', async act() { const s = _sysOf(this); _firePartClick(s.comps.ldcl, 'set'); await _sleep(300); } },
+                    { type: 'observe', target: 'ldcl', part: 'display', msg: '查看温度低报警限 L（默认 55 ℃）', async act() { await _sleep(1400); } },
+                    { type: 'btn', target: 'ldcl', part: 'set', msg: '短按 SET 查看温度高报警限 H（默认 95 ℃）', async act() { const s = _sysOf(this); _firePartClick(s.comps.ldcl, 'set'); await _sleep(1200); } },
+                    { type: 'btn', target: 'ldcl', part: 'set', msg: '短按 SET 查看温度高高报警限 HH（默认 98 ℃）', async act() {
+                        const s = _sysOf(this);
+                        _firePartClick(s.comps.ldcl, 'set');
+                        await _sleep(1400);
+                    } },
+                    { type: 'btn', target: 'ldcl', part: 'set', msg: '长按 SET 返回主界面', async act() { const s = _sysOf(this); await _setLong(s.comps.ldcl); } },
+                ],
+                check() {
+                    const s = _sysOf(this);
+                    const c = s.comps.ldcl;
+                    const seen = (c && c._seenParams) || {};
+                    // 三个报警限都进入查看过，且已长按 SET 返回主界面（L0）
+                    return !!(c && c._mnu && c._mnu.level === 0 && seen.L && seen.H && seen.HH);
                 },
             },
         ],

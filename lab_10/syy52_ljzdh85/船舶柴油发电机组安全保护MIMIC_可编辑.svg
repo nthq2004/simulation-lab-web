@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1600" height="1000" viewBox="0 0 1600 1000">
+  <title>船舶柴油发电机组安全保护系统 MIMIC 图</title>
+  <desc>纯矢量、可编辑的船舶柴油发电机组安全保护示意图，包含转速、滑油压力、冷却水温度三路信号及停机执行链。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e9eff5"/><stop offset="1" stop-color="#cbd6e1"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#284968"/><stop offset="1" stop-color="#142b43"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5f7f8"/><stop offset=".5" stop-color="#aab8c3"/><stop offset="1" stop-color="#687b8a"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#263d50"/>
+    </marker>
+    <marker id="redArrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#d92727"/>
+    </marker>
+    <style>
+      text{font-family:"Microsoft YaHei","Noto Sans CJK SC",Arial,sans-serif;fill:#142638}
+      .title{font-size:31px;font-weight:700;fill:#fff}
+      .head{font-size:20px;font-weight:700;text-anchor:middle}
+      .sub{font-size:15px;text-anchor:middle}
+      .label{font-size:18px;font-weight:700;text-anchor:middle}
+      .small{font-size:15px;text-anchor:middle}
+      .pipe{fill:none;stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
+      .signal{fill:none;stroke:#1d3346;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;marker-end:url(#arrow)}
+      .shutdown{fill:none;stroke:#d92727;stroke-width:8;stroke-linecap:round;stroke-linejoin:round;marker-end:url(#redArrow)}
+      .card{fill:#dcecf8;stroke:#6389a7;stroke-width:2.5}
+      .device{fill:url(#steel);stroke:#40596c;stroke-width:3}
+      .detail{fill:none;stroke:#40596c;stroke-width:3}
+      .white{fill:#fff}
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <rect x="18" y="16" width="1564" height="76" rx="12" fill="url(#panel)"/>
+  <text x="800" y="65" class="title" text-anchor="middle">船舶柴油发电机组 — 安全保护系统 MIMIC 图</text>
+
+  <!-- 顶部设备名称 -->
+  <g>
+    <rect class="card" x="35" y="125" width="190" height="78" rx="10"/>
+    <text x="130" y="157" class="head">柴油发电机组</text><text x="130" y="184" class="sub">Diesel Generator</text>
+
+    <rect class="card" x="270" y="125" width="205" height="78" rx="10"/>
+    <text x="372" y="157" class="head">转速传感器</text><text x="372" y="184" class="sub">Magnetic Pick-up</text>
+
+    <rect class="card" x="510" y="125" width="220" height="78" rx="10"/>
+    <text x="620" y="157" class="head">滑油压力开关</text><text x="620" y="184" class="sub">L.O. Pressure Switch</text>
+
+    <rect class="card" x="765" y="125" width="245" height="78" rx="10"/>
+    <text x="887" y="157" class="head">PT100 温度传感器</text><text x="887" y="184" class="sub">Coolant Temperature</text>
+  </g>
+
+  <!-- 柴油机矢量示意 -->
+  <g id="diesel-engine" transform="translate(45 275)">
+    <rect x="0" y="85" width="230" height="190" rx="18" class="device"/>
+    <rect x="18" y="55" width="194" height="55" rx="8" fill="#6e8799" stroke="#40596c" stroke-width="3"/>
+    <path d="M25 55 V20 H75 V55 M88 55 V8 H138 V55 M151 55 V20 H201 V55" class="detail"/>
+    <rect x="18" y="125" width="194" height="105" rx="8" fill="#8da2b1" stroke="#40596c" stroke-width="3"/>
+    <g fill="#dce5eb" stroke="#40596c" stroke-width="3">
+      <rect x="35" y="140" width="35" height="72" rx="5"/><rect x="82" y="140" width="35" height="72" rx="5"/>
+      <rect x="129" y="140" width="35" height="72" rx="5"/><rect x="176" y="140" width="22" height="72" rx="4"/>
+    </g>
+    <g stroke="#40596c" stroke-width="3">
+      <path d="M42 151h21 M42 164h21 M42 177h21 M89 151h21 M89 164h21 M89 177h21 M136 151h21 M136 164h21 M136 177h21"/>
+    </g>
+    <circle cx="250" cy="175" r="48" fill="url(#steel)" stroke="#40596c" stroke-width="4"/>
+    <circle cx="250" cy="175" r="19" fill="#6e8494" stroke="#40596c" stroke-width="3"/>
+    <g stroke="#40596c" stroke-width="5">
+      <path d="M250 123v-13 M250 237v13 M198 175h-13 M302 175h13 M213 138l-10-10 M287 212l10 10 M287 138l10-10 M213 212l-10 10"/>
+    </g>
+    <rect x="15" y="282" width="285" height="38" rx="7" fill="#19364f"/>
+    <text x="157" y="308" font-size="19" font-weight="700" text-anchor="middle" fill="#fff">柴油机 / 发电机</text>
+  </g>
+
+  <!-- 转速齿轮与磁电式传感器 -->
+  <g id="speed-sensor">
+    <circle cx="370" cy="480" r="52" fill="url(#steel)" stroke="#40596c" stroke-width="4"/>
+    <circle cx="370" cy="480" r="27" fill="#758b9b" stroke="#40596c" stroke-width="3"/>
+    <circle cx="370" cy="480" r="9" fill="#dce5eb" stroke="#40596c" stroke-width="3"/>
+    <g stroke="#40596c" stroke-width="7">
+      <path d="M370 420v-12 M370 540v12 M310 480h-12 M430 480h12 M328 438l-9-9 M412 522l9 9 M412 438l9-9 M328 522l-9 9"/>
+    </g>
+    <rect x="348" y="350" width="44" height="65" rx="8" class="device"/>
+    <path d="M370 415v18" stroke="#263d50" stroke-width="5"/>
+    <text x="370" y="570" class="label">磁电式转速传感器</text>
+    <text x="370" y="594" class="small">检测飞轮齿圈转速</text>
+  </g>
+
+  <!-- 滑油管路与压力开关 -->
+  <g id="oil-pressure-switch">
+    <path d="M505 355 H720" class="pipe" stroke="#e2a51b"/>
+    <path d="M505 355 H720" fill="none" stroke="#f7d36d" stroke-width="3"/>
+    <path d="M610 355v-58" stroke="#a97812" stroke-width="8"/>
+    <rect x="585" y="245" width="50" height="54" rx="8" class="device"/>
+    <rect x="595" y="229" width="30" height="18" rx="4" fill="#526b7c" stroke="#40596c" stroke-width="2"/>
+    <path d="M610 299v-8" stroke="#40596c" stroke-width="4"/>
+    <text x="610" y="397" class="label">滑油管路</text>
+    <text x="610" y="420" class="small">Lube Oil Pipe</text>
+    <text x="610" y="218" class="small">压力开关（开关量）</text>
+  </g>
+
+  <!-- 冷却水管路与 PT100 -->
+  <g id="pt100-sensor">
+    <path d="M790 355 H1030" class="pipe" stroke="#2389d0"/>
+    <path d="M790 355 H1030" fill="none" stroke="#8ed2f5" stroke-width="3"/>
+    <path d="M890 355v-63" stroke="#40596c" stroke-width="7"/>
+    <rect x="868" y="245" width="44" height="48" rx="8" class="device"/>
+    <path d="M875 245l15-24 15 24" fill="#c8d3db" stroke="#40596c" stroke-width="3"/>
+    <text x="910" y="397" class="label">冷却水管路</text>
+    <text x="910" y="420" class="small">Cooling Water Pipe</text>
+    <text x="890" y="218" class="small">PT100（电阻信号）</text>
+  </g>
+
+  <!-- 三路输入信号汇入安全保护模块 -->
+  <path d="M370 600 V650 H535 V685" class="signal"/>
+  <path d="M610 355 V620 H650 V685" class="signal"/>
+  <path d="M890 355 V620 H760 V685" class="signal"/>
+  <path d="M275 450 H315 V480" class="signal"/>
+
+  <!-- 安全保护模块 -->
+  <g id="safety-module">
+    <rect x="470" y="685" width="440" height="190" rx="14" fill="url(#panel)" stroke="#10283e" stroke-width="4"/>
+    <text x="690" y="728" font-size="27" font-weight="700" text-anchor="middle" fill="#fff">安全保护模块</text>
+    <text x="690" y="757" font-size="17" text-anchor="middle" fill="#dceaf4">SAFETY PROTECTION MODULE</text>
+    <line x1="495" y1="773" x2="885" y2="773" stroke="#8ba5ba" stroke-width="2"/>
+    <text x="520" y="808" font-size="18" fill="#fff">● 超速保护（Overspeed）</text>
+    <text x="520" y="837" font-size="18" fill="#fff">● 滑油低压保护（Low L.O. Pressure）</text>
+    <text x="520" y="866" font-size="18" fill="#fff">● 冷却水高温保护（High Temp.）</text>
+  </g>
+
+  <!-- 停机执行链 -->
+  <g id="shutdown-chain">
+    <rect class="card" x="1000" y="475" width="155" height="65" rx="9"/>
+    <text x="1077" y="502" class="head">停机继电器</text><text x="1077" y="525" class="sub">Shutdown Relay</text>
+    <rect x="1190" y="475" width="165" height="65" rx="9"/>
+    <text x="1272" y="502" class="head">停机电磁阀</text><text x="1272" y="525" class="sub">Stop Solenoid</text>
+    <rect x="1390" y="475" width="175" height="65" rx="9"/>
+    <text x="1477" y="502" class="head">燃油切断机构</text><text x="1477" y="525" class="sub">Fuel Shutoff</text>
+
+    <!-- 继电器 -->
+    <rect x="1045" y="575" width="65" height="80" rx="7" class="device"/>
+    <rect x="1057" y="590" width="41" height="48" rx="4" fill="#d9e1e7" stroke="#40596c" stroke-width="2"/>
+    <path d="M1062 630l12-30 12 30" fill="none" stroke="#c56a20" stroke-width="5"/>
+    <circle cx="1077" cy="644" r="5" fill="#d92727"/>
+    <!-- 电磁阀 -->
+    <rect x="1230" y="575" width="85" height="80" rx="12" class="device"/>
+    <rect x="1250" y="550" width="45" height="30" rx="6" fill="#596f80" stroke="#40596c" stroke-width="3"/>
+    <path d="M1272 605v34 M1255 622h34" stroke="#40596c" stroke-width="4"/>
+    <path d="M1230 615h-25 M1315 615h25" stroke="#40596c" stroke-width="8"/>
+    <!-- Fuel rack -->
+    <rect x="1415" y="580" width="125" height="75" rx="9" class="device"/>
+    <path d="M1430 615h92 M1450 596v38 M1470 596v38 M1490 596v38" stroke="#40596c" stroke-width="4"/>
+    <path d="M1515 590l25-20 M1515 645l25 20" stroke="#40596c" stroke-width="5"/>
+    <text x="1477" y="688" class="small">Fuel Rack → 0</text>
+
+    <!-- 主控制信号 -->
+    <path d="M910 780 H970 V615 H1040" class="shutdown"/>
+    <path d="M1115 615 H1220" class="shutdown"/>
+    <path d="M1320 615 H1405" class="shutdown"/>
+    <path d="M1545 615 H1570" class="shutdown"/>
+    <text x="990" y="755" font-size="17" font-weight="700" fill="#c51f27">SHUTDOWN COMMAND</text>
+  </g>
+
+  <!-- 末端状态 -->
+  <g id="engine-stop">
+    <rect x="1295" y="770" width="270" height="95" rx="12" fill="#19364f" stroke="#0e263b" stroke-width="3"/>
+    <circle cx="1330" cy="817" r="13" fill="#d92727" stroke="#fff" stroke-width="2"/>
+    <text x="1435" y="810" font-size="23" font-weight="700" text-anchor="middle" fill="#fff">柴油机停止</text>
+    <text x="1435" y="840" font-size="17" text-anchor="middle" fill="#dceaf4">ENGINE STOP</text>
+  </g>
+  <path d="M1477 690 V750 H1435 V765" class="shutdown"/>
+
+  <!-- 图例 -->
+  <g id="legend">
+    <rect x="45" y="900" width="1510" height="65" rx="10" fill="#edf3f7" stroke="#9aabba" stroke-width="2"/>
+    <line x1="85" y1="932" x2="145" y2="932" stroke="#e2a51b" stroke-width="9"/>
+    <text x="160" y="939" font-size="17">滑油管路</text>
+    <line x1="340" y1="932" x2="400" y2="932" stroke="#2389d0" stroke-width="9"/>
+    <text x="415" y="939" font-size="17">冷却水管路</text>
+    <line x1="610" y1="932" x2="670" y2="932" stroke="#1d3346" stroke-width="5" marker-end="url(#arrow)"/>
+    <text x="690" y="939" font-size="17">传感器信号</text>
+    <line x1="900" y1="932" x2="960" y2="932" stroke="#d92727" stroke-width="7" marker-end="url(#redArrow)"/>
+    <text x="980" y="939" font-size="17">停机控制命令</text>
+    <text x="1515" y="939" font-size="15" text-anchor="end" fill="#536779">示意图｜具体逻辑以机型电路图为准</text>
+  </g>
+</svg>
