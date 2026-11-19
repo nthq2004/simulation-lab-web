@@ -194,16 +194,16 @@ export class PageManager {
         wrap.id = 'page-index-panel';
         Object.assign(wrap.style, {
             position: 'absolute', inset: '0', zIndex: '990',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: '14px', fontFamily: 'Arial, sans-serif', pointerEvents: 'auto',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start',
+            gap: '12px', fontFamily: 'Arial, sans-serif', pointerEvents: 'auto',
             background: 'linear-gradient(160deg,#eef3f7 0%,#dde6ee 100%)',
-            padding: '16px', boxSizing: 'border-box', overflow: 'auto',
+            padding: '18px 16px 24px', boxSizing: 'border-box', overflow: 'auto',
         });
 
         const title = document.createElement('div');
         title.textContent = sys.pageIndexTitle || '仿真平台 · 页面索引';
         Object.assign(title.style, {
-            fontSize: '24px', fontWeight: 'bold', color: '#2c3e50', marginBottom: '2px',
+            fontSize: '24px', fontWeight: 'bold', color: '#2c3e50', marginBottom: '2px', marginTop: '2px',
         });
         wrap.appendChild(title);
 
@@ -212,24 +212,25 @@ export class PageManager {
         Object.assign(sub.style, { fontSize: '13px', color: '#62757f', marginBottom: '6px' });
         wrap.appendChild(sub);
 
-        // 每行 4 个页面（grid 四列，卡片宽度自适应窗口）
+        // 每行 5 个页面、上下可容纳 4 行（grid 五列，卡片更宽更高）
         const grid = document.createElement('div');
         Object.assign(grid.style, {
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-            gap: '16px',
-            width: 'min(1400px, 96vw)',
+            gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+            gap: '14px',
+            width: 'min(1840px, 98vw)',
             alignContent: 'start',
         });
 
         this.pages.filter(p => p.type !== 'index').forEach(pg => {
             const card = document.createElement('div');
             Object.assign(card.style, {
-                width: '100%', minHeight: '132px', boxSizing: 'border-box',
-                background: '#fff', borderRadius: '12px',
-                boxShadow: '0 6px 18px rgba(44,62,80,0.18)', border: '1px solid #cfd8dc',
-                padding: '14px 16px', cursor: 'pointer', transition: 'transform .15s, box-shadow .15s',
+                width: '100%', minHeight: '150px', maxHeight: '178px', boxSizing: 'border-box',
+                background: '#fff', borderRadius: '11px',
+                boxShadow: '0 5px 14px rgba(44,62,80,0.16)', border: '1px solid #cfd8dc',
+                padding: '13px 15px', cursor: 'pointer', transition: 'transform .15s, box-shadow .15s',
                 display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+                overflow: 'hidden',
             });
             card.onmouseenter = () => {
                 card.style.transform = 'translateY(-4px)';
@@ -244,17 +245,20 @@ export class PageManager {
 
             const h = document.createElement('div');
             h.textContent = `${pg.id}. ${pg.name}`;
-            Object.assign(h.style, { fontSize: '18px', fontWeight: 'bold', color: '#1395eb' });
+            Object.assign(h.style, { fontSize: '16.5px', fontWeight: 'bold', color: '#1395eb', lineHeight: '1.3' });
             card.appendChild(h);
 
             const d = document.createElement('div');
             d.textContent = pg.desc || '';
-            Object.assign(d.style, { fontSize: '13px', color: '#546e7a', lineHeight: '1.5', marginTop: '8px', flex: '1' });
+            Object.assign(d.style, {
+                fontSize: '12.5px', color: '#546e7a', lineHeight: '1.45', marginTop: '8px', flex: '1',
+                display: '-webkit-box', WebkitLineClamp: '3', WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            });
             card.appendChild(d);
 
             const go = document.createElement('div');
             go.textContent = '进入 →';
-            Object.assign(go.style, { fontSize: '13px', color: '#2e7d32', fontWeight: 'bold', marginTop: '10px' });
+            Object.assign(go.style, { fontSize: '12.5px', color: '#2e7d32', fontWeight: 'bold', marginTop: '8px' });
             card.appendChild(go);
 
             card.onclick = () => this.navigateTo(pg.id);

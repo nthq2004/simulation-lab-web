@@ -27,7 +27,10 @@ const _text = (o) => new Konva.Text(Object.assign({ listening: false, fontFamily
 const _line = (o) => new Konva.Line(Object.assign({ listening: false }, o));
 const _circle = (o) => new Konva.Circle(Object.assign({ listening: false }, o));
 
-const C_PIPE = '#1f6f43';
+const C_PIPE = '#a8cdb8';      // 管路底色（淡绿）：让滑油流动虚线（橙）更醒目
+
+// 滑油温度高 → 自动减速：> 60 ℃ 延时 6 s 触发，< 58 ℃ 还原（回差 2 ℃）
+const LO_SLD_ON = 60, LO_SLD_OFF = 58, LO_SLD_DELAY = 6;
 const C_GREEN = '#2ecc40';
 const C_GRAY = '#b0b6bb';
 
@@ -386,6 +389,48 @@ export class MainEngineLubeOilMimic extends BaseComponent {
     _createDynamic() {
         const d = this._dynamicGroup;
 
+        // ── 滑油流动虚线（沿管路走向；速度 = 冷却水流速的一半：每帧相位 +1，冷却水为 +2）──
+        this._flowPhase = 0;
+        this._flows = [];
+        const flow = (pts, cond, w = 4) => {
+            const n = new Konva.Line({
+                points: pts, stroke: '#e2a020', strokeWidth: (typeof w === 'function' ? 4 : w),
+                dash: [9, 7], dashOffset: 0, opacity: 0, lineCap: 'round', listening: false,
+            });
+            d.add(n);
+            this._flows.push({ node: n, cond, w });
+        };
+        const vkOf = (k) => (k === 'p1' ? 'v1' : 'v2');
+        const runK = (k) => {
+            const m = this.m;
+            return !!(m.pumps[k].on && m.valves[vkOf(k)] && !m.pumps[k].overload);
+        };
+        const anyRun = () => runK('p1') || runK('p2');
+        // 柴油机 → 循环柜 → 吸入总管
+        flow([150, 275, 150, 590], () => anyRun());
+        flow([280, 650, 400, 650, 400, 670], () => anyRun());
+        flow([400, 590, 400, 670], () => anyRun());
+        // 两条并联泵支路（截止阀 → 泵 → 单向阀 → 出口总管）
+        [['p1', 590], ['p2', 670]].forEach(([k, y]) => {
+            flow([400, y, 446, y], () => runK(k), 3.4);
+            flow([473, y, 514, y], () => runK(k), 3.4);
+            flow([566, y, 606, y], () => runK(k), 3.4);
+            flow([633, y, 700, y], () => runK(k), 3.4);
+        });
+        flow([700, 590, 700, 670], () => anyRun());
+        flow([700, 630, 760, 630], () => anyRun());
+        // 旁通支路（100 % − 调节阀开度）
+        flow([760, 630, 760, 575, 1026, 575], () => anyRun() && this.m.cv3 < 99,
+            () => 1.4 + 2.4 * Math.max(0, Math.min(100, 100 - this.m.cv3)) / 100);
+        // 滑油冷却器支路（调节阀开度越大流量越大）
+        const coolCond = () => anyRun() && this.m.cv3 > 1;
+        const coolW = () => 1.4 + 2.4 * Math.max(0, Math.min(100, this.m.cv3)) / 100;
+        flow([760, 630, 760, 680, 830, 680], coolCond, coolW);
+        flow([970, 680, 1040, 680, 1040, 591], coolCond, coolW);
+        // 三通阀出口 → 滤器 → 柴油机滑油入口
+        flow([1054, 575, 1120, 575, 1120, 240, 1060, 240], () => anyRun());
+        flow([930, 240, 270, 240], () => anyRun());
+
         this._vv = {
             v1: this._valveMan(d, 460, 590),
             v2: this._valveMan(d, 460, 670),
@@ -630,6 +675,24 @@ export class MainEngineLubeOilMimic extends BaseComponent {
         m.temp += (tTarget - m.temp) * Math.min(1, dt / 4);
         m.pid.pv = m.temp;
 
+        // 滑油温度高 → 延时 6 s 触发主机自动减速；低于 58 ℃ 还原（回差 2 ℃）
+        const acSld = this.sys && this.sys.ac600;
+        if (acSld && typeof acSld.safetyAction === 'function') {
+            if (m.temp > LO_SLD_ON) {
+                this._loSldT = (this._loSldT || 0) + dt;
+                if (this._loSldT >= LO_SLD_DELAY && !this._loSld) {
+                    this._loSld = true;
+                    acSld.safetyAction('SLD', 'ME-LO-T');
+                }
+            } else if (m.temp < LO_SLD_OFF) {
+                this._loSldT = 0;
+                if (this._loSld) {
+                    this._loSld = false;
+                    if (typeof acSld.safetyClear === 'function') acSld.safetyClear('SLD', 'ME-LO-T');
+                }
+            }
+        }
+
         // 柴油机：起停手柄 / 负荷指针 / 活塞 / 火焰
 try {
         const eng = m.engOn;
@@ -649,6 +712,18 @@ try {
         }
 
         } catch (e) { /* 忽略动画异常，保证泵/阀仍刷新 */ }
+
+        // 滑油流动（速度 = 冷却水的 1/2：每帧相位 +1，与 dash 周期 [9,7] 的 16 像素周期对齐）
+        this._flowPhase = ((this._flowPhase || 0) + 1) % 16;
+        (this._flows || []).forEach((f) => {
+            let on = false;
+            try { on = !!f.cond(); } catch (e) { on = false; }
+            f.node.opacity(on ? 0.95 : 0);
+            if (on) {
+                f.node.dashOffset(-this._flowPhase);
+                f.node.strokeWidth(typeof f.w === 'function' ? Math.max(0.8, f.w()) : f.w);
+            }
+        });
 
         // 阀门
         ['v1', 'v2'].forEach((k) => {
@@ -764,7 +839,7 @@ try {
         if (prSw && pr) {
             prSw.normal = (typeof pr.getSwitchOutput === 'function') ? pr.getSwitchOutput() : (pr.isEnergized ? 1 : 0);
         }
-        // 主机安保停车：滑油低压开关报警后，报警系统的安保延时（5 s）到且未被越控
+        // 主机安保停车：压力继电器 NC 触点闭合（压力低）→ 报警系统的安保延时（6 s）到且未被越控
         // → 执行 SHD，主机自动停车（起动手柄回到停止位；重新起动手柄即复位该标志）
         if (this._shdCnt == null) this._shdCnt = 0;
         const shdCnt = (kc && Array.isArray(kc.safetyActions))

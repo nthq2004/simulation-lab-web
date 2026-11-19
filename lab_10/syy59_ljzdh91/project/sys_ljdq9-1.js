@@ -36,6 +36,8 @@ import { ExtensionAlarmUnit } from '../components/ExtensionAlarmUnit.js';
 import { FieldbusTopology } from '../components/FieldbusTopology.js';
 import { DeadmanPanel } from '../components/DeadmanPanel.js';
 import { MainEngineLubeOilMimic } from '../components/MainEngineLubeOilMimic.js';
+import { CoolingWaterMimic } from '../components/CoolingWaterMimic.js';
+import { CoolingWaterPID } from '../components/CoolingWaterPID.js';
 import { PressRelay } from '../components/PressRelay.js';
 import { Ac600ConsolePanel } from '../components/Ac600ConsolePanel.js';
 import { Ac600LocalPanel } from '../components/Ac600LocalPanel.js';
@@ -195,38 +197,8 @@ async function _resetRig(sys) {
 // 故障配置（走工具栏「故障设置」界面）
 // ═══════════════════════════════════════════════════════════════
 
-export const FAULT_CONFIGS = {
-    'me-lo-press': {
-        id: 'me-lo-press', name: '主机滑油进机压力低（滑油泵排出压力下降）', system: '滑油系统',
-        check() { const M = _M(window.sys); const t = M && M.tag('ME-LO-P'); return !!(t && t.fault); },
-        trigger() { const M = _M(window.sys); if (M) M.setFault('ME-LO-P', true); },
-        repair() { const M = _M(window.sys); if (M) M.setFault('ME-LO-P', false); },
-    },
-    'me-cw-temp': {
-        id: 'me-cw-temp', name: '主机缸套冷却水出口温度高（冷却器脏堵）', system: '冷却水系统',
-        check() { const M = _M(window.sys); const t = M && M.tag('ME-CW-T'); return !!(t && t.fault); },
-        trigger() { const M = _M(window.sys); if (M) M.setFault('ME-CW-T', true); },
-        repair() { const M = _M(window.sys); if (M) M.setFault('ME-CW-T', false); },
-    },
-    'lo-pr-sw': {
-        id: 'lo-pr-sw', name: '滑油低压开关动作（压力开关触点误闭合）', system: '滑油系统',
-        check() { const M = _M(window.sys); const t = M && M.tag('ME-LO-PR-SW'); return !!(t && t.fault); },
-        trigger() { const M = _M(window.sys); if (M) M.setFault('ME-LO-PR-SW', true); },
-        repair() { const M = _M(window.sys); if (M) M.setFault('ME-LO-PR-SW', false); },
-    },
-    'lo-pump-f': {
-        id: 'lo-pump-f', name: '主滑油泵故障跳闸（备用泵自动投入）', system: '滑油系统',
-        check() { const M = _M(window.sys); const t = M && M.tag('ME-LO-PUMP-F'); return !!(t && t.fault); },
-        trigger() { const M = _M(window.sys); if (M) M.setFault('ME-LO-PUMP-F', true); },
-        repair() { const M = _M(window.sys); if (M) M.setFault('ME-LO-PUMP-F', false); },
-    },
-    'blg-high': {
-        id: 'blg-high', name: '舱底水高位（舱底泵未起动）', system: '舱底系统',
-        check() { const M = _M(window.sys); const t = M && M.tag('BLG-LV'); return !!(t && t.fault); },
-        trigger() { const M = _M(window.sys); if (M) M.setFault('BLG-LV', true); },
-        repair() { const M = _M(window.sys); if (M) M.setFault('BLG-LV', false); },
-    },
-};
+/** 本工程不设故障设置（故障列表为空） */
+export const FAULT_CONFIGS = {};
 
 /** 确保「值班呼叫 Watch calling」对话框已打开（关闭时先点顶部「ECR watch」打开） */
 async function _ensureWatchCall(sys) {
@@ -535,6 +507,12 @@ export const PROJECT_PAGES = [
             + ' → 旁通与滑油冷却器 → 三通调节阀 → 滤器 → YT1226 压力开关与压力变送器 → 柴油机右下入口；'
             + '含温度传感器与 PID 调节器面板、两台滑油泵控制面板',
     },
+    {
+        id: 11, name: '主机缸套冷却水温度控制系统', comps: ['cwmimic', 'cwpid'],
+        desc: '主机高温冷却水（缸套淡水）系统 MIMIC：主机 → 缸套水加热器 / 造水机 / 旁通 → 高温淡水冷却器、'
+            + '两台高温冷却淡水泵、三通调节阀、除气柜与膨胀水柜、TT 温度变送器与温度表；'
+            + '右侧 LDCL 温度 PID 调节器面板（AUTO / MANU 切换、SV 设定、P/I/DB 与报警限参数）',
+    },
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -556,6 +534,10 @@ export const componentConfigs = [
     { Class: DeadmanPanel, id: 'deadman', x: -120, y: 50, page: 9, visible: true },
     { Class: MainEngineLubeOilMimic, id: 'lomimic', x: -120, y: 10, page: 10, visible: true },
     { Class: PressRelay, id: 'psw1', x: 220, y: 30, page: 10, visible: true, lowStart: 0, lowEnd: 0.5, diffStart: 0.02, diffEnd: 0.12, setPoint: 30, differential: 30 },
+
+    // ══ 主机缸套冷却水温度控制系统（页 11）══
+    { Class: CoolingWaterMimic, id: 'cwmimic', x: -150, y: 40, page: 11, visible: true },
+    { Class: CoolingWaterPID, id: 'cwpid', x: 1280, y: 510, page: 11, visible: true },
 
     // ══ 7 种标准仪表（默认隐藏，通过「选择仪表」调出）══
     { Class: Multimeter, id: 'multimeter', x: 700, y: 200, page: 6, visible: false },

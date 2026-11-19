@@ -171,7 +171,8 @@ export const ALARM_TAGS = [
     T('ME-LO-TK', '滑油循环柜液位', 'M/E LO CIRC TANK LEVEL LOW', 'ME-LO', '%', 'low', 40, 62, [0, 100], { db: 2, delay: 8 }),
     T('ME-LO-CYL', '气缸油柜液位', 'M/E CYL OIL TANK LEVEL LOW', 'ME-LO', '%', 'low', 30, 55, [0, 100], { db: 2, delay: 8 }),
     D('ME-LO-PUMP-F', '主滑油泵故障', 'M/E LO PUMP TRIP', 'ME-LO', { delay: 2, prio: 'A' }),
-    D('ME-LO-PR-SW', '滑油低压开关', 'M/E LO PRESS LOW SW', 'ME-LO', { delay: 1, prio: 'A', safety: 'SHD', safetyDelay: 5 }),
+    // 压力继电器（YT1226）NC 触点闭合 = 低低压动作 → 安保延时 6 s 后自动停车；延时内触点断开则不动作
+    D('ME-LO-PR-SW', '滑油低压开关', 'M/E LO PRESS LOW SW', 'ME-LO', { delay: 0, prio: 'A', safety: 'SHD', safetyDelay: 6 }),
     D('ME-LO-FILT-SW', '滑油滤器堵塞开关', 'M/E LO FILTER BLOCKED', 'ME-LO', { delay: 2, prio: 'C' }),
 
     // ── ⑥ M/E FO SYSTEM 主机燃油 ──
@@ -453,6 +454,11 @@ export class KChiefSolver {
             } else if (back) {
                 tag.timer = 0;
                 if (al) {
+                    // 故障在安保延时内恢复（触点断开）→ 撤销尚未执行的安保动作
+                    if (this._safetyTimers[tag.id] != null) {
+                        delete this._safetyTimers[tag.id];
+                        this._log(`安保延时取消：${tag.name} 已恢复正常，不执行自动动作`);
+                    }
                     if (al.state === 'ACK') {
                         this._clear(tag.id);
                     } else {
@@ -475,6 +481,9 @@ export class KChiefSolver {
             if (tag && al && !al.override) {
                 this.safetyActions.unshift({ tagId, type: tag.safety, t: stamp(), ts: Date.now(), name: tag.name });
                 if (this.safetyActions.length > 20) this.safetyActions.pop();
+                // 联锁到主机遥控模型：执行实际的停车 / 减速（MCU 主机的燃油切断）
+                const ac = this.sys && this.sys.ac600;
+                if (ac && typeof ac.safetyAction === 'function') ac.safetyAction(tag.safety, tagId);
                 this._log(`安保动作：${tag.name} 触发主机${tag.safety === 'SHD' ? '自动停车' : '自动减速'}`);
             }
         }

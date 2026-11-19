@@ -59,7 +59,7 @@ pnpm run preview  # 预览构建产物
 ## 本工程：10 页工程（`project/sys_ljdq9-1.js`，生效项目文件）
 
 `consys.js:50` 与 `lib/WorkflowManager.js:4` 均引用 `project/sys_ljdq9-1.js`（与 `project/sys_ljdq10-4.js`
-内容相同，为同一工程的副本）。**共 10 页（页 0 索引 + 10 个电路页），现有 0 条工作流**
+内容相同，为同一工程的副本）。**共 12 页（页 0 索引 + 11 个电路页），现有 0 条工作流**
 （原「模拟量参数的修改」「开关量参数的修改」两条流程已按要求删除，`PROJECT_WORKFLOWS = {}`，
 辅助函数 `_click` `_openParamByTag` `_turnScrew` 等仍保留供后续复用）。
 
@@ -75,6 +75,12 @@ pnpm run preview  # 预览构建产物
 | 8 | `topo` | 现场总线型监视报警系统（K-Chief 600 拓扑） |
 | 9 | `deadman` | 轮机员安全系统（Dead Man） |
 | 10 | `lomimic` + `psw1` | 主机滑油系统（MIMIC + YT1226 压力继电器） |
+| 11 | `cwmimic` + `cwpid` | 主机缸套冷却水温度控制系统（MIMIC + LDCL 温度 PID 面板） |
+
+> **索引页版式**（`lib/PageManager.js` 的 `_showIndexPanel()`）：**标题/说明固定在上方**（浮层 `justify-content: flex-start`），
+> **5 列网格**（`repeat(5, minmax(0,1fr))`，`gap 14px`，宽 `min(1840px, 98vw)`），
+> 卡片 `minHeight 150px / maxHeight 178px`、标题 16.5px、说明 12.5px（3 行截断），
+> **一屏可容纳 5 × 4 = 20 张卡**。
 
 ## 主机遥控系统 AC 600（页 1~5，MAN B&W AutoChief 600）
 
@@ -82,7 +88,7 @@ pnpm run preview  # 预览构建产物
   组件侧用 `ac600Of(sys)` 取实例）。5 个页面共享同一状态，任一处操作其余页面同步变化。
   主要字段：`controlPos`（`BRIDGE` / `ECR` / `LOCAL`，三处互斥，只有当前位置能操车钟）、
   `engineMode`（`SEA` / `STANDBY` / `FWE`）、`leverIdx`（`TELEGRAPH` 11 档，0=NAV FULL … 10=EM'CY ASTERN）、
-  `rpmCmd` / `rpm` / `load` / `startAir`（28.3 bar）/ `controlAir`（7.0 bar）/ `hydOil`（280 bar）、
+  `rpmCmd`（车令/LEVER）/ `setp`（受限后的转速给定，送调速器）/ `rpm`（实际转速，**倒车为负值**）/ `activeLimiter`（正在执行的限制名）/ `load` / `startAir`（28.3 bar）/ `controlAir`（7.0 bar）/ `hydOil`（280 bar）、
   `running` / `starting` / `startBlocked` / `startFail`、`slowDown` / `shutDown` / `cancelSHD` / `cancelSLD` /
   `cancelLimits`、`turningGearOut`（盘车机脱开）/ `airDistributorOk` / `mainStartValveOk` / `engineReady`、
   `alarm` / `alarmText` / `silenced` / `acked`、`runHours` / `rev`。
@@ -90,6 +96,30 @@ pnpm run preview  # 预览构建产物
   `startEngine(slow)` `emergencyStop()` `toggleEmStopCover()` `pressEmStop()`（自锁：按下→应急停车并保持，
   再按→弹出取消）`cancelSafety('SHD'|'SLD'|'LIM')` `toggleSafety(kind)` `raiseAlarm()` `ack()` `silence()`
   `lampTest()` `toggleTurningGear()` `toggleLoadLimit()` `reset()`。
+- **负荷**：`load = 22 + 0.9 × |rpm|`（上限 105 %，负荷限制时封顶 80 %）—— **倒车按转速绝对值计负荷**，
+  反向转速越大负荷越高（−21 → 41.5 %、−41 → 59.5 %、−55 → 72.1 %），正/倒车对称；`fuelIndex` 取 `load`。
+- **限制链路（`_stepSetp()`）**：车令 `rpmCmd` → 受限 `setp` → 实际 `rpm`。
+  · 车令落临界禁区（30~37）：**升速避下限 SETP=37**、**降速避上限 SETP=50**（方向按实际转速趋势判断），限制名 `Crit. Speed`；
+  · 升速：`setp < 57` 走加速度限制（2 rpm/s，`Accel. Lim.`），`≥57` 走 Load Up 程序（57→68 / 3 min ≈ 0.061 rpm/s，`Load Up`）；
+  · 降速：`setp > 57` 走 Load Down 程序（68→57 / 2 min，`Load Down`），`≤57` 走减速度限制（3 rpm/s，`Decel. Lim.`）；
+  · `setp` 不取整（程序速率很慢，取整会卡住）；`limits` 字段由 Limiters 面板 SAVE 同步；
+  · **Cancel Limits 越控**（`model.cancelLimits`）时 `_stepSetp()` 直接令 `setp = 目标值`（加速/减速/Load Up·Down 速率限制全部取消），
+    仅保留临界转速避让与最低稳定转速；
+  · **主机惯性最大变速率 `model.inertiaRate = 68/15 ≈ 4.53 rpm/s`**：`rpm` 追随 `setp` 时按此速率升降
+    （停车动作仍为 55 rpm/s），因此**所有限制取消时 68 → 0 约 15 s**（最快下降，不会瞬跳）、0 → 68 约 15.4 s；
+  · **起动方向随车令**（`_startDir = rpmCmd >= 0 ? 1 : -1`）：倒车车令时起动空气把主机**反转**转车到 −12 rpm，
+    完成后最低转速取 −12（正车仍 +12）；转车目标为 `_startDir * 12`；
+  · **车令稳定 0.4 s 才起动**（`_cmdHold`，`rpmCmd` 一变就清零）：拖动车钟途中车令连续变化，不得起动——
+    否则从倒车侧往上拖到正车全速时，拖过倒车区那一下会以**倒车**方向起动（之后才被纠正，属明显错误）；
+  · **静止时不自行升速**：`!running && |rpm| < 1` 时 `rpm` 固定为 0（必须经起动程序用起动空气转起来），
+    否则车令稳定 0.4 s 之前就把转速顶过 1 rpm，"起动"被跳过（Engine State 不显示 Starting）；
+  · **过零换向不得重复起动**：`_autoStart()` 要求主机**静止 ≥ 0.3 s**（`_restTime`，`|rpm| < 1` 时累加）才允许起动。
+    否则「正车全速 → 应急倒车」时转速过零 `running` 变假，会被当成"停机"反复起动（而且方向是正车），出现来回摆动；现在只会在过零后**起动一次倒车**；
+  · **起动空气转车 `START_DURATION = 3 s`**：转车期间转速由 0 **平顺**升到约 12 rpm（`rpm += (12-rpm)*min(1,dt*1.2)`），
+    结束后按惯性速率加速。⚠ 不要把时长设长或让转速收敛到固定值（如 10 rpm），否则从 STOP 推到全速会出现
+    「转速长时间卡在 10 rpm」的平台（原来是 10 s 平台，已改掉）；慢转程序在此基础上再加 `slowTurnDurS`；
+    ⚠ `rpm` **不要**再取整到 0.1（每帧取整会在慢速率下累积掉速，实测把 4.53 变成 4.0），只在 |rpm| < 0.05 时归零；
+  · **正在执行的限制显示在主页 SETP/LEVER 柱下方**（如 `Accel. Lim.` / `Load Up`），SETP 柱与数值显示受限给定、LEVER 柱显示本面板车钟。
 - **菜单系统（照 AutoChief 600 ACP 真机两级结构）**：
   - **第 1 级**：菜单区 9 个主菜单（Alarms / Limiters / Control Pos. / Misc Menu / Safety System /
     Engine State / B&W Modes / Param. Change / Home），点某项后**菜单区整体切换成该菜单的二级按钮组**，
@@ -99,9 +129,99 @@ pnpm run preview  # 预览构建产物
     Limiters 二级按钮为 `Set Limiters` / `Show Limiters`；**Show Limiters 共 12 项**（扫气压力/转矩/燃油指数/慢降/最低稳定转速/
     手动RPM(Chief)/加速率/减速率/Load Up/Load Down/慢转程序/临界转速），列宽 LIMITER 310 · STATUS 180 · LEVEL 510，
     扫气与转矩的 LEVEL 按「压力-油量」3 点格式（`0 bar-50 %；1.15 bar-80 %；2.3 bar-100 %`）；
+    **STATUS 为实时判定**：扫气/转矩＝调速器输出 `fuelIndex` 超过 3 点折线允许值才 ACTIVE；
+    加速/减速＝`rpmCmd` 与 `rpm` 差 >1 时 ACTIVE；Load Up/Down＝加减速且实际转速落在 57~68 时 ACTIVE；
+    慢转＝停机 `stoppedTime ≥ stopMin`（默认 20 min）才 ACTIVE；临界＝车钟落在 30~37 才 ACTIVE；
+    最大转速（Manual RPM Chief）＝车钟超过 68/55 才 ACTIVE；其余默认 INACTIVE；
+    默认值：加速 57 rpm·2 rpm/s、减速 57 rpm·−3 rpm/s、Load Up 57~68·3 min、Load Down 57~68·2 min、
+    慢转 20 min·10 s、临界 30.0~37.0 rpm；
     **Set Limiters 与之一一对应 12 行**（行高 33），每行 6 槽等间距文本框（双击编辑，DOM input），行尾独立 SAVE/CANCEL，
     仅当本行有修改时 SAVE 可用，CANCEL 还原（`_lim` 为已保存值、`_limEdit` 为编辑副本）；编辑时暂停页面重建；
-    Misc：Counters·Order Printer·Service (LTU)；Safety：Safety alarms·Emergency stop·Slow down/Shut down；
+    Misc：Counters·Order Printer·Service (LTU)；
+    **Safety**：`Shut Down`(0,0) / `Slow Down`(1,0) / `RESET SLD`(3,0) / `Emg. Stop`(0,1) / `RPM Detector`(1,1) ——
+    **Shut Down / Slow Down / Emg. Stop 三页统一用 `_paintSafetyTable()`**：真机版式表头
+    `Active | Cancelled | Loop fail | Description | Value | Alarms`，**Alarms 之后为空白区**（不放任何列表内容，无按钮列），
+    动作行红底 + ALARM，长列表滚动翻页（`_listOffset`、`saf-scroll-up/down`）；
+    **每行只画自身具备的指示灯**（条目字段 `hasA` 默认 true / `hasC` / `hasL`）：
+    Active 动作亮红、Cancelled 越控后**亮红**、Loop fail 亮黄，未具备的列**不画灯**（如 `FUEL CUT-OUT SOL. V/V` 为纯输出行，一盏灯都没有）；
+    **行选中 + 逐项越控**：点击某一行 → 该行选中（底色变亮 `#414141`，动作行 `#6d1414`，再点一次取消选中，存 `this._safSel = {page,key}`）；
+    选中行**有 Cancelled 灯**时，其右侧空白区出现蓝色按钮 `Cancel SHD` / `Cancel SLD`（部件 id `saf-cancel-<key>`，行热区 `saf-row-<key>`）；
+    点一次 → `Cancelled` 灯变红（该故障对应的自动停车/自动减速被取消，行转橙色、ALARM 清空），**再点一次还原**（`_safToggle(page,key)`）；
+    本页所有「可越控且动作中」的项目都被越控 → 置 `cancelSHD` / `cancelSLD`，还原任一项则恢复；
+    越控标记存 `this._safCancelled`（键 `'shd:os'`、`'sld:eicu-a'` …），`RESET SLD` 清 `sld:*`；
+    ⚠ **清标记的时机**：只在「停车/降速动作由有变无」时清（`_safPrevShd` / `_safPrevSld` 记忆上一次状态），
+    不要写成"当前无故障就清"——否则点完 Cancel SHD 下一秒 500 ms 重绘就把红标记清掉，灯看起来不变红；
+    **两种显示状态**（`_safetyViewMode` = `'all'` / `'active'`）：首次点击子菜单显示全部条目，**再点同一子菜单只显示故障项**
+    （无故障时显示 `NO ACTIVE ALARMS`），与 Alarms 各分类的两态规则一致；
+    **Shut Down 13 项**（照真机，A=Active、C=Cancelled、L=Loop fail）：
+    ENGINE TRIPPED〔A〕/ FUEL CUT-OUT SOL. V/V〔三灯皆无，纯输出行，值 CLOSED↔OPEN〕/ OVERSPEED FROM RPM UNIT〔A+L〕/
+    MAIN L.O. LOW-LOW PRESS〔A〕/ THRUST PAD HIGH-HIGH TEMP·T/C LUB.OIL LOW-LOW PRESS·J.C.F.W. INLET LOW PRESS〔各 A+C+L〕/
+    EICU A·B SHUTDOWN NON-CANCELLABLE〔A+L〕/ EICU A·B SHUTDOWN CANCELLABLE〔A+C+L〕/ OVERSPEED SYS.1·2 SW BACKUP〔A〕；
+    **Slow Down 23 项**：**所有项目都有 A+C 灯**，只有 4 个回路带 Loop fail 灯 —— AXIAL VIBRATION HIGH、OIL MIST HIGH IN CRANKCASE、
+    EICU A SLOWDOWN、EICU B SLOWDOWN〔A+C+L〕；
+    **Emg. Stop 6 项**：仅第一行 FUEL CUT-OUT SOL. V/V 三灯皆无，其余 5 处 EMERGENCY STOP SWITCH 为〔A+L〕（急停不可越控，无 Cancelled 灯）；
+    **三个 Cancel 按钮各面板独立（不同步）**：面板自己存 `this._cancel = { shd, sld, lim }` 驱动本面板 Cancel 指示灯与本站点安全页；
+    模型侧按位置记录 `cancelSHDBy / cancelSLDBy / cancelLimBy`（`setCancel(kind, on, posKey)`），**任一位置按下即生效**（`cancelSHD = any(...)`），
+    某位置取消时若其它位置仍在越控则系统保持越控状态；
+    **每个 Cancel 都会产生报警**：`SHUTDOWN CANCELLED, ACTIVE` / `SLOWDOWN CANCELLED, ACTIVE` / `LIMITS CANCEL FROM ACP, ACTIVE`
+    （`setCancelAlarm(kind, on)`：进入报警栏，并在 Alarms → Sys. Non-Crit 里对应项变 `ACTIVE` + `AL. CLOSE`；
+    取消越控时若已应答则清除、未应答转 `, NORMAL`；已存在则不重复报警）；
+    Sys. Non-Crit 的 `SHUTDOWN CANCELLED` / `SLOWDOWN CANCELLED` / `LIMITS CANCEL FROM ACP` 三项**按本面板 `_cancel` 显示**（面板之间互不影响）；
+    Cancel SHD / Cancel SLD 点击时还会调 `_safCancelAll(page, on)` 把该页**所有带 Cancelled 灯的项目一次性越控**
+    （Cancelled 灯全部变红，自动停车/减速功能取消），再点一次全部还原（灯回白）；
+    **最低稳定转速（Minimum stable running speed）**：默认 `INACTIVE`，只有**车钟不在 STOP（`|rpmCmd| > 0.5`）且给定转速绝对值小于该值**时才 `ACTIVE`；
+    **`Cancel Limits`**：Show Limiters 页除「Minimum stable running speed」「Critical speed」「Scavenge air pressure」「Torque」四项外，
+    其余 STATUS 一律显示红色 `CANCELLED`；同时**扫气/转矩每一点燃油开度 +10 %**（50→60、80→90、100→110；转矩 50/90/110→60/100/120），
+    **LEVEL 里的数字标红 `#ff4040`**（`_pgRichText()` 分段彩色文字，按最终字号 15.5 量宽、绘制 13.5），不激活时还原；
+    **RESET SLD**：本仿真中**按下无任何动作**（`_openSub('reset-sld')` 直接 return，不复位、不跳页，保持与真机一致）；
+    **RPM Detector**（`_paintRpmDetector()`）为面板式页面：两个 `Rpm Detector System 1/2` 框（各 Pickup1/2 转速值 + Ahead 绿亮 + Fail 白）、
+    第 1 排 Revolution Counter（值 + `Reset`）/ Engine Rpm / Rpm Simulate（灯 + OFF/ON + 值），
+    第 2 排 Running Hours（值 + `Reset`）/ Overspeed Level / Overspeed Test Level（灯 + OFF/ON + 值），
+    **两排的灯、OFF 按钮、值框同列同基线对齐**（灯 cx=712、按钮 x=730 w=84、值框 x=826 w=168；标签行 y=284/362、控件行 y=310/388）；
+    **白底 = 可编辑**（Overspeed Level / Rpm Simulate 值 / Overspeed Test Level 值），
+    **灰底 = 只读**（`#bfc4c8`：Pickup1·2 / Engine Rpm / Revolution Counter / Running Hours）；
+    **仅 ECR 可操作**（`variant === 'ecr'`）：双击白框走 DOM input（`_beginDetEdit(field,x,y,w,h)`），
+    状态存在**模型** `model.overspeedTest`（`simOn/simRpm/osTestOn/osTestRpm/osLevel/msg/msgUntil`，两块面板共享；`_detState()` 即返回它），
+    `Reset` 清 `model.rev` / `model.runHours`，OFF⇄ON 走 `model.toggleOverspeedTest('sim'|'os')`；
+    **超速保护试验**：只有**停机状态**（`model.isStopped`：`!starting && |rpm| < 1`）才允许把两个 OFF 打到 ON，
+    运行中点 ON 被拒（按钮灰显 + 红字「主机未停机，不能进行超速保护试验」）；
+    两个开关都 ON 且 `simRpm > osTestRpm` → `_overspeedTrip()` 超速停车（锁存 `overspeedTripped`：
+    `shutDown=true`、`cancelSHD=false`、`rpmCmd=0`、车钟回 STOP、`rpm/load=0`，
+    报警栏两条 `OVERSPEED SYS.1 - SW BACKUP, SHUTDN` / `OVERSPEED SYS.2 - SW BACKUP, SHUTDN`（照真机），页面底部红字说明）；
+    **超速停车后的联动（照真机 8 张截图）**：
+    · `engineReady = false`（状态条第 4 段 Eng. Not Ready 红）、`startBlocked = true`（Engine State 的 Start Blocked 红）；
+    · `stateText` = `Engine Tripped`，主页红色原因行显示 `Overspeed`；
+    · **Shut Down 页只亮 4 项**：ENGINE TRIPPED（`ACTIVE`）+ OVERSPEED FROM RPM UNIT / OVERSPEED SYS.1 / SYS.2（`SHUTDN`），
+      FUEL CUT-OUT SOL. V/V 只显示 `OPEN`（不亮红）、EICU A/B 组不亮（`eicuLive = live && !overspeedTripped`）；
+    · Safety 表与 Alarms 列表的 Alarms 列统一显示 **`AL. CLOSE`**（不是 ALARM）；
+    · Alarms 五类中**只有 Sys. Non-Crit. 被点亮**，其中 `START FAIL/BLOCK` 显示 `ACTIVE`；
+      `ESU MAIN POWER FAILURE` / `SUDDEN STOP` / io-fail 里的 EICU 项**不因超速停车而亮**；
+    · Engine State 页：STATE 的 Start Blocked、Engine Tripped 红；START FAIL/BLOCK 的 Engine tripped、Start Blocked 红；
+      ENGINE NOT READY 的 Engine not ready ECS 红，其余白灯；
+    · **报警栏始终显示最新两条报警信息**（不再随打开的菜单切换成菜单故障文字）；
+    · RPM Detector 页：Pickup / Engine Rpm 显示**主机实际转速**（模拟值只用于超速试验），
+      方向标签 `Ahead` / `Astern` 随转向（转速 ≤ 0 显示 Astern），检出转向才亮绿灯；
+    越控 `Cancel SHD`（`cancelSafety/toggleSafety('SHD')`）或退出应急停车会清除 `overspeedTripped`，`reset()` 清空两个试验开关，
+    主机起动时自动结束试验；
+    **超速试验一次性武装 + 故障自动消失**：`_osTestArmed` —— 越限动作一次后置 false；
+    **把模拟转速调回试验值以下（或关掉任一开关）＝ 超速故障消失**：自动清 `overspeedTripped`、解除 `shutDown`（非急停时）、
+    调 `_shutAlarmReturn()`（已应答 → 报警直接清除、全部恢复；未应答 → 转 RTN，等 ACK），随后才重新武装，
+    因此不会越控后被立刻重新跳闸；
+    **三个 Cancel 的报警与超速同一套规则**（`_anyFaultActive()` 统一判定"故障是否仍在"）：
+    按下 Cancel → 报警 `…, ACTIVE`（未应答红）；**先应答** → 变黄，再按一次取消（故障消失）→ **自动清除，无需第二次应答**；
+    **先取消（故障消失）** → 报警转 `…, NORMAL`（红、列表项 RTN），**再应答**才清除；
+    `ack()` 在仍有故障（`_anyFaultActive()`）时把已恢复（`, NORMAL`）的信息移除、保留仍在动作的条目，全部恢复时整体清除；
+    **报警应答/恢复状态机**（`_alm(key, active)` + `_almState`，每 200 ms `_pollAlarms()` 轮询；三个 Cancel 的项也纳入轮询）：
+    · `unack` 未应答（红字 + 红底 + `AL. CLOSE`）→ 按 **ACK** → `acked` **黄色文字**（深底、Active 灯仍红、`AL. CLOSE` 黄）；
+    · 故障消失后：**已应答 → 自动恢复正常（不需要第二次应答）**；**未应答 → `rtn`**（红字、Value 显示 `NORMAL`、无 `AL. CLOSE`、Active 灯灭），按 ACK 才消失；
+    · 模型侧 `_shutAlarmReturn()`（越控 SHD 时调用）：`engineReady=true`、`startBlocked=false`；未应答时把报警信息的 `SHUTDN` 改写为 `NORMAL`，已应答则清除报警；
+    · `ack()` 在**故障仍在**时不清报警栏（只转黄），故障已恢复/已越控时才清；
+    · Safety 表、Alarms 列表都按 `st` 着色；Safety 菜单只有 **Shut Down** 灯随 `_shdAlarmLive`（含 RTN）亮，其它子按钮保持不亮；
+    · Safety「仅故障项」视图只看 `st !== 'none'`（不含无故障的已越控项）；
+    · `stateText`：停车且未越控 → `Engine Tripped`；停机且备车完成 → `Ready for Start`；
+    部件 id `det-reset-rev` `det-reset-hours` `det-sim-toggle` `det-os-toggle` `det-edit-simRpm` `det-edit-osLevel` `det-edit-osTestRpm`；
+    **BRIDGE 面板该页只显示、不注册任何热区**（编辑框/Reset/OFF 全部无响应），底部提示「本面板（BRIDGE）该页仅作显示…」；
+    Rpm Simulate 接通时 4 路 Pickup 与 Engine Rpm 显示模拟转速；编辑期间暂停 500 ms 页面自动重建（`_detEditing`）。
     B&W：Engine modes·**Running mode**·Slow turning·Cyl. lubrication；
     Param.：Start/Stop·Reversing·Crash astern·Governor (DGU PID)）。Home 固定在第 2 行第 7 列。
     ⚠ **Engine State 没有子菜单**：点一下直接在液晶区显示「STATE / START FAIL/BLOCK / ENGINE NOT READY」
@@ -145,8 +265,16 @@ pnpm run preview  # 预览构建产物
   「点哪儿跳哪儿」，上下拖动给连续转速给定（`setLeverContinuous()`，取指针 y 映射 68…−55 rpm），
   松手吸附到最近整档，当前档文字绿色；交互用 **stage 级指针事件**（`mousedown/mousemove/mouseup` + 绝对值反算局部 y），
   不依赖 Konva 的 draggable/hit；拖动期间 `group.draggable(false)`，不会拖动整块面板；
-  **三处车钟互相独立**（`leverRpm = { BRIDGE, ECR, LOCAL }`）：任何面板的车钟都可自由拖动（不受操纵权限制），
-  但只有**控制位置**的车钟会写入主机给定 `rpmCmd`；`setControlPos()` 切换后取新位置的车钟作为给定（无扰转移）；
+  **三处车钟互相独立**（`leverRpm = { BRIDGE, ECR, LOCAL }`）：**任何面板的车钟都能正常拖动**（手柄自由移动，不受操纵权限制），
+  但**只有控制位置的车钟会写入主机给定 `rpmCmd`（LEVER）**，其它位置拖动只动手柄、LEVER 不变；
+  **LEVER 柱与数值显示 `rpmCmd`**（不是本面板手柄位置）；`setControlPos()` 切换时把当前 `rpmCmd` 写入新位置手柄（**LEVER 不跳变**），
+  之后只有新位置的车钟能改变 LEVER；
+  **应急停车（Crash astern）自动越控**：车钟**从 NAV FULL（68）直接拉到 EM'CY ASTERN（−55）** → 触发 `model.crashAstern()`，
+  **`cancelLimits` 自动置真**（面板左侧 Cancel Limits 指示灯自动点亮、限制全部取消，主机按惯性最快速率响应）；
+  **只有拥有控制权的面板**车钟这样拉才会触发（无控制权拖只会动手柄、`rpmCmd`/`cancelLimits` 都不变）；
+  判定两路并用：① 面板拖动手势（`down` 记 `_telDragFrom`，`up` 吸附后要求 `controlPos === posKey && from ≥ 67.5 && to ≤ −54.5`）；
+  ② 模型 `_checkCrashAstern(val)`（只在 `w === controlPos` 时调用；最近 3 s 内停在 NAV FULL 后直接落到 EM'CY ASTERN）；
+  `reset()` 清 `crashAsternOn` / `_navFullAt`；
   位置 ↔ 转速按档位实际值分段线性插值（`posToRpm()` / `rpmToPos()`），**松手时只有与最近档位相差 ≤1 rpm 才吸附**，
   否则保持连续值；**只有正好落在整档上该档文字才绿色高亮**（连续值时不突出）；
   调试钩子 `window.__telDebug` 记录最近一次 down/up；
@@ -292,6 +420,8 @@ pnpm run preview  # 预览构建产物
   （`null` = Home，`'param'` = 参数对话框），工作流 `check()` 用它判断。
 - **两块组件均为可拖动面板**：静态图形一律 `listening:false`，因此各加了一块
   "整块拖动热区"（`_addDragPlate()`，置于交互层最底层），面板空白处按下即可拖动。
+  ⚠ **液晶屏显示页面时禁止拖动**：`_renderMenu()` 末尾按 `(menuPage && subPage) || _directPage` 置
+  `group.draggable(false)`（回 Home/关闭页面自动恢复 `true`），否则在页面上选中行/点按钮会把整块面板拖走。
 - **工作流**：原有流程已全部删除，现有两条（均 `check` + `op` + `check()`）：
   ① `analog-param-modify`「1. 模拟量参数的修改」（7 步）：
   第 1 页点 `dock-ME-LO`（M/E LO SYSTEM）→ `overlayKind='group'`、`_groupFilter='ME-LO'`
@@ -322,10 +452,60 @@ pnpm run preview  # 预览构建产物
   （清报警 / 参数回初值 / MIMIC 三通阀回测管路、手摇泵回 0.30 与 0.20 MPa / 压力继电器回 30 %·30 %），
   保证演示从干净状态开始。末步 `check()` 判据同时接受 `_projFlag` 标记与历史记录 `state==='RTN'`，
   演练 / 评估模式（不经 `act` 的 flag）也能判过。
-- **故障**（均走「故障设置」界面）：`me-lo-press`、`me-cw-temp`、`blg-high`（模拟量），
-  以及两个**开关量**故障 —— `lo-pr-sw`（滑油低压开关触点误闭合 → `ME-LO-PR-SW` 动作，
-  5 s 安保延时后主机 SHD 停车）、`lo-pump-f`（主滑油泵故障 → `ME-LO-PUMP-F` 动作；
-  MIMIC 联动：运行泵置 `overload` 跳闸、备用泵自动投入，修复后过载标志清除、备泵续转）。
+- **第 11 页：主机缸套冷却水温度控制系统**（`cwmimic` = `CoolingWaterMimic`（1360×750，x=-20 y=40）、
+  `cwpid` = `CoolingWaterPID`（330×290，x=1390 y=60））：两者共用 `sys.coolingSolver`（`CoolingWaterSolver`，
+  在 `consys.js` 中创建并每帧 `solve(1/20)`，与 `sys.ac600` 同一条循环）；
+  MIMIC 部件：设备 `engine heater distiller cooler tank deaerator`、阀门 `wb-v4 wb-v25s wb-v5 wb-v25s wb-v27s wb-v6s wb-v7s wb-v8 wb-v9 wb-v502 wb-v12s wb-v13s wb-v15s wb-v26s`、
+  两台冷却泵 `cw1 cw2`（含面板起动/停止按钮）、三通调节阀 `rv-cooler rv-bypass`、仪表 `tc pt ps gauge`；
+  PID 面板部件：`am`（A/M 切换）/`set`/`up`/`down`/`reset`、`pv`/`sv`/`out`、`alarm-reset`；
+  控制量 = 三通阀冷却口开度 `m.manip`（0 % 全旁通最热 / 100 % 全经冷却器最冷），PI + 负荷前馈 + 积分分离，SV 默认 85 ℃。
+  **默认即为稳定运行工况**（`CoolingWaterSolver.createModel()` 的初值）：
+  `engineSw/engineOn = true`（柴油机运转，负荷 50 %）、两台泵 `mode 'AUTO'` 且 **1# 泵运行**（`autoLead='cw1'`，2# 备用）、
+  `psUp=true`（排出 2.05 bar / 41 m³/h）、LDCL `mode='AUTO'` 且 `tempCtrl='AUTO'`、
+  `temp = tcMeas = setTemp = 85 ℃`、阀位 `manip = outCmd = 32 %`（50 % 负荷的前馈稳态开度），无报警。
+- **滑油流动动画（页 10 MIMIC）**：`_createDynamic()` 里按管路走向建立 18 条 `Konva.Line` 流动虚线
+  （`stroke '#e2a020'`、`dash [9,7]`、`dashOffset` 滚动、`listening:false`，存入 `this._flows`），
+  `tick()` 中 `this._flowPhase = (phase + 1) % 16` —— **速度为冷却水 MIMIC 的一半**（那边是 `+2`）；
+  每条的 `cond()` 决定是否显示：泵支路 = 该泵 `on && 对应截止阀开 && 未过载`；总管 = 任一台泵在运行；
+  旁通/冷却器两条支路按三通阀开度 `m.cv3` 分别给 0~100 % 的流量宽度。
+  **管路底色改为淡绿 `C_PIPE = '#a8cdb8'`**（原深绿 `#1f6f43`），让橙色流动虚线更醒目。
+- **缸套冷却水进口低压自动停车（由冷却水 MIMIC 的 PS 压力开关触发）**：
+  `CoolingWaterSolver.solve()` 第 5 步 —— 水流开关 `m.psUp === false`（PS 断开）持续 **`PS_TRIP_DELAY = 10 s`**
+  → `m.tripped = true`、`m.engineOn = false`（MIMIC 柴油机停车），并回调 `sys.coolingHostTrip(true)`；
+  `consys.js` 中定义 `coolingHostTrip = (on) => on && ac600.safetyAction('SHD', 'CW-PS')`，
+  因此主机遥控模型同时停车：Shut Down 页多亮一行 `J.C.F.W. INLET LOW PRESS`（`SHUTDN`，标志 `M.jcwLowShd`）、
+  报警信息 `JACKET C.F.W. INLET PRESS LOW, SHUTDN`、主页原因行 `Safety Shut Down`、状态条 `Eng. Not Ready`；
+  PS 恢复时 `m.tripped` 自动复位（AC600 侧仍需 Cancel SHD 越控）。⚠ 两台泵都打 STOP 才会让 PS 保持断开
+  （只停一台时 3 s 后备用泵自动投入，PS 恢复）。
+- **温度高自动减速（SLD，两处触发，规则一致）**：
+  · **滑油**（`MainEngineLubeOilMimic.tick()`）：油温 `m.temp > 60 ℃` 持续 **6 s** → `ac600.safetyAction('SLD','ME-LO-T')`；
+    降到 `< 58 ℃`（回差 2 ℃）→ `ac600.safetyClear('SLD','ME-LO-T')`；
+  · **缸套冷却水**（`CoolingWaterSolver.solve()` 第 5b 步）：出口温度 `m.temp > 90 ℃` 持续 **6 s** → `safetyAction('SLD','CW-T')`；
+    `< 88 ℃` → `safetyClear('SLD','CW-T')`；
+  · AC600 侧 `sldCauses` 记录减速原因；存在原因时 `_stepSetp()` 把 `setp` **压到 40 rpm** 并按减速度（3 rpm/s）下降，
+    `activeLimiter = 'Slow Down'`；
+  · **减速动作不自动复位（锁存）**：`safetyClear()` 只清原因并把报警信息改写（已应答→清除，未应答→`, NORMAL`），
+    同时置 `sldAwaitReset = true`，`slowDown` 保持——**必须由拥有控制权的面板把车令 `rpmCmd` 拉到 40 rpm 以下**
+    （`solve()` 中 `|rpmCmd| < 40` 判定）才解除自动减速；正好 40 不复位；
+  · Slow Down 页对应行 `MAIN L.O. INLET TEMP HIGH` / `JACKET C.F.W. OUTLET TEMP HIGH` 随 `sldCauses` 点亮，
+    有明确原因时（以及 `sldAwaitReset` 锁存期间）**EICU A/B 组不再跟着点亮**；
+  · **Slow Down 页报警项状态键用 `sld:<key>`**（曾误写成 `shd:` 与停车页共用状态，会串色）；
+    车钟拉到 40 rpm 以下、`slowDown` 落下的那一帧，`_pollAlarms()` 会**清掉全部 `sld:*` 状态**，
+    因此 `SLOWDOWN ACTIVE` / `MAIN L.O. INLET TEMP HIGH` / `EICU A/B SLOWDOWN` 等行**同时还原**（无需再按 ACK）。
+- **故障设置已清空**：`project/sys_ljdq9-1.js` 的 `FAULT_CONFIGS = {}`（原 5 项已删除），
+  工具栏「故障设置」界面不再有可勾选故障；所有故障改由装置本身触发。
+- **主滑油低低压自动停车（由压力继电器触发，替代原 `lo-pr-sw` 故障）**：
+  页 10 MIMIC 上的压力继电器 `psw1`（YT1226）取压来自继电器侧三通阀（`m.sw3b`：line=滤器出口压力 / pump=手摇泵 `m.handP2`）；
+  **压力低于下限 `lowSet`（默认 0.15 MPa，受给定值/幅差螺钉影响）→ NC 触点闭合**（`psw.getSwitchOutput()=1`）
+  → K-Chief 测点 `ME-LO-PR-SW`（`delay: 0` 触点闭合立即判报警，`prio: 'A'`，`safety: 'SHD'`，**`safetyDelay: 6`**）
+  → 安保延时 6 s 到且未被越控 → `kc.safetyActions` 记录 SHD → MIMIC `m.shdTrip = true`、`m.engOn = false`（主机停车）；
+  **延时内触点断开（压力回升）→ `_safetyTimers` 立即删除、报警转 RTN，不触发停车**（`KChiefSolver.solve()` 的 `back` 分支）；
+  越控：K-Chief Operate → `Cancel Shut Down`（Cancel SHD）。
+- **安保动作联锁到主机遥控模型**：`KChiefSolver` 执行安保动作时调用 `sys.ac600.safetyAction(kind, tagId)` ——
+  SHD → 燃油切断、主机停车（`shutDown`、`rpm=0`、`engineReady=false`、`startBlocked=true`，报警信息 `<TAG>, SHUTDN`），
+  SLD → 自动减速 `<TAG>, SLDN`；`ME-LO-PR-SW` 会置 `loLowLowShd`，AC600 的 Shut Down 页因此多亮一行
+  `MAIN L.O. LOW-LOW PRESS`（值 `SHUTDN`），主页红色原因行显示 `Safety Shut Down`，EICU 组不亮；
+  越控 Cancel SHD 时清 `loLowLowShd`。延时内触点断开 → K-Chief 撤销计时、报警转 RTN，不会停车。
 
 ## 上一项目（保留）：风油切断装置的功能实验（`project/sys_ljdq9-3-2.js`）
 

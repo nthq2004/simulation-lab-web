@@ -70,7 +70,7 @@ export function rpmToPos(rpm) {
 }
 
 /** 起动过程时长（s）：推手柄后先起动空气转车，之后转为燃油运转（真机约 10 s） */
-const START_DURATION = 10;
+const START_DURATION = 3;   // 起动空气转车时长（s）：过长会让转速长时间卡在 ~10 rpm
 
 export class AC600Solver {
     constructor(sys) {
@@ -80,6 +80,25 @@ export class AC600Solver {
 
     /** 复位到"海上全速航行、集控室控制、68 rpm"的初始状态 */
     reset() {
+        this.loLowLowShd = false;
+        this.jcwLowShd = false;
+        this.sldCauses = {};
+        this.sldAwaitReset = false;
+        this._osTestArmed = true;
+        this.cancelAlarmOn = { shd: false, sld: false, lim: false };
+        this._restTime = 0;
+        this._cmdHold = 0;
+        this._lastCmdVal = this.rpmCmd;
+        this._startDir = 1;
+        this.crashAsternOn = false;
+        this._navFullAt = 0;
+        this.overspeedTripped = false;
+        if (this.overspeedTest) {
+            this.overspeedTest.simOn = false;
+            this.overspeedTest.osTestOn = false;
+            this.overspeedTest.msg = '';
+            this.overspeedTest.msgUntil = 0;
+        }
         this.controlPos = CONTROL_POS.ECR;
         this.engineMode = 'SEA';
         this.runMode = 'ECONOMY';          // Engine Running Mode：ECONOMY 经济模式 / EMISSION 排放模式
@@ -88,6 +107,7 @@ export class AC600Solver {
         this.leverIdx = 0;                  // 当前控制位置车钟的最近档（NAVIGATION FULL）
         this.leverPos = 0;                  // 当前控制位置车钟的连续位置（0 = NAV FULL，10 = EM'CY ASTERN）
         this.rpmCmd = 68;
+        this.setp = 68;
         this.rpm = 68;
         this.load = 83.5;
 
@@ -135,8 +155,52 @@ export class AC600Solver {
         this.silenced = false;
         this.acked = true;
 
+        // 限制规律参数（Limiters 面板保存时同步）
+        this.limits = {
+            accelRate: 2,            // Accel. Lim.（rpm/s）
+            decelRate: 3,            // Decel. Lim.（rpm/s）
+            loadUpFrom: 57, loadUpTo: 68, loadUpTime: 3,        // Load Up program（min）
+            loadDownFrom: 57, loadDownTo: 68, loadDownTime: 2,  // Load Down program（min）
+            critLo: 30, critHi: 37,  // 临界转速禁区
+            critRiseSp: 37,          // 升速避下限时的 SETP
+            critFallSp: 50,          // 降速避上限时的 SETP
+            maxAhead: 68, maxAstern: 55,
+            steadyMin: 21,
+        };
+        this.setp = 68;              // 实际送到调速器的转速给定（受各类限制约束）
+        // 主机惯性决定的最大转速变化率：68 → 0 最快约 15 s（≈4.53 rpm/s），
+        // 所有限制取消（Cancel Limits）时也按这个最快速率升降，不会瞬间跳变
+        this.inertiaRate = 68 / 15;
+        this._restTime = 0;          // 主机静止（|rpm| < 1）累计时长：过零反转过程中不重复起动
+        this._cmdHold = 0;           // 车令保持不变的时长：拖车钟途中不自动起动（避免"拖过倒车区就反向起动"）
+        this._lastCmdVal = 0;
+        this._startDir = 1;          // 本次起动的转向（+1 正车 / −1 倒车，按车令符号）
+        this.activeLimiter = '';     // 当前正在执行的限制（主页右下角显示）
+        this.stoppedTime = 0;              // 停机累计时长（s）—— 超过 slow turning 门槛则下次起动先慢转
+        this.slowTurnStopMin = 20;         // 激活慢转的停机时间（min）
+        this.slowTurnDurS = 10;            // 慢转持续时间（s）
         this.runHours = 1.4;
         this.rev = 5306;
+
+        // 转速检测页（RPM Detector）—— 超速保护试验状态（两块面板共享同一台设备）
+        this.overspeedTripped = false;   // 超速停车已动作（锁存）
+        this.loLowLowShd = false;        // 监视报警系统执行的「滑油低低压」安保停车
+        this.jcwLowShd = false;          // 冷却水 PS 断开 → 缸套水进口低压安保停车
+        this.sldCauses = {};             // 监视系统"自动减速"的原因集合（温度回落后按 tagId 撤销）
+        this.sldAwaitReset = false;      // 减速原因已消失、但减速动作锁存中（需车钟拉到 40 rpm 以下复位）
+        this.cancelAlarmOn = { shd: false, sld: false, lim: false };   // 三个 Cancel 报警是否处于激活
+        this.cancelSHDBy = { BRIDGE: false, ECR: false, LOCAL: false };
+        this.cancelSLDBy = { BRIDGE: false, ECR: false, LOCAL: false };
+        this.cancelLimBy = { BRIDGE: false, ECR: false, LOCAL: false };
+        this.overspeedTest = {
+            simOn: false,        // Rpm Simulate 开关
+            simRpm: 65.0,        // 模拟转速值
+            osTestOn: false,     // Overspeed Test 开关
+            osTestRpm: 78.0,     // 超速试验值
+            osLevel: 78.0,       // 超速动作值
+            msg: '',             // 页面提示（拒绝操作/试验结果）
+            msgUntil: 0,
+        };
 
         this.lampTest = false;
         this.lampTestTimer = 0;
@@ -154,10 +218,18 @@ export class AC600Solver {
 
     get lever() { return TELEGRAPH[clamp(this.leverIdx, 0, TELEGRAPH.length - 1)]; }
 
+    /** 调速器输出（燃油指数 %）—— 用主机负荷近似 */
+    get fuelIndex() { return Math.max(0, Math.min(110, this.load)); }
+
+    /** 扫气压力（bar）—— 由转速推算（0 rpm→0.02，68 rpm→2.4） */
+    get scavAir() { return 0.02 + Math.max(0, Math.min(68, this.rpm)) / 68 * 2.38; }
+
     get stateText() {
         if (this.starting) return 'Starting';
-        if (this.shutDown) return 'Shut down';
-        return this.rpm > 5 ? 'Running' : (this.rpm < -5 ? 'Running (Astern)' : 'Stopped');
+        if (this.shutDown && !this.cancelSHD) return 'Engine Tripped';
+        if (this.rpm > 5) return 'Running';
+        if (this.rpm < -5) return 'Running (Astern)';
+        return this.engineReady ? 'Ready for Start' : 'Stopped';
     }
 
     /** 该位置是否有操纵权 */
@@ -177,7 +249,9 @@ export class AC600Solver {
         this.controlPos = pos;
         this.forceTake = false;
         this.lastOpPos = pos;
-        this._syncCmdFromLever();      // 新位置车钟成为主机给定
+        // 无扰转移：新位置手柄对齐当前给定（LEVER 不跳变），此后只有该位置的车钟能改变 LEVER
+        if (this.leverRpm) this.leverRpm[pos] = this.rpmCmd;
+        this._syncCmdFromLever();
         return true;
     }
 
@@ -191,7 +265,10 @@ export class AC600Solver {
     /** 本位置车钟的连续位置（0…10） */
     leverPosAt(where) { return rpmToPos(this.leverRpm[where || this.controlPos] ?? this.rpmCmd); }
 
-    /** 设定某位置的车钟（连续值）；只有该位置拥有控制权时才同步到主机给定 */
+    /**
+     * 设定某位置的车钟（连续值）。
+     * 各位置车钟都能自由拖动；**只有控制位置的车钟会改写主机给定（LEVER）**。
+     */
     setLeverAt(rpm, where) {
         const w = where || this.controlPos;
         const top = TELEGRAPH[0].rpm;
@@ -199,7 +276,10 @@ export class AC600Solver {
         const val = Math.round(clamp(rpm, bottom, top) * 10) / 10;
         this.leverRpm[w] = val;
         this.lastOpPos = w;
-        if (w === this.controlPos) this._syncCmdFromLever();
+        if (w === this.controlPos) {
+            this._syncCmdFromLever();
+            this._checkCrashAstern(val);
+        }
         return val;
     }
 
@@ -252,11 +332,37 @@ export class AC600Solver {
         this.leverRpm[w] = TELEGRAPH[i].rpm;
         this.lastOpPos = w;
         if (w === this.controlPos) {
+            this._checkCrashAstern(TELEGRAPH[i].rpm);
             this.rpmCmd = TELEGRAPH[i].rpm;
             this.leverIdx = i;
             this.leverPos = i;
         }
         return true;
+    }
+
+    /**
+     * 应急操作（Crash astern）：车钟从 NAV FULL 直接拉到 EM'CY ASTERN → 触发应急操作，
+     * **Cancel Limits 自动生效**（面板 Cancel Limits 指示灯随之点亮），限制全部取消以便最快响应。
+     */
+    crashAstern() {
+        this.crashAsternOn = true;
+        this.cancelLimits = true;
+        this.activeLimiter = '';
+        this._navFullAt = 0;
+        return true;
+    }
+
+    /**
+     * 车钟在 NAV FULL ↔ EM'CY ASTERN 之间的"直接放车"检测：
+     * 记下最近一次停在 NAV FULL 的时刻，若 3 s 内直接落到 EM'CY ASTERN → 触发 crashAstern()。
+     */
+    _checkCrashAstern(val) {
+        const topR = TELEGRAPH[0].rpm;
+        const botR = TELEGRAPH[TELEGRAPH.length - 1].rpm;
+        if (val >= topR - 0.5) { this._navFullAt = Date.now(); return; }
+        if (val <= botR + 0.5 && this._navFullAt && Date.now() - this._navFullAt < 3000) {
+            this.crashAstern();
+        }
     }
 
     /** 改变转速给定 ±2 rpm（RPM CMD 上下箭头） */
@@ -275,10 +381,218 @@ export class AC600Solver {
         if (this.startAir < 15) { this.raiseAlarm('起动空气压力过低，不能起动'); this.startBlocked = true; return false; }
         this.startBlocked = false;
         this.starting = true;
+        this._startDir = this.rpmCmd >= 0 ? 1 : -1;                // 倒车车令 → 反向起动
+        // 试验只在停机状态进行：一旦起动，自动结束超速保护试验
+        if (this.overspeedTest) { this.overspeedTest.simOn = false; this.overspeedTest.osTestOn = false; }
         this.slowTurning = !!slow;
         this.startTimer = 0;
         this.mainStartValveOpen = true;
         return true;
+    }
+
+    /**
+     * 计算 SETP（限制后的转速给定）并按限制逐步逼近车令：
+     *  · 车令落在临界转速禁区：升速避下限（SETP=37）、降速避上限（SETP=50）
+     *  · 升速：SETP < 57 → 加速度限制（accelRate）；≥57 → Load Up program 速率
+     *  · 降速：SETP > 57 → Load Down program 速率；≤57 → 减速度限制（decelRate）
+     */
+    _stepSetp(dt) {
+        const L = this.limits || {};
+        const cmd = this.rpmCmd;
+        const cur = (typeof this.setp === 'number') ? this.setp : cmd;
+        const inCrit = (v) => v >= (L.critLo ?? 30) && v <= (L.critHi ?? 37);
+
+        // 方向判定：按实际转速趋势（升速 / 降速）
+        const prev = (typeof this._prevRpm === 'number') ? this._prevRpm : this.rpm;
+        const trend = this.rpm - prev;
+        this._prevRpm = this.rpm;
+
+        // 目标：默认就是车令；车令落禁区时按方向避让
+        let target = cmd;
+        let why = '';
+        if (inCrit(cmd) && Math.abs(this.rpm) > 1) {
+            const rising = Math.abs(trend) > 0.01 ? (trend > 0) : (cmd >= cur);
+            target = rising ? (L.critRiseSp ?? 37) : (L.critFallSp ?? 50);
+            why = 'Crit. Speed';
+        }
+
+        // 慢降（自动减速）：给定压到 40 rpm，并按减速度限制快速下降（不走 Load Down 程序）
+        if (this.slowDown && !this.cancelSLD) {
+            if (target > 40) target = 40;
+            const stepSld = Math.abs(L.decelRate ?? 3) * dt;
+            this.setp = cur + clamp(target - cur, -stepSld, stepSld);
+            this.activeLimiter = 'Slow Down';
+            return;
+        }
+
+        // Cancel Limits 越控：加速/减速/Load Up/Down 等速率限制一律取消（临界转速避让与最低稳定转速仍有效）
+        if (this.cancelLimits) {
+            this.setp = target;
+            this.activeLimiter = why;
+            return;
+        }
+
+        const diff = target - cur;
+        if (Math.abs(diff) < 0.05) {
+            this.setp = target;
+            this.activeLimiter = why;                              // 到点后不再显示限制
+            return;
+        }
+
+        const up = diff > 0;
+        let rate;                                                   // rpm/s
+        if (up) {
+            if (cur >= (L.loadUpFrom ?? 57)) {
+                rate = ((L.loadUpTo ?? 68) - (L.loadUpFrom ?? 57)) / Math.max(0.01, (L.loadUpTime ?? 3) * 60);
+                why = why || 'Load Up';
+            } else {
+                rate = (L.accelRate ?? 2);
+                why = why || 'Accel. Lim.';
+            }
+        } else {
+            if (cur > (L.loadDownFrom ?? 57)) {
+                rate = ((L.loadDownFrom ?? 57) - (L.loadDownTo ?? 68)) / Math.max(0.01, (L.loadDownTime ?? 2) * 60);
+                if (rate < 0) rate = -rate;
+                why = why || 'Load Down';
+            } else {
+                rate = Math.abs(L.decelRate ?? 3);
+                why = why || 'Decel. Lim.';
+            }
+        }
+        const step = rate * dt;
+        this.setp = cur + clamp(diff, -step, step);   // 不取整：Load Up/Down 速率很慢（~0.09 rpm/s）
+        this.activeLimiter = why;
+    }
+
+    /** 主机是否处于停机状态（超速保护试验只能在此状态下进行） */
+    get isStopped() { return !this.starting && Math.abs(this.rpm) < 1; }
+
+    /**
+     * RPM Detector 页的两个试验开关（sim = Rpm Simulate，os = Overspeed Test）。
+     * 只有停机状态才允许从 OFF 切到 ON；运行中点击只给出提示，开关不动。
+     * @returns {boolean} 是否切换成功
+     */
+    toggleOverspeedTest(which) {
+        const T = this.overspeedTest;
+        if (!T) return false;
+        const cur = which === 'sim' ? !!T.simOn : !!T.osTestOn;
+        if (!cur && !this.isStopped) {
+            T.msg = '主机未停机，不能进行超速保护试验';
+            T.msgUntil = Date.now() + 2600;
+            return false;
+        }
+        if (which === 'sim') T.simOn = !T.simOn;
+        else T.osTestOn = !T.osTestOn;
+        T.msg = '';
+        T.msgUntil = 0;
+        return true;
+    }
+
+    /**
+     * 监视报警系统（K-Chief）执行安保动作时调用：
+     *   SHD —— 燃油切断、主机自动停车（滑油低低压等）；
+     *   SLD —— 主机自动减速。
+     * @param {'SHD'|'SLD'} kind
+     * @param {string} tagId 触发测点（如 'ME-LO-PR-SW'）
+     */
+    safetyAction(kind, tagId) {
+        const TEXT = {
+            'ME-LO-PR-SW': 'MAIN L.O. LOW-LOW PRESS',
+            'CW-PS': 'JACKET C.F.W. INLET PRESS LOW',
+            'CW-T': 'JACKET C.F.W. OUTLET TEMP HIGH',
+            'ME-LO-T': 'MAIN L.O. INLET TEMP HIGH',
+            'ME-GEN-SAIR': 'START AIR PRESS LOW',
+            'ME-CW-T': 'J.C.F.W. OUTLET TEMP HIGH',
+            'ME-FO-P': 'MAIN FUEL OIL PRESS LOW',
+        };
+        const txt = TEXT[tagId] || String(tagId || '').replace(/-/g, ' ').toUpperCase();
+        if (kind === 'SLD') {
+            this.sldCauses = this.sldCauses || {};
+            this.sldCauses[tagId] = txt;
+            this.slowDown = true;
+            this.cancelSLD = false;
+            this.alarm = true;
+            this.acked = false;
+            this.silenced = false;
+            this.alarmText = `${txt}, SLDN`;
+            this.pushMessage(`${txt}, SLDN`);
+            return;
+        }
+        // SHD：燃油切断、主机停车（与超速停车同样的表现）
+        this.shutDown = true;
+        this.cancelSHD = false;
+        this.starting = false;
+        this.mainStartValveOpen = false;
+        this.running = false;
+        this.rpmCmd = 0;
+        this.leverIdx = 5;
+        this.setp = 0;
+        this.rpm = 0;
+        this.load = 0;
+        this.engineReady = false;
+        this.startBlocked = true;
+        if (tagId === 'ME-LO-PR-SW') this.loLowLowShd = true;
+        if (tagId === 'CW-PS') this.jcwLowShd = true;
+        this.alarm = true;
+        this.acked = false;
+        this.silenced = false;
+        this.alarmText = `${txt}, SHUTDN`;
+        this.messages = [];
+        this.pushMessage(`${txt}, SHUTDN`);
+    }
+
+    /**
+     * 自动减速的原因消失（温度回落到回差值以下）→ 解除 SLD；
+     * 没有其它减速原因时结束慢降显示，并按"已应答自动清除 / 未应答转 NORMAL"处理报警信息。
+     */
+    safetyClear(kind, tagId) {
+        if (kind !== 'SLD') return;
+        this.sldCauses = this.sldCauses || {};
+        const txt = this.sldCauses[tagId];
+        if (!txt) return;
+        delete this.sldCauses[tagId];
+        // 报警信息随故障恢复处理（已应答 → 清除；未应答 → 改写成 NORMAL）
+        if (this.alarm) {
+            if (this.acked) {
+                this.messages = (this.messages || []).filter((m) => !m.startsWith(txt));
+                if (!this.messages.length) this.alarm = false;
+            } else {
+                this.messages = (this.messages || []).map((m) => (m.startsWith(txt) ? `${txt}, NORMAL` : m));
+            }
+            this.alarmText = (this.messages[0] || '');
+        }
+        // ⚠ 减速动作不自动复位：锁存，直到把（控制位置的）车钟拉到 40 rpm 以下
+        if (!Object.keys(this.sldCauses).length) this.sldAwaitReset = true;
+    }
+
+    /** 超速保护动作：燃油切断 → 主机停车（由转速检测页试验触发，锁存） */
+    _overspeedTrip() {
+        if (this.overspeedTripped) return;
+        this.overspeedTripped = true;
+        this.shutDown = true;
+        this.cancelSHD = false;
+        this.starting = false;
+        this.mainStartValveOpen = false;
+        this.running = false;
+        this.rpmCmd = 0;
+        this.setp = 0;
+        this.rpm = 0;
+        this.load = 0;
+        this.leverIdx = 5;
+        this.alarm = true;
+        this.acked = false;
+        this.silenced = false;
+        this.engineReady = false;        // 停车后主机未备车（状态条 Eng. Not Ready）
+        this.startBlocked = true;        // 超速停车 → 起动阻塞
+        this.alarmText = 'OVERSPEED SYS.1 - SW BACKUP, SHUTDN';
+        this.messages = [];
+        this.pushMessage('OVERSPEED SYS.2 - SW BACKUP, SHUTDN');
+        this.pushMessage('OVERSPEED SYS.1 - SW BACKUP, SHUTDN');
+        const T = this.overspeedTest;
+        if (T) {
+            T.msg = `超速保护动作：模拟转速 ${T.simRpm.toFixed(1)} rpm 超过试验值 ${T.osTestRpm.toFixed(1)} rpm`;
+            T.msgUntil = Date.now() + 10000;
+        }
     }
 
     /** 手柄自动起动（推手柄离开 STOP 即自动起动，含联锁检查） */
@@ -294,6 +608,8 @@ export class AC600Solver {
             return;
         }
         if (this.running || this.starting) return;
+        if (this._restTime < 0.3) return;                          // 刚过零/正在换向：不重复起动
+        if (this._cmdHold < 0.4) return;                           // 车钟还在拖动（车令连续变化）：等把手柄放稳再起动
         if (this.shutDown && !this.cancelSHD) return;              // 停车动作中
         if (!this.turningGearOut || !this.airDistributorOk || !this.mainStartValveOk || this.startAir < 15) {
             this.startBlocked = true;
@@ -301,7 +617,11 @@ export class AC600Solver {
         }
         this.startBlocked = false;
         this.starting = true;
-        this.slowTurning = false;
+        this._startDir = this.rpmCmd >= 0 ? 1 : -1;                // 倒车车令 → 反向起动
+        // 试验只在停机状态进行：一旦起动，自动结束超速保护试验
+        if (this.overspeedTest) { this.overspeedTest.simOn = false; this.overspeedTest.osTestOn = false; }
+        // 停机时间超过门槛（默认 20 min）→ 本次起动先慢转
+        this.slowTurning = this.stoppedTime >= (this.slowTurnStopMin || 20) * 60;
         this.startTimer = 0;
         this.mainStartValveOpen = true;
     }
@@ -318,6 +638,7 @@ export class AC600Solver {
         if (this.emStopLatched) {
             this.emStopLatched = false;
             this.shutDown = false;
+            this.overspeedTripped = false;
             this.alarm = false;
             this.acked = true;
             this.clearMessages();
@@ -343,14 +664,28 @@ export class AC600Solver {
     }
 
     cancelSafety(kind) {
-        if (kind === 'SHD') this.cancelSHD = true;
+        if (kind === 'SHD') {
+            this.cancelSHD = true;
+            this.overspeedTripped = false;
+            this.loLowLowShd = false;
+            this.jcwLowShd = false;
+            this._shutAlarmReturn();
+        }
         if (kind === 'SLD') this.cancelSLD = true;
         if (kind === 'LIM') this.cancelLimits = true;
     }
 
     /** 切换型越控按钮：按一次置位（越控），再按一次复位 */
     toggleSafety(kind) {
-        if (kind === 'SHD') this.cancelSHD = !this.cancelSHD;
+        if (kind === 'SHD') {
+            this.cancelSHD = !this.cancelSHD;
+            if (this.cancelSHD) {
+                this.overspeedTripped = false;   // 越控后解除超速锁存
+                this.loLowLowShd = false;
+                this.jcwLowShd = false;
+                this._shutAlarmReturn();         // 故障消失 → 已应答则清除，未应答则转 RTN
+            }
+        }
         if (kind === 'SLD') this.cancelSLD = !this.cancelSLD;
         if (kind === 'LIM') this.cancelLimits = !this.cancelLimits;
         return kind === 'SHD' ? this.cancelSHD : (kind === 'SLD' ? this.cancelSLD : this.cancelLimits);
@@ -379,6 +714,14 @@ export class AC600Solver {
         this.alarmText = '';
     }
 
+    /** 当前是否还有未恢复的故障（含越控产生的报警）——应答时据此决定"保持黄色"还是"直接清除" */
+    _anyFaultActive() {
+        if (this.overspeedTripped) return true;                    // 超速停车
+        if (this.shutDown && !this.cancelSHD) return true;         // 停车动作未越控
+        const C = this.cancelAlarmOn || {};
+        return !!(C.shd || C.sld || C.lim);                        // 三个 Cancel 产生的报警
+    }
+
     ack() {
         // 归档到报警历史后再清除当前报警
         const t = new Date();
@@ -388,8 +731,87 @@ export class AC600Solver {
         });
         if (this.alarmHistory.length > 8) this.alarmHistory.length = 8;
         this.acked = true;
-        this.alarm = false;
-        this.clearMessages();
+        // 故障仍在（未恢复）→ 报警保留（已确认，页面显示黄色），只停止声光；
+        // 故障已恢复 → 确认后直接清除报警与信息栏（超速与三个 Cancel 报警规则一致）
+        if (!this._anyFaultActive()) {
+            this.alarm = false;
+            this.clearMessages();
+            return;
+        }
+        // 仍有动作中的故障：已恢复（…, NORMAL）的信息在确认后移除，只保留仍在动作的条目
+        const keep = (this.messages || []).filter((m) => !/, NORMAL$/.test(m));
+        this.messages = keep;
+        if (!keep.length) this.alarm = false;
+        else this.alarmText = keep[0];
+    }
+
+    /**
+     * 设置越控状态（面板三个 Cancel 按钮各自的开关 → 系统副作用）。
+     * @param {'SHD'|'SLD'|'LIM'} kind
+     * @param {boolean} on
+     */
+    setCancel(kind, on, where) {
+        const w = where || this.controlPos;
+        const key = { SHD: 'cancelSHDBy', SLD: 'cancelSLDBy', LIM: 'cancelLimBy' }[kind];
+        if (!key) return false;
+        this[key] = this[key] || { BRIDGE: false, ECR: false, LOCAL: false };
+        this[key][w] = !!on;
+        const any = Object.values(this[key]).some(Boolean);   // 任一位置按下即生效
+        if (kind === 'SHD') {
+            const before = this.cancelSHD;
+            this.cancelSHD = any;
+            if (any && !before) {
+                this.overspeedTripped = false;
+                this.loLowLowShd = false;
+                this.jcwLowShd = false;
+                this._shutAlarmReturn();
+            }
+        } else if (kind === 'SLD') this.cancelSLD = any;
+        else this.cancelLimits = any;
+        return !!on;
+    }
+
+    /**
+     * 面板左侧越控按钮（Cancel SHD / SLD / Limits）产生的报警：
+     * 按下 → 报警 `xxx, ACTIVE`（进入报警栏与 Sys. Non-Crit）；再按取消 → 已应答则清除，未应答转 `, NORMAL`。
+     */
+    setCancelAlarm(kind, on) {
+        const txt = { shd: 'SHUTDOWN CANCELLED', sld: 'SLOWDOWN CANCELLED', lim: 'LIMITS CANCEL FROM ACP' }[kind];
+        if (!txt) return;
+        this.cancelAlarmOn = this.cancelAlarmOn || { shd: false, sld: false, lim: false };
+        const act = `${txt}, ACTIVE`;
+        const has = (this.messages || []).some((m) => m.startsWith(txt));
+        if (on) {
+            this.cancelAlarmOn[kind] = true;
+            if (!has) this.raiseAlarm(act);        // 已存在则不重复报警（也不会把已确认状态打回未确认）
+            return;
+        }
+        this.cancelAlarmOn[kind] = false;
+        if (!has) return;
+        if (this.acked) {
+            // 已应答 → 该报警直接消失（不需要第二次应答）
+            this.messages = (this.messages || []).filter((m) => !m.startsWith(txt));
+            if (!this.messages.length) this.alarm = false;
+            this.alarmText = (this.messages[0] || '');
+            return;
+        }
+        // 未应答 → RTN：文字转 NORMAL，保持红色等待 ACK
+        this.messages = (this.messages || []).map((m) => (m.startsWith(txt) ? `${txt}, NORMAL` : m));
+        this.alarmText = this.messages[0] || '';
+    }
+
+    /**
+     * 停车/超速故障消失（如越控 Cancel SHD）：
+     * · 已应答（acked）→ 报警自动清除（不需要第二次应答）；
+     * · 未应答 → 转 RTN：报警信息文字由 SHUTDN 改为 NORMAL，仍保持未复位状态等待 ACK。
+     */
+    _shutAlarmReturn() {
+        this.engineReady = true;
+        this.startBlocked = false;
+        if (!this.alarm) return;
+        if (this.acked) { this.alarm = false; this.clearMessages(); return; }
+        this.messages = (this.messages || []).map((t) => t.replace(/SHUTDN$/, 'NORMAL'));
+        this.alarmText = this.messages[0] || '';
     }
     silence() { this.silenced = true; }
 
@@ -409,45 +831,100 @@ export class AC600Solver {
     solve(dt) {
         dt = Math.min(dt || 0, 0.2);
 
+        // 停机时长累计（用于 slow turning 程序）
+        if (this.running) this.stoppedTime = 0;
+        else this.stoppedTime += dt;
+
+        // 静止计时（过零换向过程中不触发重复起动）
+        if (Math.abs(this.rpm) < 1) this._restTime += dt;
+        else this._restTime = 0;
+
+        // 车令稳定计时（拖车钟途中车令一直在变 → 不计时，松手稳定后才允许自动起动）
+        if (this.rpmCmd !== this._lastCmdVal) { this._lastCmdVal = this.rpmCmd; this._cmdHold = 0; }
+        else this._cmdHold += dt;
+
+        // 超速保护试验：两个开关都在 ON，且模拟转速超过超速试验值 → 超速停车
+        // 每次试验只动作一次（越限后需先退出越限/关掉开关"重新武装"，避免越控后被立刻重新触发）
+        const OT = this.overspeedTest;
+        if (OT) {
+            const over = OT.simOn && OT.osTestOn && OT.simRpm > OT.osTestRpm;
+            if (over) {
+                if (this._osTestArmed !== false) {
+                    this._osTestArmed = false;
+                    this._overspeedTrip();
+                }
+            } else {
+                this._osTestArmed = true;
+                // 试验条件消失（模拟转速降到试验值以下 / 关掉开关）→ 超速故障消失，报警自动恢复
+                if (this.overspeedTripped) {
+                    this.overspeedTripped = false;
+                    if (!this.emStopLatched) this.shutDown = false;   // 试验引起的停车随之解除
+                    this._shutAlarmReturn();                          // 已应答→清除；未应答→转 RTN
+                }
+            }
+        }
+
+        // 慢降锁存复位：减速原因已消失，且本船车令（控制位置车钟）拉到 40 rpm 以下 → 解除自动减速
+        if (this.slowDown && this.sldAwaitReset
+            && !Object.keys(this.sldCauses || {}).length
+            && Math.abs(this.rpmCmd) < 40) {
+            this.slowDown = false;
+            this.sldAwaitReset = false;
+        }
+
         // 手柄自动起动：手柄离开 STOP（有转速给定）且主机未运行 → 自动进入起动过程
         this._autoStart();
 
-        // 起动过程：约 3 s 内转速建立
+        // 起动过程：起动空气转车（约 3 s，转速由 0 平顺升到 ~12 rpm，不出现 10 rpm 平台）
         if (this.starting) {
             this.startTimer += dt;
             this.startAir = Math.max(18, this.startAir - dt * 2.2);
-            if (this.startTimer > (this.slowTurning ? START_DURATION + 3 : START_DURATION)) {
+            if (this.startTimer > (this.slowTurning ? START_DURATION + (this.slowTurnDurS || 10) : START_DURATION)) {
                 this.starting = false;
                 this.mainStartValveOpen = false;
                 this.running = true;
-                this.rpm = Math.max(this.rpm, 12);
+                this.rpm = this._startDir >= 0 ? Math.max(this.rpm, 12) : Math.min(this.rpm, -12);
             }
         } else {
             // 起动空气由空压机补气
             if (this.startAir < 28.3) this.startAir = Math.min(28.3, this.startAir + dt * 0.55);
         }
 
+        // ① 限制链路：由车令 rpmCmd 计算受限的 SETP（加速率 / 负荷程序 / 临界区避让 …）
+        this._stepSetp(dt);
+
         if (this.starting) {
-            // 起动空气转车阶段：转速稳定在很低值（约 10 rpm），不跟随燃油给定
-            this.rpm += (10 - this.rpm) * Math.min(1, dt * 4);
+            // 起动空气转车阶段：按起动方向平顺转到约 ±12 rpm（不跟随燃油给定，也不长时间停滞）
+            const turn = (this._startDir || 1) * 12;
+            this.rpm += (turn - this.rpm) * Math.min(1, dt * 1.2);
         } else {
-            // 主机转速追随给定（慢降时目标受限）
-            let target = this.rpmCmd;
+            // ①5 静止且未起动：不自行升速（必须由起动程序用起动空气转起来）
+            const atRest = !this.running && Math.abs(this.rpm) < 1;
+            if (atRest) {
+                this.rpm = 0;
+            } else {
+            // ② 主机转速追随 SETP（慢降时目标受限）
+            let target = this.setp;
             if (this.slowDown && !this.cancelSLD) target = Math.min(target, target > 0 ? 40 : target);
             if (this.shutDown && !this.cancelSHD) target = 0;
-            const rate = this.shutDown ? 55 : 26;              // rpm/s
+            // 速率（rpm/s）：停车动作 55；其余按主机惯性最快变化率（≈4.53 → 68→0 约 15 s）
+            const rate = this.shutDown ? 55 : (this.inertiaRate || 68 / 15);
             const diff = target - this.rpm;
             if (Math.abs(diff) > 0.2) {
                 this.rpm += clamp(diff, -rate * dt, rate * dt);
             } else {
                 this.rpm = target;
             }
+            }
         }
-        this.rpm = Math.round(this.rpm * 10) / 10;
+        // 不再把 rpm 取整到 0.1：惯性速率很慢（约 4.53 rpm/s），每帧取整会累积掉速
+        if (Math.abs(this.rpm) < 0.05) this.rpm = 0;
 
-        // 负荷随转速（22 % + 0.9 rpm，上限 105 %；负荷限制时封顶 80 %）
+        // 负荷随转速（22 % + 0.9 × |rpm|，上限 105 %；负荷限制时封顶 80 %）
+        // 倒车同样按转速绝对值计负荷：反向转速越大，负荷越大
         const cap = (this.loadLimit && !this.cancelLimits) ? 80 : 105;
-        const tLoad = this.rpm > 0 ? Math.min(cap, 22 + this.rpm * 0.9) : 0;
+        const absRpm = Math.abs(this.rpm);
+        const tLoad = absRpm > 0.5 ? Math.min(cap, 22 + absRpm * 0.9) : 0;
         this.load += (tLoad - this.load) * Math.min(1, dt * 1.6);
         this.load = Math.round(this.load * 10) / 10;
 

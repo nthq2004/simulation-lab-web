@@ -94,6 +94,10 @@ export class Ac600ConsolePanel extends BaseComponent {
         this._menuTab = 0;          // 二级页（软键）
         this._directPage = null;    // 无子菜单的直接页面（如 estate）
         this._menuHitIds = [];      // 页面软键热区 id
+        this._safCancelled = {};    // Safety 页逐项越控标记（'shd:os' / 'sld:eicu-a' …）
+        this._almState = {};        // 报警状态机：key → { seen, on, acked }
+        this._cancel = { shd: false, sld: false, lim: false };   // 本面板三个 Cancel 按钮（各面板独立，不同步）
+        this._safetyViewMode = 'all';  // Safety 页两种显示状态：全部 / 仅故障项
 
         this._initGroups();
         this._init();
@@ -407,6 +411,12 @@ export class Ac600ConsolePanel extends BaseComponent {
         this._setpTri = mkTri(L.setp.x, L.setp.w);
         this._leverTri = mkTri(L.lev.x, L.lev.w);
         this._setpVal = _text({ x: L.setp.x - 25, y: L.setp.y + L.setp.h + 22, width: 100, align: 'center', fontSize: 16, fill: C_YELLOW, text: '68.0 RPM' });
+        // 正在执行的限制（SETP/LEVER 柱下方，居中原点）
+        this._limiterTxt = _text({
+            x: L.setp.x - 60, y: L.setp.y + L.setp.h + 52, width: 280, align: 'center',
+            fontSize: 20, fill: C_YELLOW, text: '',
+        });
+        d.add(this._limiterTxt);
         this._leverVal = _text({ x: L.lev.x - 25, y: L.lev.y + L.lev.h + 22, width: 100, align: 'center', fontSize: 16, fill: C_YELLOW, text: '68.0 RPM' });
         d.add(this._setpVal, this._leverVal);
 
@@ -489,10 +499,10 @@ export class Ac600ConsolePanel extends BaseComponent {
         /** 依据指针 y 设定车钟（连续）并移动滑条 */
         this._telApplyPointer = (localY) => {
             const ratio = Math.max(0, Math.min(1, (localY - minY) / (maxY - minY)));
-            this._telSlider.y(minY + ratio * (maxY - minY));
             const rpm = posToRpm(ratio * 10);          // 拖到某档行 → 正好该档转速
-            // 各位置车钟独立：本面板车钟始终可自由拖动；仅控制位置的车钟会改变主机给定
+            // 车钟手柄各位置都能自由拖动；只有控制位置的车钟会改变主机给定（LEVER）
             this.model.setLeverContinuous(rpm, this.posKey);
+            this._telSlider.y(minY + ratio * (maxY - minY));
             this._redraw();
         };
 
@@ -514,6 +524,7 @@ export class Ac600ConsolePanel extends BaseComponent {
                 const lo = toLocal();
                 if (!inTelArea(lo)) return;
                 this._telManualDrag = true;
+                this._telDragFrom = this.model.leverRpm[this.posKey];   // 记录拖动起点（判断急倒车）
                 this.group.draggable(false);        // 锁住整块面板拖动
                 this._telApplyPointer(lo.y);        // 点哪儿 → 手柄立即到位
                 if (typeof window !== 'undefined') window.__telDebug = { id: this.id, phase: 'down', localY: Math.round(lo.y) };
@@ -526,8 +537,16 @@ export class Ac600ConsolePanel extends BaseComponent {
             const up = () => {
                 if (!this._telManualDrag) return;
                 this._telManualDrag = false;
-                this.group.draggable(true);
+                this.group.draggable(!((this._menuPage && this._subPage) || this._directPage));
                 this._telSnap();
+                // 一次拖动内从 NAV FULL(68) 直接拉到 EM'CY ASTERN(-55) → 应急操作（Cancel Limits 自动生效）
+                // 只有**拥有控制权**的面板车钟才触发（无控制权拖动只动手柄，不触发任何动作）
+                const to = this.model.leverRpm[this.posKey];
+                const inControl = this.model.controlPos === this.posKey;
+                if (inControl && typeof this._telDragFrom === 'number'
+                    && this._telDragFrom >= 67.5 && to <= -54.5) {
+                    this.model.crashAstern();
+                }
                 if (typeof window !== 'undefined') window.__telDebug = { id: this.id, phase: 'up', leverPos: this.model.leverPos, cmd: this.model.rpmCmd };
             };
             stage.on('mousedown.tel', down);
@@ -645,6 +664,22 @@ export class Ac600ConsolePanel extends BaseComponent {
     //  交互
     // ═══════════════════════════════════════════════════════
 
+    /**
+     * 画一段分段彩色的文字（同一行内不同颜色）。
+     * 各段按「最终字号 15.5」量宽后顺序排布，绘制时用 13.5 —— _renderMenu 统一 +2 后正好吻合。
+     */
+    _pgRichText(x, y, segs) {
+        const g = this._menuGroup;
+        let cx = x;
+        segs.forEach(([t, color]) => {
+            if (!t) return;
+            g.add(_text({ x: cx, y, width: 520, fontSize: 13.5, fill: color || '#e6ecf2', text: t }));
+            const n = new Konva.Text({ text: t, fontSize: 15.5 });
+            cx += n.width();
+            n.destroy();
+        });
+    }
+
     _bindInteraction() {
         const M = this.model;
         const mk = (id, x, y, w, h, onClick) => {
@@ -655,9 +690,33 @@ export class Ac600ConsolePanel extends BaseComponent {
 
         // Cancel 越控
         // 三个按钮均为切换型：按一次越控（灯亮），再按一次复位（灯灭）
-        mk('cancel-shd', L.cancelBtn.x, L.cancelBtn.y[0] - 37, L.cancelBtn.w, L.cancelBtn.w, () => M.toggleSafety('SHD'));
-        mk('cancel-sld', L.cancelBtn.x, L.cancelBtn.y[1] - 37, L.cancelBtn.w, L.cancelBtn.w, () => M.toggleSafety('SLD'));
-        mk('cancel-limits', L.cancelBtn.x, L.cancelBtn.y[2] - 37, L.cancelBtn.w, L.cancelBtn.w, () => M.toggleSafety('LIM'));
+        // 越控（各面板独立，互不同步）：只改本面板状态与本站点安全页的逐项越控，并产生本站点报警
+        mk('cancel-shd', L.cancelBtn.x, L.cancelBtn.y[0] - 37, L.cancelBtn.w, L.cancelBtn.w, () => {
+            const on = !this._cancel.shd;
+            this._cancel.shd = on;
+            M.setCancel('SHD', on, this.posKey);
+            this._safCancelAll('shd', on);
+            M.setCancelAlarm('shd', M.cancelSHD);
+            this._almPollAt = 0; this._pollAlarms();     // 立即记录报警状态（保证 RTN 能保留）
+            this._renderMenu();
+        });
+        mk('cancel-sld', L.cancelBtn.x, L.cancelBtn.y[1] - 37, L.cancelBtn.w, L.cancelBtn.w, () => {
+            const on = !this._cancel.sld;
+            this._cancel.sld = on;
+            M.setCancel('SLD', on, this.posKey);
+            this._safCancelAll('sld', on);
+            M.setCancelAlarm('sld', M.cancelSLD);
+            this._almPollAt = 0; this._pollAlarms();     // 立即记录报警状态（保证 RTN 能保留）
+            this._renderMenu();
+        });
+        mk('cancel-limits', L.cancelBtn.x, L.cancelBtn.y[2] - 37, L.cancelBtn.w, L.cancelBtn.w, () => {
+            const on = !this._cancel.lim;
+            this._cancel.lim = on;
+            M.setCancel('LIM', on, this.posKey);
+            M.setCancelAlarm('lim', M.cancelLimits);
+            this._almPollAt = 0; this._pollAlarms();     // 立即记录报警状态（保证 RTN 能保留）
+            this._renderMenu();          // Show Limiters 页的 STATUS / LEVEL 立即随动
+        });
 
         // 按钮排
         const btnAt = (ci, ri) => [L.btns.x[ci], ri === 0 ? L.btns.y1 : L.btns.y2];
@@ -669,7 +728,7 @@ export class Ac600ConsolePanel extends BaseComponent {
         // 扬声器 / 报警铃 / ACK
         mk('silence', 492, L.bottomY - 34, 68, 68, () => { M.silence(); });
         mk('alarm-bell', 578, L.bottomY - 25, 116, 50, () => { M.silence(); });
-        mk('ack', 712, L.bottomY - 34, 68, 68, () => { M.ack(); });
+        mk('ack', 712, L.bottomY - 34, 68, 68, () => { M.ack(); this._ackAlarms(); });
 
         // RPM CMD 上 / 下
         mk('lever-up', L.dark.x + L.arrowCol - 17, L.dark.y + L.arrowUpY - 17, 34, 34, () => { M.stepRpmCmd(2); });
@@ -743,8 +802,9 @@ export class Ac600ConsolePanel extends BaseComponent {
             'btn-cpos': [['Overview', 'overview', 0, 0], ['Transfer', 'transfer', 1, 0]],
             'btn-misc': [['Counters', 'counters', 0, 0],
                 ['Order Printer', 'printer', 1, 0], ['Service (LTU)', 'service', 2, 0]],
-            'btn-safety': [['Safety alarms', 'safety-alarms', 0, 0], ['Emergency stop', 'emstop', 1, 0],
-                ['Slow down / Shut down', 'sld-shd', 2, 0]],
+            'btn-safety': [['Shut Down', 'shd', 0, 0], ['Slow Down', 'sld', 1, 0],
+                ['RESET SLD', 'reset-sld', 3, 0],
+                ['Emg. Stop', 'emstop', 0, 1], ['RPM Detector', 'detector', 1, 1]],
             'btn-bwm': [['Engine modes', 'modes', 0, 0], ['Running mode', 'running', 1, 0],
                 ['Slow turning', 'slow-turning', 2, 0], ['Cyl. lubrication', 'prelub', 3, 0]],
             'btn-param': [['Start / Stop', 'p0', 0, 0], ['Reversing', 'p1', 1, 0],
@@ -827,6 +887,8 @@ export class Ac600ConsolePanel extends BaseComponent {
 
     /** 点二级按钮 */
     _openSub(key) {
+        // RESET SLD：本仿真中该软键不起作用（按下无任何动作，与真机一致）
+        if (key === 'reset-sld') return;
         if (key === 'home') {
             this._menuPage = null;
             this._subPage = null;
@@ -836,8 +898,18 @@ export class Ac600ConsolePanel extends BaseComponent {
             return;
         }
         const ALARM_KINDS = ['sys-crit', 'sys-nonc', 'comerr-c', 'comerr-n', 'io-fail'];
+        const SAFETY_KINDS = ['shd', 'sld', 'emstop'];
         this._listOffset = 0;
-        if (ALARM_KINDS.includes(key)) {
+        if (this._subPage !== key) this._safSel = null;
+        if (SAFETY_KINDS.includes(key)) {
+            // 首次点击显示全部项目；再次点击只显示故障项
+            if (this._subPage === key) {
+                this._safetyViewMode = this._safetyViewMode === 'all' ? 'active' : 'all';
+            } else {
+                this._subPage = key;
+                this._safetyViewMode = 'all';
+            }
+        } else if (ALARM_KINDS.includes(key)) {
             // 两种状态：同一项再点 → 在「全部 / 仅未复位」间切换
             if (this._subPage === key) {
                 this._alarmViewMode = this._alarmViewMode === 'all' ? 'active' : 'all';
@@ -904,11 +976,13 @@ export class Ac600ConsolePanel extends BaseComponent {
         this._listOffset = off;
         items.slice(off, off + maxRows).forEach((it, i) => {
             const ry = bodyY + i * rowH;
-            g.add(_rect({ x: xD, y: ry, width: 1006, height: rowH, fill: it.alarm ? '#4d0f0f' : ((off + i) % 2 ? '#2b2b2b' : '#323232') }));
-            const col = it.alarm ? '#ff4040' : '#00c000';
+            const st = it.st || (it.alarm ? 'unack' : 'none');
+            const on = st === 'unack' || st === 'acked';
+            g.add(_rect({ x: xD, y: ry, width: 1006, height: rowH, fill: st === 'unack' ? '#4d0f0f' : ((off + i) % 2 ? '#2b2b2b' : '#323232') }));
+            const col = st === 'acked' ? '#f0d040' : ((st === 'unack' || st === 'rtn') ? '#ff4040' : '#00c000');
             g.add(_text({ x: xD + 6, y: ry + 4, width: wD - 8, fontSize: 14, fill: col, text: it.desc }));
-            g.add(_text({ x: xV + 6, y: ry + 4, width: wV - 8, fontSize: 14, fill: col, text: it.value }));
-            g.add(_text({ x: xA + 6, y: ry + 4, width: wA - 8, fontSize: 14, fill: col, text: it.alarm ? 'ALARM' : '' }));
+            g.add(_text({ x: xV + 6, y: ry + 4, width: wV - 8, fontSize: 14, fill: col, text: st === 'rtn' ? 'NORMAL' : it.value }));
+            g.add(_text({ x: xA + 6, y: ry + 4, width: wA - 8, fontSize: 14, fill: col, text: on ? 'AL. CLOSE' : '' }));
         });
         if (!items.length) {
             g.add(_text({ x: xD, y: bodyY + 30, width: 1000, align: 'center', fontSize: 15, fill: '#9fd3ff', text: 'NO ITEMS' }));
@@ -971,7 +1045,7 @@ export class Ac600ConsolePanel extends BaseComponent {
                 N('DGU RPM SYSTEM', 'NORMAL', false),
                 N('ECR PANEL COMMUNICATION', 'NORMAL', false),
                 N('ESU BACKUP POWER FAILURE', 'NORMAL', false),
-                N('ESU MAIN POWER FAILURE', 'NORMAL', M.shutDown && !M.cancelSHD),
+                N('ESU MAIN POWER FAILURE', 'NORMAL', !!M.emStopLatched),
                 N('GOVERNOR SYS FAILURE', 'NORMAL', false),
                 N('PBW POT.METER', pot(0), false),
                 N('REMOTE CONTROL SYS FAILURE', 'NORMAL', false),
@@ -1001,17 +1075,17 @@ export class Ac600ConsolePanel extends BaseComponent {
                 N('BR SERVO FAILURE', 'NORMAL', false),
                 N('ECR FORCED CMD TKOVER', M.forceTake ? 'OPEN' : 'NORMAL', M.forceTake),
                 N('ECR SERVO FAILURE', 'NORMAL', false),
-                N('LIMITS CANCEL FROM ACP', M.cancelLimits ? 'ACTIVE' : 'NORMAL', M.cancelLimits),
+                N('LIMITS CANCEL FROM ACP', this._cancel.lim ? 'ACTIVE' : 'NORMAL', this._cancel.lim),
                 N('LIMITTATION INCREASED', 'NORMAL', M.loadLimitUp),
                 N('LOCAL FORCED CMD TKOVR', M.forceTake ? 'OPEN' : 'NORMAL', M.forceTake),
                 N('LOAD PROG CANCEL FROM ACP', 'NORMAL', false),
                 N('POWER FAILURE 1X10 BRIDGE', 'NORMAL', false),
                 N('POWER FAILURE 2X10 BRIDGE', 'NORMAL', false),
                 N('SG DISCONNECTION FAILED', 'OPEN', false),
-                N('SHUTDOWN CANCELLED', M.cancelSHD ? 'ACTIVE' : 'NORMAL', M.cancelSHD),
-                N('SLOWDOWN CANCELLED', M.cancelSLD ? 'ACTIVE' : 'NORMAL', M.cancelSLD),
-                N('SUDDEN STOP', 'NORMAL', M.shutDown && !M.cancelSHD),
-                N('START FAIL/BLOCK', 'NORMAL', M.startBlocked || M.startFail),
+                N('SHUTDOWN CANCELLED', this._cancel.shd ? 'ACTIVE' : 'NORMAL', this._cancel.shd),
+                N('SLOWDOWN CANCELLED', this._cancel.sld ? 'ACTIVE' : 'NORMAL', this._cancel.sld),
+                N('SUDDEN STOP', 'NORMAL', false),
+                N('START FAIL/BLOCK', (M.startBlocked || M.startFail) ? 'ACTIVE' : 'NORMAL', M.startBlocked || M.startFail),
                 N('START FAILED', 'NORMAL', M.startFail),
                 N('START AIR PRESSURE LOW', 'NORMAL', M.startAir < 15),
                 N('WRONG WAY', 'NORMAL', M.wrongWay),
@@ -1080,10 +1154,10 @@ export class Ac600ConsolePanel extends BaseComponent {
             N('THRUST PAD HIGH-HIGH TEMP', 'NORMAL', false),
             N('T/C LUB.OIL LOW-LOW PRESS', 'NORMAL', false),
             N('J.C.F.W. INLET LOW PRESS', 'NORMAL', false),
-            N('EICU A SHUTDOWN NON-CANCELLABLE', 'NORMAL', M.shutDown && !M.cancelSHD),
-            N('EICU A SHUTDOWN CANCELLABLE', 'NORMAL', M.shutDown && !M.cancelSHD),
-            N('EICU B SHUTDOWN NON-CANCELLABLE', 'NORMAL', M.shutDown && !M.cancelSHD),
-            N('EICU B SHUTDOWN CANCELLABLE', 'NORMAL', M.shutDown && !M.cancelSHD),
+            N('EICU A SHUTDOWN NON-CANCELLABLE', 'NORMAL', M.shutDown && !M.cancelSHD && !M.overspeedTripped),
+            N('EICU A SHUTDOWN CANCELLABLE', 'NORMAL', M.shutDown && !M.cancelSHD && !M.overspeedTripped),
+            N('EICU B SHUTDOWN NON-CANCELLABLE', 'NORMAL', M.shutDown && !M.cancelSHD && !M.overspeedTripped),
+            N('EICU B SHUTDOWN CANCELLABLE', 'NORMAL', M.shutDown && !M.cancelSHD && !M.overspeedTripped),
             // ── 第 3 页 ──
             N('SHUTDOWN ACTIVE ACTION A', 'OPEN', false),
             N('SHUTDOWN ACTIVE ACTION B', 'OPEN', false),
@@ -1098,6 +1172,8 @@ export class Ac600ConsolePanel extends BaseComponent {
      *  页面内所有文字（标题 / 表头 / 选项行 / 软键）统一在绘制后放大 2px */
     _renderMenu() {
         this._renderMenuRaw();
+        // 液晶屏显示页面时，整块面板不再可拖动（避免选行/点按钮时误拖面板）
+        if (this.group) this.group.draggable(!((this._menuPage && this._subPage) || this._directPage));
         try {
             (this._menuGroup.find('Text') || []).forEach((t) => {
                 const fs = typeof t.fontSize === 'function' ? t.fontSize() : 12;
@@ -1128,8 +1204,9 @@ export class Ac600ConsolePanel extends BaseComponent {
         // ── Alarms：真机样式，表头紧贴状态条，无标题行 ──
         if (ALARM_KINDS.includes(sub)) {
             this._menuGroup.add(_rect({ x: 126, y: 70, width: 1020, height: 430, fill: '#2b2b2b' }));
-            let items = this._alarmItems(sub);
-            if (this._alarmViewMode === 'active') items = items.filter((it) => it.alarm);
+            let items = this._alarmItems(sub)
+                .map((it) => ({ ...it, st: this._alm(`alm:${sub}-${it.desc}`, it.alarm) }));
+            if (this._alarmViewMode === 'active') items = items.filter((it) => it.st !== 'none');
             this._pgListTable(items, 70, { showHeader: true });
             return;
         }
@@ -1211,39 +1288,17 @@ export class Ac600ConsolePanel extends BaseComponent {
         }
 
         if (this._menuPage === 'btn-safety') {
-            const y = this._pgBase('SAFETY SYSTEM');
-            if (sub === 'safety-alarms') {
-                const list = [];
-                if (M.shutDown) list.push([M.cancelSHD ? 'SHUT DOWN (CANCELLED)' : 'SHUT DOWN', !!M.cancelSHD]);
-                if (M.slowDown) list.push([M.cancelSLD ? 'SLOW DOWN (CANCELLED)' : 'SLOW DOWN', !!M.cancelSLD]);
-                if (M.emStopLatched) list.push(['EMERGENCY STOP', false]);
-                if (!list.length) list.push(['SAFETY SYSTEM NORMAL', false]);
-                list.forEach(([n, ok], i) => {
-                    this._pgRow(136, y + 6 + i * 26, 1000, [{ w: 700, text: n, bold: true }, { w: 280, text: ok ? 'CANCELLED' : 'ACTIVE', color: ok ? '#9fe0a0' : '#ff8a8a' }], { bg: i % 2 ? '#2b2b2b' : '#323232' });
-                });
-                this._menuGroup.add(_text({ x: 136, y: y + 130, width: 940, fontSize: 13, fill: '#9fd3ff', text: '可用 Cancel SHD / Cancel SLD 越控可取消的安保动作。' }));
-            } else if (sub === 'emstop') {
-                [['BRIDGE', M.emStopLatched && M.controlPos === 'BRIDGE'], ['ECR', M.emStopLatched && M.controlPos === 'ECR'],
-                    ['LOCAL', M.emStopLatched && M.controlPos === 'LOCAL'], ['PORT WING', false], ['STB. WING', false]].forEach(([label, on], i) => {
-                    const bx = 150 + i * 190, by = y + 10;
-                    this._menuGroup.add(_rect({ x: bx, y: by, width: 170, height: 54, fill: on ? '#c40000' : '#3a3a3a', stroke: '#e8ebec', strokeWidth: 2, cornerRadius: 4 }));
-                    this._menuGroup.add(_text({ x: bx, y: by + 8, width: 170, align: 'center', fontSize: 13.5, fill: '#ffffff', text: label }));
-                    this._menuGroup.add(_text({ x: bx, y: by + 28, width: 170, align: 'center', fontSize: 12.5, fill: on ? '#ffffff' : '#9fd3ff', text: on ? 'PRESSED' : 'NORMAL' }));
-                });
-                this._menuGroup.add(_text({ x: 150, y: y + 78, width: 940, fontSize: 14, fontStyle: 'bold', fill: M.emStopLatched ? '#ff8a8a' : '#9fe0a0',
-                    text: M.emStopLatched ? 'ENGINE TRIPPED — 应急停车已动作，需全部急停开关复位后方可重新起动' : 'ALL EMERGENCY STOP SWITCHES NORMAL' }));
-                this._menuGroup.add(_text({ x: 150, y: y + 112, width: 940, fontSize: 13, fill: '#9fd3ff', text: '急停开关硬线接至主机安全系统（ESU），动作后燃油给定清零。' }));
-            } else {
-                [['SLOW DOWN', M.slowDown ? (M.cancelSLD ? 'CANCELLED' : 'ACTIVE') : 'INACTIVE', '40 rpm'],
-                    ['SHUT DOWN', M.shutDown ? (M.cancelSHD ? 'CANCELLED' : 'ACTIVE') : 'INACTIVE', '0 rpm'],
-                    ['Cancel SHD', M.cancelSHD ? 'ON' : 'OFF', '—'],
-                    ['Cancel SLD', M.cancelSLD ? 'ON' : 'OFF', '—'],
-                    ['Cancel limits', M.cancelLimits ? 'ON' : 'OFF', '—']].forEach((r, i) => {
-                    this._pgRow(136, y + 6 + i * 26, 1000, [
-                        { w: 500, text: r[0] }, { w: 300, text: r[1], color: (r[1] === 'ACTIVE' || r[1] === 'ON') ? '#ffb0b0' : '#9fe0a0' }, { w: 200, text: r[2] },
-                    ], { bg: i % 2 ? '#2b2b2b' : '#323232' });
-                });
+            if (sub === 'shd') { this._paintSafetyTable(this._shdItems()); return; }
+            if (sub === 'sld') {
+                const resetNote = (this._resetSldDone && Date.now() - this._resetSldDone < 3000)
+                    ? 'SLOW DOWN RESET — DONE' : '';
+                this._paintSafetyTable(this._sldItems(), { note: resetNote });
+                return;
             }
+            if (sub === 'emstop') { this._paintSafetyTable(this._emItems()); return; }
+
+            // RPM Detector：专用面板（Rpm Detector System 1/2 + 计数器/转速/模拟等）
+            this._paintRpmDetector();
             return;
         }
 
@@ -1392,11 +1447,11 @@ export class Ac600ConsolePanel extends BaseComponent {
                 slowDown: { level: 40 },
                 steady: { rpm: 21 },
                 chiefRpm: { ahead: 68, astern: 55 },
-                accel: { rpm: 60, rate: 8 },
-                decel: { rpm: 45, rate: -10 },
-                loadUp: { from: 25, to: 68, time: 30 },
-                loadDown: { from: 68, to: 25, time: 30 },
-                slowTurn: { stopMin: 30, durS: 45 },
+                accel: { rpm: 57, rate: 2 },
+                decel: { rpm: 57, rate: -3 },
+                loadUp: { from: 57, to: 68, time: 3 },
+                loadDown: { from: 57, to: 68, time: 2 },
+                slowTurn: { stopMin: 20, durS: 10 },
                 critical: { lo: 30, hi: 37 },
             };
             this._limEdit = {};
@@ -1445,39 +1500,700 @@ export class Ac600ConsolePanel extends BaseComponent {
         setTimeout(() => { inp.focus(); inp.select(); }, 0);
     }
 
-    /** Show Limiters：LIMITER / STATUS / LEVEL（LIMITER 列宽减半，加宽到 LEVEL） */
+    /** RPM Detector 页状态（保存在模型里，两块面板共享：编辑值 + 两个试验开关） */
+    _detState() {
+        const M = this.model;
+        if (!M.overspeedTest) {
+            M.overspeedTest = {
+                simOn: false, simRpm: 65.0, osTestOn: false, osTestRpm: 78.0, osLevel: 78.0,
+                msg: '', msgUntil: 0,
+            };
+        }
+        return M.overspeedTest;
+    }
+
+    /** 双击 RPM Detector 可编辑框 → DOM 输入框（仅 ECR） */
+    _beginDetEdit(field, x, y, w, h) {
+        if (this.variant !== 'ecr') return;
+        const D = this._detState();
+        const abs = this.group.getAbsolutePosition();
+        const rect = this.sys.stage.container().getBoundingClientRect();
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.value = String(D[field]);
+        Object.assign(inp.style, {
+            position: 'fixed', left: `${rect.left + abs.x + x}px`, top: `${rect.top + abs.y + y}px`,
+            width: `${w}px`, height: `${h}px`, fontSize: '14px', textAlign: 'center',
+            boxSizing: 'border-box', zIndex: '9999', border: '2px solid #1395eb',
+        });
+        document.body.appendChild(inp);
+        this._detEditing = true;
+        let closed = false;
+        const done = (commit) => {
+            if (closed) return;
+            closed = true;
+            if (commit) {
+                const v = parseFloat(inp.value);
+                if (Number.isFinite(v)) D[field] = v;
+            }
+            inp.remove();
+            this._detEditing = false;
+            this._renderMenu();
+            this._redraw();
+        };
+        inp.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') done(true);
+            else if (e.key === 'Escape') done(false);
+        });
+        inp.addEventListener('blur', () => done(true));
+        setTimeout(() => { inp.focus(); inp.select(); }, 0);
+    }
+
+    /**
+     * RPM Detector 页（照真机版式）：
+     *   白底文本框 = 可编辑（Overspeed Level / Rpm Simulate / Overspeed Test Level）
+     *   灰底文本框 = 只读（Pickup1/2、Engine Rpm、Revolution Counter、Running Hours）
+     *   仅 ECR 面板可操作（Reset 清零、OFF⇄ON 切换、双击白框改值）；BRIDGE 面板本页不可操作
+     */
+    _paintRpmDetector() {
+        const M = this.model;
+        const D = this._detState();
+        const canOp = this.variant === 'ecr';
+        const g = this._menuGroup;
+        g.add(_rect({ x: 126, y: 70, width: 1020, height: 430, fill: '#b9bdc0' }));
+
+        const C_RO = '#bfc4c8';                 // 只读（灰底）
+        const C_RW = '#ffffff';                 // 可编辑（白底）
+
+        const lab = (x, y, t, w = 220, fs = 13.5) =>
+            g.add(_text({ x, y, width: w, fontSize: fs, fill: '#101010', text: t }));
+
+        /** 文本框：editable=true 用白底；field 非空且 ECR 时注册双击编辑热区 */
+        const tbox = (x, y, w, h, val, field, editable) => {
+            g.add(_rect({
+                x, y, width: w, height: h,
+                fill: editable ? C_RW : C_RO, stroke: '#202020', strokeWidth: 1.6,
+            }));
+            g.add(_text({
+                x, y: y + (h - 18) / 2, width: w, align: 'center',
+                fontSize: 14, fill: '#101010', text: val,
+            }));
+            if (!editable || !field || !canOp) return;
+            const id = `det-edit-${field}`;
+            const hit = this.addClickablePart(id, x, y, w, h);
+            hit.on('click tap', (e) => {
+                e.cancelBubble = true;
+                const now = Date.now(), last = this._detLastClick;
+                if (last && last.field === field && now - last.t < 450) {
+                    this._detLastClick = null;
+                    this._beginDetEdit(field, x, y, w, h);
+                } else {
+                    this._detLastClick = { field, t: now };
+                }
+            });
+            this._menuHitIds.push(id);
+        };
+
+        /** 按钮：BRIDGE 只画不响应（不注册热区）；enabled=false 时灰显（仍可点，用于给出拒绝提示） */
+        const btn = (x, y, w, h, t, id, onDown, enabled = true) => {
+            g.add(_rect({
+                x, y, width: w, height: h,
+                fill: enabled ? '#cfd3d6' : '#bdc2c6', stroke: '#5f6669', strokeWidth: 1.6, cornerRadius: 2,
+            }));
+            g.add(_text({
+                x, y: y + (h - 18) / 2, width: w, align: 'center', fontSize: 14,
+                fill: enabled ? '#1a3fa0' : '#7b838a', text: t,
+            }));
+            if (!canOp) return;
+            const hit = this.addClickablePart(id, x, y, w, h);
+            hit.on('click tap', (e) => { e.cancelBubble = true; onDown(); this._renderMenu(); this._redraw(); });
+            this._menuHitIds.push(id);
+        };
+
+        const lamp = (cx, cy, on, color) => {
+            g.add(_circle({
+                x: cx, y: cy, radius: 11,
+                fill: on ? color : '#f4f6f7', stroke: on ? '#3a7a12' : '#a9aeb2', strokeWidth: 1.6,
+            }));
+            if (on) g.add(_circle({ x: cx - 4, y: cy - 5, radius: 3.6, fill: 'rgba(255,255,255,0.7)' }));
+        };
+
+        /** 系统框（legend 标题压在上边框） */
+        const sysBox = (x, y, w, h, title) => {
+            g.add(_rect({ x, y, width: w, height: h, fill: 'rgba(0,0,0,0)', stroke: '#101010', strokeWidth: 2 }));
+            const tw = Math.max(150, title.length * 8.2 + 20);
+            g.add(_rect({ x: x + 18, y: y - 11, width: tw, height: 22, fill: '#b9bdc0' }));
+            g.add(_text({ x: x + 26, y: y - 10, width: tw, fontSize: 15, fill: '#101010', text: title }));
+        };
+
+        const stopped = !!M.isStopped;                     // 停机状态才允许做超速保护试验
+        const shownRpm = M.rpm;                            // 探头/Engine Rpm 显示主机实际转速（模拟值只做超速试验）
+        const rpmTxt = `${shownRpm.toFixed(1)} rpm`;
+        const ahead = shownRpm > 0.05;
+        const astern = shownRpm < -0.05;
+        const dirLabel = ahead ? 'Ahead' : 'Astern';
+
+        // ── 两个测速系统（Pickup 值为只读灰框） ──
+        [['Rpm Detector System 1', 150], ['Rpm Detector System 2', 650]].forEach(([title, bx]) => {
+            sysBox(bx, 100, 450, 176, title);
+            ['Pickup1', 'Pickup2'].forEach((pname, pi) => {
+                const px = bx + 18 + pi * 216;
+                lab(px, 112, pname, 176, 14);
+                tbox(px, 132, 176, 32, rpmTxt, null, false);
+                lab(px, 178, dirLabel, 176, 14);
+                lamp(px + 120, 188, ahead || astern, '#35e01b');   // 检出转向才亮绿
+                lab(px, 212, 'Fail', 176, 14);
+                lamp(px + 120, 222, false, '#e01818');
+            });
+        });
+
+        // ── 两排（灯 / OFF 按钮 / 值框三列对齐） ──
+        const R1 = 310, R2 = 388, BH = 32;
+        // 第 1 排
+        lab(160, 284, 'Revolution Counter');
+        tbox(160, R1, 170, BH, String(Math.round(M.rev)), null, false);
+        btn(344, R1, 78, BH, 'Reset', 'det-reset-rev', () => { this.model.rev = 0; });
+
+        lab(480, 284, 'Engine Rpm');
+        tbox(480, R1, 170, BH, rpmTxt, null, false);
+
+        lab(700, 284, 'Rpm Simulate', 200);
+        lamp(712, R1 + BH / 2, !!D.simOn, '#35e01b');
+        btn(730, R1, 84, BH, D.simOn ? 'ON' : 'OFF', 'det-sim-toggle',
+            () => { this.model.toggleOverspeedTest('sim'); }, D.simOn || stopped);
+        tbox(826, R1, 168, BH, `${D.simRpm.toFixed(1)} rpm`, 'simRpm', true);
+
+        // 第 2 排（与第 1 排同列、同 y 基准）
+        lab(160, 362, 'Running Hours');
+        tbox(160, R2, 170, BH, M.runHours.toFixed(1), null, false);
+        btn(344, R2, 78, BH, 'Reset', 'det-reset-hours', () => { this.model.runHours = 0; });
+
+        lab(480, 362, 'Overspeed Level');
+        tbox(480, R2, 170, BH, `${D.osLevel.toFixed(1)} rpm`, 'osLevel', true);
+
+        lab(700, 362, 'Overspeed Test Level', 200);
+        lamp(712, R2 + BH / 2, !!D.osTestOn, '#35e01b');
+        btn(730, R2, 84, BH, D.osTestOn ? 'ON' : 'OFF', 'det-os-toggle',
+            () => { this.model.toggleOverspeedTest('os'); }, D.osTestOn || stopped);
+        tbox(826, R2, 168, BH, `${D.osTestRpm.toFixed(1)} rpm`, 'osTestRpm', true);
+
+        // 底部提示（超速动作 / 拒绝操作 / 停机互锁 / BRIDGE 只读）
+        const tripped = !!(M.overspeedTripped && M.shutDown && !M.cancelSHD);
+        const msgOn = !!(D.msg && Date.now() < D.msgUntil);
+        let hint = '白底数值框可双击编辑；Reset 清零计数/运行时间；两个开关都打到 ON 后，把模拟转速调过超速试验值即触发超速停车。';
+        let hintColor = '#4a5155';
+        if (tripped) {
+            hint = 'OVERSPEED SHUT DOWN — 超速保护已动作：燃油切断、主机停车';
+            hintColor = '#c40000';
+        } else if (msgOn) {
+            hint = D.msg;
+            hintColor = '#c40000';
+        } else if (!canOp) {
+            hint = '本面板（BRIDGE）该页仅作显示，操作请在集控台（ECR）进行。';
+        } else if (!stopped) {
+            hint = '主机运行中：超速保护试验只能在停机状态进行，两个 OFF 不能切到 ON。';
+            hintColor = '#a05a00';
+        }
+        g.add(_text({ x: 160, y: 444, width: 940, fontSize: 12, fill: hintColor, text: hint }));
+    }
+
+    /**
+     * 单条报警的状态机：
+     *   'unack' 未应答（红色，动作中）
+     *   'acked' 已应答但故障仍在（黄色）
+     *   'rtn'   故障已恢复但未应答（红色，Value 显示 NORMAL，等 ACK）
+     *   'none'  正常 / 已应答且已恢复（消失）
+     */
+    _alm(key, active) {
+        if (!this._almState) this._almState = {};
+        let st = this._almState[key];
+        if (!st) st = this._almState[key] = { seen: false, on: false, acked: false };
+        if (active) { st.seen = true; st.on = true; } else st.on = false;
+        if (st.on) return st.acked ? 'acked' : 'unack';
+        if (!st.seen) return 'none';
+        return st.acked ? 'none' : 'rtn';
+    }
+
+    /** 应答：故障仍在的项目转为"已确认"（黄）；已恢复的项目确认后消失 */
+    _ackAlarms() {
+        const S = this._almState || {};
+        Object.keys(S).forEach((k) => {
+            const st = S[k];
+            if (st.on) st.acked = true;
+            else delete S[k];
+        });
+    }
+
+    /** 每帧轮询报警状态（即使页面没打开也要更新，供菜单灯与本页着色使用） */
+    _pollAlarms() {
+        const M = this.model;
+        const now = Date.now();
+        if (this._almPollAt && now < this._almPollAt) return;
+        this._almPollAt = now + 200;
+        const live = !!(M.shutDown && !M.cancelSHD);
+        const os = !!M.overspeedTripped;
+        // 慢降复位（车钟拉到 40 rpm 以下）→ Slow Down 页的报警项一并恢复正常（不需要再按 ACK）
+        const sldNow = !!(M.slowDown && !M.cancelSLD);
+        if (this._sldPrev === true && !sldNow) {
+            Object.keys(this._almState || {}).forEach((k) => { if (k.startsWith('sld:')) delete this._almState[k]; });
+        }
+        this._sldPrev = sldNow;
+        this._alm('shd:trip', live);
+        this._alm('shd:os', os);
+        this._alm('shd:os-sw1', os);
+        this._alm('shd:os-sw2', os);
+        this._alm('alm:sys-nonc-START FAIL/BLOCK', !!(M.startBlocked || M.startFail));
+        // 三个 Cancel 产生的报警（与超速同一套状态机）
+        this._alm('alm:sys-nonc-SHUTDOWN CANCELLED', !!this._cancel.shd);
+        this._alm('alm:sys-nonc-SLOWDOWN CANCELLED', !!this._cancel.sld);
+        this._alm('alm:sys-nonc-LIMITS CANCEL FROM ACP', !!this._cancel.lim);
+        // Safety 菜单指示灯：任一停车项未消除（动作中或已恢复未应答）都算
+        this._shdAlarmLive = ['shd:trip', 'shd:os', 'shd:os-sw1', 'shd:os-sw2'].some((k) => {
+            const st = this._almState[k];
+            return st && (st.on || (st.seen && !st.acked));
+        });
+    }
+
+    /** 某项是否已被逐项越控（页 + key） */
+    _safIsCancelled(page, key) { return !!(this._safCancelled && this._safCancelled[`${page}:${key}`]); }
+
+    /** 标记某项已越控 */
+    _safMarkCancelled(page, key) {
+        if (!this._safCancelled) this._safCancelled = {};
+        this._safCancelled[`${page}:${key}`] = true;
+    }
+
+    /** 清除某页的全部逐项越控标记 */
+    _clearSafCancelled(page) {
+        if (!this._safCancelled) return;
+        Object.keys(this._safCancelled).forEach((k) => { if (k.startsWith(page + ':')) delete this._safCancelled[k]; });
+    }
+
+    /**
+     * Shut Down 页条目（照真机 13 行，各行指示灯按真机分布）：
+     *   ENGINE TRIPPED〔A〕/ FUEL CUT-OUT SOL. V/V〔无灯〕/ OVERSPEED FROM RPM UNIT〔A+L〕/
+     *   MAIN L.O. LOW-LOW PRESS〔A〕/ THRUST PAD·T/C LUB.OIL·J.C.F.W.〔A+C+L〕/
+     *   EICU A/B NON-CANCELLABLE〔A+L〕/ EICU A/B CANCELLABLE〔A+C+L〕/ OVERSPEED SYS.1·2〔A〕
+     * 带 Cancelled 灯的项目动作时行尾出现「Cancel SHD」，可逐项越控。
+     */
+    _shdItems() {
+        const M = this.model;
+        const live = !!(M.shutDown && !M.cancelSHD);
+        // 停车动作由「有」变「无」时才清逐项越控（避免刚点 Cancel SHD 就被下一次重绘清掉）
+        const nowOn = !!(M.shutDown || M.overspeedTripped);
+        if (this._safPrevShd && !nowOn) this._clearSafCancelled('shd');
+        this._safPrevShd = nowOn;
+        const C = (k) => this._safIsCancelled('shd', k);
+        const mk = (key, desc, opt = {}) => ({
+            key, desc,
+            value: opt.value || (opt.active ? 'ACTIVE' : 'NORMAL'),
+            active: !!opt.active,
+            st: this._alm(`shd:${key}`, !!opt.active),
+            cancelled: C(key),
+            hasA: opt.hasA !== false,
+            hasC: !!opt.hasC,
+            hasL: !!opt.hasL,
+            loopfail: !!opt.loopfail,
+            btn: opt.hasC ? 'Cancel SHD' : '',
+            onCancel: () => { this._safMarkCancelled('shd', key); if (opt.after) opt.after(); this._safRecheckShd(); },
+        });
+        const os = !!M.overspeedTripped;
+        const eicuLive = live && !os && !M.loLowLowShd && !M.jcwLowShd;   // 有明确原因时 EICU 组不亮
+        return [
+            mk('trip', 'ENGINE TRIPPED', { active: live }),
+            mk('fuel', 'FUEL CUT-OUT SOL. V/V', { value: live ? 'OPEN' : 'CLOSED', active: false, hasA: false }),
+            mk('os', 'OVERSPEED FROM RPM UNIT', {
+                active: os, value: os ? 'SHUTDN' : 'NORMAL', hasL: true,
+                after: () => { M.overspeedTripped = false; },
+            }),
+            mk('lo', 'MAIN L.O. LOW-LOW PRESS', {
+                active: !!M.loLowLowShd, value: M.loLowLowShd ? 'SHUTDN' : 'NORMAL',
+            }),
+            mk('thrust', 'THRUST PAD HIGH-HIGH TEMP', { active: false, hasC: true, hasL: true }),
+            mk('tc', 'T/C LUB.OIL LOW-LOW PRESS', { active: false, hasC: true, hasL: true }),
+            mk('jcw', 'J.C.F.W. INLET LOW PRESS', {
+                active: !!M.jcwLowShd, value: M.jcwLowShd ? 'SHUTDN' : 'NORMAL', hasC: true, hasL: true,
+            }),
+            mk('eicu-a-nc', 'EICU A SHUTDOWN NON-CANCELLABLE', { active: eicuLive, hasL: true }),
+            mk('eicu-a-c', 'EICU A SHUTDOWN CANCELLABLE', { active: eicuLive, hasC: true, hasL: true }),
+            mk('eicu-b-nc', 'EICU B SHUTDOWN NON-CANCELLABLE', { active: eicuLive, hasL: true }),
+            mk('eicu-b-c', 'EICU B SHUTDOWN CANCELLABLE', { active: eicuLive, hasC: true, hasL: true }),
+            mk('os-sw1', 'OVERSPEED SYS.1 - SW BACKUP', { active: os, value: os ? 'SHUTDN' : 'NORMAL' }),
+            mk('os-sw2', 'OVERSPEED SYS.2 - SW BACKUP', { active: os, value: os ? 'SHUTDN' : 'NORMAL' }),
+        ];
+    }
+
+    /** Slow Down 页条目：所有项目都有 Active + Cancelled 灯，仅 4 个回路（AXIAL VIB / OIL MIST / EICU A·B）带 Loop fail 灯 */
+    _sldItems() {
+        const M = this.model;
+        const live = !!(M.slowDown && !M.cancelSLD);
+        // 有明确减速原因（滑油温度高 / 缸套水出口温度高等）时，EICU 组不再跟着点亮
+        const eicuLive = live && !Object.keys(M.sldCauses || {}).length && !M.sldAwaitReset;
+        // 降速动作由「有」变「无」时才清逐项越控
+        if (this._safPrevSld && !M.slowDown) this._clearSafCancelled('sld');
+        this._safPrevSld = !!M.slowDown;
+        const C = (k) => this._safIsCancelled('sld', k);
+        // hasL 只在 4 个回路为真
+        const mk = (key, desc, opt = {}) => ({
+            key, desc,
+            value: opt.value || (opt.active ? 'ACTIVE' : 'NORMAL'),
+            active: !!opt.active,
+            st: this._alm(`sld:${key}`, !!opt.active),
+            cancelled: C(key),
+            hasA: true,
+            hasC: true,
+            hasL: !!opt.hasL,
+            loopfail: !!opt.loopfail,
+            btn: 'Cancel SLD',
+            onCancel: () => { this._safMarkCancelled('sld', key); this._safRecheckSld(); },
+        });
+        return [
+            mk('sld', 'SLOWDOWN ACTIVE', { active: live }),
+            mk('lo-p', 'MAIN L.O. INLET PRESS LOW'),
+            mk('lo-t', 'MAIN L.O. INLET TEMP HIGH', { active: !!(M.sldCauses && M.sldCauses['ME-LO-T']) }),
+            mk('pco-nf', 'P.C.O. COOLING OIL NON FLOW'),
+            mk('pco-t', 'P.C.O. OUTLET TEMP HIGH'),
+            mk('thrust', 'THRUST PAD TEMP HIGH'),
+            mk('mbrg', 'MAIN BEARING TEMP & DEV. HIGH'),
+            mk('hps', 'HPS BEARING TEMP HIGH'),
+            mk('jcw-p', 'JACKET C.F.W. INLET PRESS LOW'),
+            mk('jcw-t', 'JACKET C.F.W. OUTLET TEMP HIGH', { active: !!(M.sldCauses && M.sldCauses['CW-T']) }),
+            mk('scav', 'SCAV. AIR TEMP HIGH'),
+            mk('exh-t', 'EXH. GAS OUTLET TEMP HIGH'),
+            mk('exh-d', 'EXH. GAS OUTLET TEMP DEV. HIGH'),
+            mk('vib', 'AXIAL VIBRATION HIGH', { hasL: true }),
+            mk('mist', 'OIL MIST HIGH IN CRANKCASE', { hasL: true }),
+            mk('wear', 'BEARING WEAR SLOWDOWN'),
+            mk('eicu-a', 'EICU A SLOWDOWN', { active: eicuLive, hasL: true }),
+            mk('eicu-b', 'EICU B SLOWDOWN', { active: eicuLive, hasL: true }),
+            mk('cyl', 'CYL. COVER C.W. OUTLET TEMP HIGH'),
+            mk('stern', 'STERN TUBE BEARING (AFT) T.H.'),
+            mk('thr-r', 'THRUST RADIAL BEARING TEMP HIGH'),
+            mk('jcw-l', 'M/E JCW ACROSS CYL. LINE DPL'),
+            mk('jcw-c', 'M/E JCW ACROSS CYL. COV/EXH VV DPL'),
+        ];
+    }
+
+    /** Emg. Stop 页条目：仅第一行（FUEL CUT-OUT SOL. V/V）无灯；急停开关为 Active + Loop fail（不可越控，无 Cancelled 灯） */
+    _emItems() {
+        const M = this.model;
+        const em = !!M.emStopLatched;
+        const mk = (key, desc, active) => ({
+            key, desc, value: active ? 'PRESSED' : 'NORMAL', active,
+            cancelled: false, hasA: true, hasC: false, hasL: true, loopfail: false, btn: '',
+        });
+        return [
+            { key: 'fuel', desc: 'FUEL CUT-OUT SOL. V/V', value: em ? 'OPEN' : 'CLOSED', active: em, cancelled: false, hasA: false, hasC: false, hasL: false, btn: '' },
+            mk('bridge', 'EMERGENCY STOP SWITCH BRIDGE', em && M.controlPos === 'BRIDGE'),
+            mk('ecr', 'EMERGENCY STOP SWITCH ECR', em && M.controlPos === 'ECR'),
+            mk('local', 'EMERGENCY STOP SWITCH LOCAL', em && M.controlPos === 'LOCAL'),
+            mk('stbd', 'EMERGENCY STOP SWITCH STBD WING', false),
+            mk('port', 'EMERGENCY STOP SWITCH PORT WING', false),
+        ];
+    }
+
+    /** 总越控：把某页所有「带 Cancelled 灯」的项目一次性越控（on=true）/ 恢复（on=false） */
+    _safCancelAll(page, on) {
+        if (!this._safCancelled) this._safCancelled = {};
+        const items = page === 'shd' ? this._shdItems() : this._sldItems();
+        items.forEach((it) => {
+            if (!it.hasC) return;
+            const k = `${page}:${it.key}`;
+            if (on) this._safCancelled[k] = true; else delete this._safCancelled[k];
+        });
+        this._renderMenu();
+        this._redraw();
+    }
+
+    /** 切换某项的越控状态（点一次取消该故障的自动停车/自动减速，再点一次还原） */
+    _safToggle(page, key) {
+        if (!this._safCancelled) this._safCancelled = {};
+        const k = `${page}:${key}`;
+        if (this._safCancelled[k]) delete this._safCancelled[k];
+        else this._safCancelled[k] = true;
+        if (page === 'shd') this._safRecheckShd();
+        else if (page === 'sld') this._safRecheckSld();
+        this._renderMenu();
+        this._redraw();
+    }
+
+    /** 本页所有「可越控且动作中」的项目都越控 → 解除自动停车；有任一项还原 → 恢复自动停车 */
+    _safRecheckShd() {
+        const canc = this._shdItems().filter((it) => it.active && it.btn);
+        if (canc.length) {
+            const all = canc.every((it) => it.cancelled);
+            this.model.cancelSHD = all;
+            this._safAutoShd = all;
+        } else if (this._safAutoShd) {
+            this.model.cancelSHD = false;
+            this._safAutoShd = false;
+        }
+    }
+
+    /** 同上（自动减速） */
+    _safRecheckSld() {
+        const canc = this._sldItems().filter((it) => it.active && it.btn);
+        if (canc.length) {
+            const all = canc.every((it) => it.cancelled);
+            this.model.cancelSLD = all;
+            this._safAutoSld = all;
+        } else if (this._safAutoSld) {
+            this.model.cancelSLD = false;
+            this._safAutoSld = false;
+        }
+    }
+
+    /**
+     * Safety 表格（照真机版式）：
+     *   Active | Cancelled | Loop fail | Description | Value | Alarms    ← 之后为空白区
+     * · 每行只画该项自身具备的指示灯（hasA / hasC / hasL）；
+     * · **点击某一行 → 该行选中**（底色变亮）；若该行有 Cancelled 灯，其右侧空白区出现
+     *   `Cancel SHD` / `Cancel SLD` 按钮；点一次取消该故障的自动停车/自动减速（Cancelled 灯变红），
+     *   再点一次还原；
+     * · `_safetyViewMode = 'active'` 时只显示故障项（再点该子菜单切换）。
+     */
+    _paintSafetyTable(items, opt) {
+        const g = this._menuGroup;
+        const o = opt || {};
+        const x0 = 126, W = 1020, rowW = W - 14;
+        const colA = { x: x0, w: 76 }, colC = { x: x0 + 76, w: 82 }, colL = { x: x0 + 158, w: 92 };
+        const colD = { x: x0 + 250, w: 404 }, colV = { x: x0 + 654, w: 140 };
+        const colAl = { x: x0 + 794, w: 106 };
+        const blankX = colAl.x + colAl.w;        // Alarms 之后的空白区（不放任何列表内容）
+
+        g.add(_rect({ x: x0, y: 70, width: W, height: 430, fill: '#2b2b2b' }));
+
+        // 表头（白底黑字）
+        const hy = 70, hh = 26;
+        g.add(_rect({ x: x0, y: hy, width: W, height: hh, fill: '#eceef0', stroke: '#8d9498', strokeWidth: 1 }));
+        [[colA.x + 4, colA.w, 'Active'], [colC.x + 4, colC.w, 'Cancelled'], [colL.x + 4, colL.w, 'Loop fail'],
+            [colD.x + 6, colD.w, 'Description'], [colV.x + 6, colV.w, 'Value'], [colAl.x + 6, colAl.w, 'Alarms']]
+            .forEach(([x, w, t]) => g.add(_text({ x, y: hy + 4, width: w, fontSize: 13.5, fill: '#101010', text: t })));
+        [colC.x, colL.x, colD.x, colV.x, colAl.x].forEach((x) => {
+            g.add(_line({ points: [x, hy, x, hy + hh], stroke: '#8d9498', strokeWidth: 1 }));
+        });
+
+        // 两种显示状态：全部 / 仅故障项
+        const mode = this._safetyViewMode || 'all';
+        const list = mode === 'active'
+            ? items.filter((it) => (it.st || (it.active ? 'unack' : 'none')) !== 'none')
+            : items;
+
+        const rowH = 23.5, bodyTop = hy + hh;
+        const maxRows = Math.floor((500 - bodyTop) / rowH);
+        const total = list.length;
+        const maxOff = Math.max(0, total - maxRows);
+        const off = Math.min(Math.max(0, this._listOffset || 0), maxOff);
+        this._listOffset = off;
+
+        const selKey = (this._safSel && this._safSel.page === this._subPage) ? this._safSel.key : null;
+        const btnLabel = this._subPage === 'sld' ? 'Cancel SLD' : 'Cancel SHD';
+
+        list.slice(off, off + maxRows).forEach((it, i) => {
+            const ry = bodyTop + i * rowH;
+            const st = it.st || (it.active ? 'unack' : 'none');
+            const cancelled = !!it.cancelled;
+            const act = st === 'unack' || st === 'acked';       // 动作中（含已确认仍在）
+            const isSel = it.key === selKey;
+            let fill = st === 'unack' ? '#4d0f0f' : ((off + i) % 2 ? '#2b2b2b' : '#323232');
+            if (isSel) fill = st === 'unack' ? '#6d1414' : '#414141';       // 选中行底色变亮
+            g.add(_rect({ x: x0, y: ry, width: rowW, height: rowH, fill }));
+
+            // 指示灯（只画该项具备的那几列；Cancelled 越控后变红）
+            const lamp = (cx, on, color) => {
+                g.add(_circle({
+                    x: cx, y: ry + rowH / 2, radius: 6.5,
+                    fill: on ? color : '#e9edf0',
+                    stroke: on ? '#5a5f63' : '#9aa1a5', strokeWidth: 1.2,
+                }));
+            };
+            if (it.hasA !== false) lamp(colA.x + colA.w / 2, act, '#e01818');
+            if (it.hasC) lamp(colC.x + colC.w / 2, cancelled, '#e01818');
+            if (it.hasL) lamp(colL.x + colL.w / 2, !!it.loopfail, '#e8d000');
+
+            const color = cancelled ? '#f0a000'
+                : (st === 'acked' ? '#f0d040' : (act || st === 'rtn' ? '#ff4040' : '#00c000'));
+            g.add(_text({ x: colD.x + 6, y: ry + 4, width: colD.w - 10, fontSize: 13, fill: color, text: it.desc }));
+            g.add(_text({
+                x: colV.x + 6, y: ry + 4, width: colV.w - 10, fontSize: 13,
+                fill: color, text: st === 'rtn' ? 'NORMAL' : (it.value || ''),
+            }));
+            g.add(_text({
+                x: colAl.x + 6, y: ry + 4, width: colAl.w - 10, fontSize: 13,
+                fill: st === 'acked' ? '#f0d040' : '#ff6060',
+                text: act ? 'AL. CLOSE' : '',
+            }));
+
+            // 整行点击 → 选中/取消选中
+            const rid = `saf-row-${it.key || i}`;
+            const rhit = this.addClickablePart(rid, x0, ry, rowW, rowH);
+            rhit.on('click tap', (e) => {
+                e.cancelBubble = true;
+                this._safSel = (selKey === it.key) ? null : { page: this._subPage, key: it.key };
+                this._renderMenu();
+                this._redraw();
+            });
+            this._menuHitIds.push(rid);
+        });
+
+        // 选中行有 Cancelled 灯 → 其右侧空白区出现逐项越控按钮
+        const selRow = list.find((it) => it.key === selKey);
+        if (selRow && selRow.hasC) {
+            const si = list.indexOf(selRow);
+            if (si >= off && si < off + maxRows) {
+                const ry = bodyTop + (si - off) * rowH;
+                const bx = blankX + 4, by = ry + 2, bw = 1128 - bx, bh = rowH - 4;
+                g.add(_rect({
+                    x: bx, y: by, width: bw, height: bh, cornerRadius: 3,
+                    fill: '#2f5ea8', stroke: '#9fd3ff', strokeWidth: 1.2,
+                }));
+                g.add(_text({
+                    x: bx, y: by + 1, width: bw, align: 'center',
+                    fontSize: 10.5, fontStyle: 'bold', fill: '#ffffff', text: btnLabel,
+                }));
+                const id = `saf-cancel-${selRow.key}`;
+                const hit = this.addClickablePart(id, bx, by, bw, bh);
+                hit.on('click tap', (e) => {
+                    e.cancelBubble = true;
+                    this._safToggle(this._subPage, selRow.key);
+                });
+                this._menuHitIds.push(id);
+            }
+        }
+
+        if (!total) {
+            g.add(_text({
+                x: x0, y: bodyTop + 30, width: W, align: 'center', fontSize: 15, fill: '#9fd3ff',
+                text: mode === 'active' ? 'NO ACTIVE ALARMS' : 'NO ITEMS',
+            }));
+        }
+
+        // 滚动条（长列表翻页）
+        g.add(_rect({ x: 1132, y: hy, width: 14, height: 500 - hy, fill: '#c9ccce', stroke: '#8d9498', strokeWidth: 1 }));
+        g.add(_line({ points: [1139, hy + 6, 1145, hy + 13, 1133, hy + 13], closed: true, fill: off > 0 ? '#3a3f42' : '#9aa1a5', stroke: '#3a3f42', strokeWidth: 1 }));
+        g.add(_line({ points: [1139, 494, 1145, 487, 1133, 487], closed: true, fill: off < maxOff ? '#3a3f42' : '#9aa1a5', stroke: '#3a3f42', strokeWidth: 1 }));
+        if (maxOff > 0) {
+            const trackH = 500 - hy - 32;
+            const thumbH = Math.max(24, trackH * (maxRows / total));
+            const thumbY = hy + 16 + (trackH - thumbH) * (off / maxOff);
+            g.add(_rect({ x: 1134, y: thumbY, width: 10, height: thumbH, fill: '#8d9498', stroke: '#5c6366', strokeWidth: 1, cornerRadius: 2 }));
+        }
+        const pageRows = Math.max(1, maxRows - 1);
+        this._mkMenuBtn('saf-scroll-up', 1128, hy + 2, 20, 20, () => { this._listOffset = Math.max(0, off - pageRows); });
+        this._mkMenuBtn('saf-scroll-down', 1128, 478, 20, 20, () => { this._listOffset = Math.min(maxOff, off + pageRows); });
+
+        if (o.note) {
+            g.add(_text({ x: x0 + 6, y: 500 + 2, width: W, fontSize: 13, fill: '#ffd24d', text: o.note }));
+        }
+    }
+
+    /**
+     * Show Limiters：LIMITER / STATUS / LEVEL
+     * · **Cancel Limits 激活**时：除「最低稳定转速」「临界转速」「扫气压力限制」「转矩限制」外，
+     *   其余各项 STATUS 一律显示 `CANCELLED`（限制功能已越控）；
+     * · 同时**扫气压力 / 转矩限制**每一项的燃油开度（油门）**+10 %**，LEVEL 里的数字**标红**；
+     *   不激活时恢复初始值、数字恢复常规颜色。
+     */
     _paintShowLimiters(y) {
         const M = this.model;
         const L1 = this._limState();
-        const fmt3p = (a, b) => `${a}-${b}`;
-        const scavTxt = `${fmt3p(L1.scav.p1 + ' bar', L1.scav.f1 + ' %')}；${fmt3p(L1.scav.p2 + ' bar', L1.scav.f2 + ' %')}；${fmt3p(L1.scav.p3 + ' bar', L1.scav.f3 + ' %')}`;
-        const torqTxt = `${fmt3p(L1.torque.r1 + ' rpm', L1.torque.f1 + ' %')}；${fmt3p(L1.torque.r2 + ' rpm', L1.torque.f2 + ' %')}；${fmt3p(L1.torque.r3 + ' rpm', L1.torque.f3 + ' %')}`;
+        const cancel = !!M.cancelLimits;
+        const boost = cancel ? 10 : 0;                     // 扫气/转矩每点燃油开度 +10 %
+        const numColor = cancel ? '#ff4040' : '#e6ecf2';   // 数字标红
+        const scavPts = [
+            [L1.scav.p1 + ' bar', L1.scav.f1 + boost],
+            [L1.scav.p2 + ' bar', L1.scav.f2 + boost],
+            [L1.scav.p3 + ' bar', L1.scav.f3 + boost],
+        ];
+        const torqPts = [
+            [L1.torque.r1 + ' rpm', L1.torque.f1 + boost],
+            [L1.torque.r2 + ' rpm', L1.torque.f2 + boost],
+            [L1.torque.r3 + ' rpm', L1.torque.f3 + boost],
+        ];
+        /** 分段彩色文字：压力/转速常规色，燃油开度数字按 numColor */
+        const segsOf = (pts) => {
+            const segs = [];
+            pts.forEach(([a, b], i) => {
+                if (i) segs.push(['；', '#e6ecf2']);
+                segs.push([`${a}-`, '#e6ecf2']);
+                segs.push([`${b} %`, numColor]);
+            });
+            return segs;
+        };
 
         const COLS = [{ w: 310 }, { w: 180 }, { w: 510 }];
         this._pgRow(136, y + 6, 1000, [
             { w: COLS[0].w, text: 'LIMITER' }, { w: COLS[1].w, text: 'STATUS' }, { w: COLS[2].w, text: 'LEVEL' },
         ], { bg: '#454545' });
 
+        // ── 各限制器是否"激活"（按车钟给定与实际转速实时判定）──
+        const cmd = M.rpmCmd, act = M.rpm;
+        const accelerating = (cmd - act) > 1;
+        const decelerating = (cmd - act) < -1;
+        const inRange = (v, a, b) => v >= Math.min(a, b) && v <= Math.max(a, b);
+        const maxRpmLimit = cmd >= 0 ? L1.chiefRpm.ahead : L1.chiefRpm.astern;
+        const slowTurnOn = (M.stoppedTime || 0) >= L1.slowTurn.stopMin * 60;
+        const critOn = inRange(cmd, L1.critical.lo, L1.critical.hi);
+        const maxRpmOn = Math.abs(cmd) > Math.abs(maxRpmLimit);
+        // 最低稳定转速：车钟不在 STOP、且给定转速绝对值低于该值时才激活
+        const steadyOn = Math.abs(cmd) > 0.5 && Math.abs(cmd) < L1.steady.rpm;
+        const loadUpOn = accelerating && inRange(act, L1.loadUp.from, L1.loadUp.to);
+        const loadDownOn = decelerating && inRange(act, L1.loadDown.from, L1.loadDown.to);
+        const A = (v) => (v ? 'ACTIVE' : 'INACTIVE');
+        /** Cancel Limits 越控后统一显示 CANCELLED（exempt=true 的项目不受影响） */
+        const S = (txt, exempt) => ((cancel && !exempt) ? 'CANCELLED' : txt);
+
+        // 3 点折线插值：给定 x 求允许的最大燃油输出（Cancel Limits 时曲线整体 +10 %）
+        const interp3 = (x, xs, ys) => {
+            const px = [xs[0], xs[1], xs[2]], py = [ys[0], ys[1], ys[2]];
+            for (let i = 0; i < 2; i++) {
+                const a = px[i], b = px[i + 1];
+                if ((x >= a && x <= b) || (x <= a && x >= b)) {
+                    const span = b - a;
+                    return span === 0 ? py[i] : py[i] + (py[i + 1] - py[i]) * ((x - a) / span);
+                }
+            }
+            return x < Math.min(px[0], px[2]) ? py[0] : py[2];
+        };
+        const fuel = M.fuelIndex;
+        const scavAllow = interp3(M.scavAir, [L1.scav.p1, L1.scav.p2, L1.scav.p3], scavPts.map((p2) => p2[1]));
+        const torqAllow = interp3(M.rpm, [L1.torque.r1, L1.torque.r2, L1.torque.r3], torqPts.map((p2) => p2[1]));
+        const scavOn = fuel > scavAllow;
+        const torqOn = fuel > torqAllow;
+
         const rows = [
-            ['Scavenge air pressure limiter', 'ACTIVE', scavTxt],
-            ['Torque limiter', 'ACTIVE', torqTxt],
-            ['Fuel index limiter', (M.loadLimit && !M.cancelLimits) ? 'LIMITING' : 'INACTIVE', `${L1.fuelIndex.level} %`],
-            ['Slow-down limiter', (M.slowDown && !M.cancelSLD) ? 'ACTIVE' : 'INACTIVE', `${L1.slowDown.level} rpm`],
-            ['Minimum stable running speed', 'ACTIVE', `${L1.steady.rpm} rpm`],
-            ['Manual RPM limiter (Chief)', M.cancelLimits ? 'CANCELLED' : 'ACTIVE', `${L1.chiefRpm.ahead} / ${L1.chiefRpm.astern} rpm`],
-            ['Acceleration rate limiter', 'ACTIVE', `${L1.accel.rpm} rpm, ${L1.accel.rate} rpm/s`],
-            ['Deceleration rate limiter', 'ACTIVE', `${L1.decel.rpm} rpm, ${L1.decel.rate} rpm/s`],
-            ['Load Up program limiter', 'INACTIVE', `${L1.loadUp.from}~${L1.loadUp.to} rpm, ${L1.loadUp.time} min`],
-            ['Load Down program limiter', 'INACTIVE', `${L1.loadDown.from}~${L1.loadDown.to} rpm, ${L1.loadDown.time} min`],
-            ['Slow turning program', 'ACTIVE', `${L1.slowTurn.stopMin} min, ${L1.slowTurn.durS} s`],
-            ['Critical speed limiter', 'ACTIVE', `${L1.critical.lo.toFixed(1)}~${L1.critical.hi.toFixed(1)} rpm`],
+            { name: 'Scavenge air pressure limiter', stat: A(scavOn), rich: true, segs: segsOf(scavPts) },
+            { name: 'Torque limiter', stat: A(torqOn), rich: true, segs: segsOf(torqPts) },
+            { name: 'Fuel index limiter', stat: S((M.loadLimit && !M.cancelLimits) ? 'LIMITING' : 'INACTIVE'), lvl: `${L1.fuelIndex.level} %` },
+            { name: 'Slow-down limiter', stat: S((M.slowDown && !M.cancelSLD) ? 'ACTIVE' : 'INACTIVE'), lvl: `${L1.slowDown.level} rpm` },
+            { name: 'Minimum stable running speed', stat: S(A(steadyOn), true), lvl: `${L1.steady.rpm} rpm` },
+            { name: 'Manual RPM limiter (Chief)', stat: S(A(maxRpmOn)), lvl: `${L1.chiefRpm.ahead} / ${L1.chiefRpm.astern} rpm` },
+            { name: 'Acceleration rate limiter', stat: S(A(accelerating)), lvl: `${L1.accel.rpm} rpm, ${L1.accel.rate} rpm/s` },
+            { name: 'Deceleration rate limiter', stat: S(A(decelerating)), lvl: `${L1.decel.rpm} rpm, ${L1.decel.rate} rpm/s` },
+            { name: 'Load Up program limiter', stat: S(A(loadUpOn)), lvl: `${L1.loadUp.from}~${L1.loadUp.to} rpm, ${L1.loadUp.time} min` },
+            { name: 'Load Down program limiter', stat: S(A(loadDownOn)), lvl: `${L1.loadDown.from}~${L1.loadDown.to} rpm, ${L1.loadDown.time} min` },
+            { name: 'Slow turning program', stat: S(A(slowTurnOn)), lvl: `${L1.slowTurn.stopMin} min, ${L1.slowTurn.durS} s` },
+            { name: 'Critical speed limiter', stat: S(A(critOn), true), lvl: `${L1.critical.lo.toFixed(1)}~${L1.critical.hi.toFixed(1)} rpm` },
         ];
         rows.forEach((r, i) => {
-            this._pgRow(136, y + 36 + i * 26, 1000, [
-                { w: COLS[0].w, text: r[0] },
-                { w: COLS[1].w, text: r[1], color: (r[1] === 'ACTIVE' || r[1] === 'LIMITING') ? '#ffb0b0' : '#9fe0a0' },
-                { w: COLS[2].w, text: r[2] },
-            ], { bg: i % 2 ? '#2b2b2b' : '#323232' });
+            const ry = y + 36 + i * 26;
+            const bg = i % 2 ? '#2b2b2b' : '#323232';
+            const statusColor = (r.stat === 'ACTIVE' || r.stat === 'LIMITING') ? '#ffb0b0'
+                : (r.stat === 'CANCELLED' ? '#ff6060' : '#9fe0a0');
+            if (r.rich) {
+                // 前两项：LEVEL 用分段彩色文字（燃油开度数字标红）
+                this._pgRow(136, ry, 1000, [
+                    { w: COLS[0].w, text: r.name },
+                    { w: COLS[1].w, text: r.stat, color: statusColor },
+                ], { bg });
+                this._pgRichText(136 + 8 + COLS[0].w + COLS[1].w, ry + 4, r.segs);
+            } else {
+                this._pgRow(136, ry, 1000, [
+                    { w: COLS[0].w, text: r.name },
+                    { w: COLS[1].w, text: r.stat, color: statusColor },
+                    { w: COLS[2].w, text: r.lvl },
+                ], { bg });
+            }
         });
     }
 
@@ -1550,6 +2266,36 @@ export class Ac600ConsolePanel extends BaseComponent {
             };
             mkBtn(saveX, 'SAVE', dirty, () => {
                 this._lim[d.key] = { ...this._limEdit[d.key] };
+                // 慢转参数影响自动起动行为 → 同步到模型
+                const M = this.model;
+                M.limits = M.limits || {};
+                const LL = M.limits;
+                if (d.key === 'slowTurn') {
+                    M.slowTurnStopMin = this._lim.slowTurn.stopMin;
+                    M.slowTurnDurS = this._lim.slowTurn.durS;
+                } else if (d.key === 'accel') {
+                    LL.accelRate = this._lim.accel.rate;
+                } else if (d.key === 'decel') {
+                    LL.decelRate = Math.abs(this._lim.decel.rate);
+                } else if (d.key === 'loadUp') {
+                    LL.loadUpFrom = this._lim.loadUp.from;
+                    LL.loadUpTo = this._lim.loadUp.to;
+                    LL.loadUpTime = this._lim.loadUp.time;
+                } else if (d.key === 'loadDown') {
+                    LL.loadDownFrom = this._lim.loadDown.from;
+                    LL.loadDownTo = this._lim.loadDown.to;
+                    LL.loadDownTime = this._lim.loadDown.time;
+                } else if (d.key === 'critical') {
+                    LL.critLo = this._lim.critical.lo;
+                    LL.critHi = this._lim.critical.hi;
+                    LL.critRiseSp = this._lim.critical.hi;      // 升速避下限 = 上限
+                    LL.critFallSp = this._lim.critical.hi + 13; // 降速避上限 = 上限上方 13 rpm（默认 50）
+                } else if (d.key === 'chiefRpm') {
+                    LL.maxAhead = this._lim.chiefRpm.ahead;
+                    LL.maxAstern = this._lim.chiefRpm.astern;
+                } else if (d.key === 'steady') {
+                    LL.steadyMin = this._lim.steady.rpm;
+                }
             }, `lim-save-${d.key}`);
             mkBtn(cancelX, 'CANCEL', dirty, () => {
                 this._limEdit[d.key] = { ...this._lim[d.key] };
@@ -1611,7 +2357,7 @@ export class Ac600ConsolePanel extends BaseComponent {
                     ['Repeated Start', !!M.startFail, 'alarm'],
                     ['Runing', !!M.running && Math.abs(M.rpm) > 50, 'ok'],
                     ['Stopping', (Math.abs(M.rpmCmd) < 0.5 || (M.shutDown && !M.cancelSHD)) && Math.abs(M.rpm) > 25, 'warn'],
-                    ['Engine Tripped', !!M.emStopLatched, 'alarm'],
+                    ['Engine Tripped', !!(M.emStopLatched || (M.shutDown && !M.cancelSHD) || M.overspeedTripped), 'alarm'],
                 ],
             },
             {
@@ -1622,7 +2368,7 @@ export class Ac600ConsolePanel extends BaseComponent {
                     ['Engine tripped', !!(M.emStopLatched || (M.shutDown && !M.cancelSHD)), 'alarm'],
                     ['Start Blocked', !!(M.startBlocked || !M.turningGearOut || !M.mainStartValveOk || !M.airDistributorOk || M.startAir < 15), 'alarm'],
                     ['Engine Blocked', !(M.mainStartValveOk && M.airDistributorOk), 'alarm'],
-                    ['Sudden Stop', !!(M.shutDown && !M.cancelSHD), 'alarm'],
+                    ['Sudden Stop', !!M.emStopLatched, 'alarm'],
                 ],
             },
             {
@@ -1676,10 +2422,22 @@ export class Ac600ConsolePanel extends BaseComponent {
             if (!this._menuPage) {
                 // 主菜单：按菜单类别判断
                 has = !!faults[cell.key];
+            } else if (this._menuPage === 'btn-safety') {
+                // Safety 二级按钮：只有与该故障相关的那一项亮灯（超速停车只亮 Shut Down）
+                const map = {
+                    shd: !!this._shdAlarmLive || !!M.emStopLatched,
+                    sld: !!(M.slowDown && !M.cancelSLD),
+                    'reset-sld': false,
+                    emstop: !!M.emStopLatched,
+                    detector: false,
+                    home: false,
+                };
+                has = !!map[cell.key];
             } else if (this._menuPage === 'btn-alarms') {
                 // 二级按钮：该子页内是否存在未复位（报警）项
                 const kinds = ['sys-crit', 'sys-nonc', 'comerr-c', 'comerr-n', 'io-fail'];
-                has = kinds.includes(cell.key) && this._alarmItems(cell.key).some((it) => it.alarm);
+                has = kinds.includes(cell.key)
+                    && this._alarmItems(cell.key).some((it) => this._alm(`alm:${cell.key}-${it.desc}`, it.alarm) !== 'none');
             } else {
                 const keyMap = { 'btn-safety': 'safety', 'btn-estate': 'estate', 'btn-limiters': 'limiters', 'btn-misc': 'misc' };
                 has = !!faults[keyMap[this._menuPage] || 'misc'];
@@ -1702,6 +2460,7 @@ export class Ac600ConsolePanel extends BaseComponent {
     tick() {
         const M = this.model;
         if (!M) return;
+        this._pollAlarms();
 
         // 状态条
         const segOn = [M.engineMode === 'SEA', M.engineMode === 'SEA', M.controlPos === CONTROL_POS.ECR, M.running, M.engineReady];
@@ -1737,9 +2496,12 @@ export class Ac600ConsolePanel extends BaseComponent {
         g.rpm.value.text(`${M.rpm.toFixed(1)} RPM`);
         g.rpm.state.text(M.stateText);
         // 第二行红色原因：应急停车 / 停车 / 慢降
-        const reason = M.shutDown
-            ? (M.cancelSHD ? 'Emergency Stop (Overridden)' : 'Emergency Stop')
-            : (M.slowDown ? (M.cancelSLD ? 'Slow Down (Overridden)' : 'Slow Down') : '');
+        const reason = M.overspeedTripped
+            ? 'Overspeed'
+            : ((M.loLowLowShd || M.jcwLowShd) ? 'Safety Shut Down'
+            : (M.shutDown
+                ? (M.cancelSHD ? 'Emergency Stop (Overridden)' : 'Emergency Stop')
+                : (M.slowDown ? (M.cancelSLD ? 'Slow Down (Overridden)' : 'Slow Down') : '')));
         g.rpm.reason.text(reason);
         g.rpm.reason.visible(!!reason);
         g.air.needle.rotation(this._angleFor(M.startAir, 0, 40));
@@ -1749,25 +2511,32 @@ export class Ac600ConsolePanel extends BaseComponent {
 
         // SETP / LEVER
         const barY = (v) => L.setp.y + L.setp.h * (1 - (Math.max(-120, Math.min(120, v)) + 120) / 240);
-        this._setpTri.y(barY(M.rpmCmd));
-        const myLever = (M.leverRpm && M.leverRpm[this.posKey] !== undefined) ? M.leverRpm[this.posKey] : M.rpm;
+        const sp = (typeof M.setp === 'number') ? M.setp : M.rpmCmd;
+        this._setpTri.y(barY(sp));
+        // LEVER 显示主机给定：只有拥有控制权的面板车钟能改变它（无控制权时拖动车钟只动手柄）
+        const myLever = (typeof M.rpmCmd === 'number') ? M.rpmCmd : M.rpm;
         this._leverTri.y(barY(myLever));
-        this._setpVal.text(`${M.rpmCmd.toFixed(1)} RPM`);
+        this._setpVal.text(`${sp.toFixed(1)} RPM`);
+        if (this._limiterTxt) {
+            const lim = M.activeLimiter || '';
+            this._limiterTxt.text(lim);
+            this._limiterTxt.visible(!!lim);
+        }
         this._leverVal.text(`${myLever.toFixed(1)} RPM`);
 
         this._runHour.text(`ME Run Hour:${M.runHours.toFixed(1)}`);
         this._rev.text(`Rev: ${Math.round(M.rev)}`);
 
         // 越控灯
-        this._cancelLamp.shd.fill(M.cancelSHD ? '#e01717' : '#ffffff');
-        this._cancelLamp.sld.fill(M.cancelSLD ? '#e01717' : '#ffffff');
-        this._cancelLamp.lim.fill(M.cancelLimits ? '#e01717' : '#ffffff');
+        this._cancelLamp.shd.fill(this._cancel.shd ? '#e01717' : '#ffffff');
+        this._cancelLamp.sld.fill(this._cancel.sld ? '#e01717' : '#ffffff');
+        this._cancelLamp.lim.fill(this._cancel.lim ? '#e01717' : '#ffffff');
 
         // 报警铃
         this._bellRing.opacity((M.alarm && !M.silenced && M.blink) ? 0.5 : 0);
 
         // 菜单页面：打开时按 500 ms 节流刷新（数据实时变化；含 Estate 直接页面）
-        if ((this._menuPage && this._subPage) || this._directPage) {
+        if (((this._menuPage && this._subPage) || this._directPage) && !this._detEditing && !this._limEditing) {
             const now = Date.now();
             if (!this._menuNextRefresh || now >= this._menuNextRefresh) {
                 this._menuNextRefresh = now + 500;
@@ -1796,8 +2565,8 @@ export class Ac600ConsolePanel extends BaseComponent {
         });
 
         // 报警栏：点开某菜单时显示该菜单的具体故障，否则显示最新两条报警信息；正常时空白
-        const focusId = (this._menuFocus && (faults[this._menuFocus] || []).length) ? this._menuFocus : null;
-        const lines = focusId ? faults[focusId].slice(0, 2) : (M.alarm ? msgs.slice(0, 2) : []);
+        // 报警栏始终显示最新两条报警信息（与真机一致；不随打开的菜单切换）
+        const lines = M.alarm ? msgs.slice(0, 2) : [];
         if (this._alarmFill) this._alarmFill.visible(lines.length > 0);
         (this._alarmLines || []).forEach((t, i) => {
             t.text(lines[i] || '');

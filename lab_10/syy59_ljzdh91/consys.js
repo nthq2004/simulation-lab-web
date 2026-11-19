@@ -50,6 +50,7 @@ import { MotorControlBox, GroundBusBar, ThreePhaseMotor3D, InductionMotorExplode
 import { componentConfigs, initSlider, applyAllPresets, PROJECT_PAGES } from './project/sys_ljdq9-1.js';
 import { PageManager } from './lib/PageManager.js';
 import { AC600Solver } from './tools/AC600Solver.js';
+import { CoolingWaterSolver } from './tools/CoolingWaterSolver.js';
     
 /**
  * ControlSystem - 控制系统仿真引擎
@@ -194,6 +195,15 @@ export class ControlSystem {
         // ── 主机遥控系统 AC 600 共享模型 ──
         //    驾控台 / 集控台 / 机旁面板 / 气动操纵系统图 / MIMIC 结构图 共用同一实例（sys.ac600）
         if (!this.ac600) this.ac600 = new AC600Solver(this);
+
+        // ── 主机缸套冷却水温度控制系统（页 11：MIMIC + LDCL 温度 PID 共用同一过程模型）──
+        if (!this.coolingSolver) this.coolingSolver = new CoolingWaterSolver(this);
+        // 冷却水 PS 断开 → 延时 10 s → 联锁到主机遥控模型的安保停车（滑油低低压同理）
+        this.coolingHostTrip = (on) => {
+            if (on && this.ac600 && typeof this.ac600.safetyAction === 'function') {
+                this.ac600.safetyAction('SHD', 'CW-PS');
+            }
+        };
 
         // ── CAN 总线系统（工程包含 AI/AO/DI/DO/中央计算机等 CAN 模块时创建，
         //    并把总线注入各模块的 sys.canBus，供模块 tick 中 setNodeOnline 等调用）──
@@ -1003,6 +1013,9 @@ export class ControlSystem {
 
         // ── 主机遥控 AC 600 模型 ──
         if (this.ac600) this.ac600.solve(1 / 20);
+
+        // ── 主机缸套冷却水温度控制过程模型 ──
+        if (this.coolingSolver) this.coolingSolver.solve(1 / 20);
 
         // ── 复合设备更新（preUpdate + commit） ──
         if (this.deviceManager) {

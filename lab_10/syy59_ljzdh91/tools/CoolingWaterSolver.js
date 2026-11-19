@@ -71,6 +71,9 @@ export const CW_DEFAULTS = {
 };
 
 const U_MIN = 2, U_MAX = 98;   // 三通阀冷却口开度限幅（%）
+const PS_TRIP_DELAY = 10;      // 压力开关 PS 断开 → 主机自动停车的延时（s）
+// 缸套水出口温度高 → 自动减速：> 90 ℃ 延时 6 s 触发，< 88 ℃ 还原（回差 2 ℃）
+const CW_SLD_ON = 90, CW_SLD_OFF = 88, CW_SLD_DELAY = 6;
 
 function mkPump(id, name) {
     return {
@@ -90,13 +93,13 @@ function createModel() {
     return {
         clock: 0,
         panelMain: true,       // 水泵面板主电源
-        mode: 'MANU',          // LDCL 状态：默认手动（MANU）；需人工/AUTO 投入才自动调节
+        mode: 'AUTO',          // LDCL 状态：默认 Automatic（自动调节）
 
         // ── 手动阀门：true = 打开 ──
         sw: {
-            wbV25S: true, wbV27S: false,   // 缸套水加热器 进 / 出
+            wbV25S: false, wbV27S: false,  // 缸套水加热器 进 / 出（默认不投运）
             wbV6S: true, wbV7S: false,     // 造水机 进 / 出
-            wbV4: false,                   // 缸套水至污水井（放水阀，默认关）
+            wbV4: true,                    // 与预热器并联的截止阀（默认导通）
             wbV5: true,                    // 主管进泵截止阀（图 WB-V5）
             wbV8: true, wbV9: true,        // 1# / 2# 泵吸入阀（图 WB-V8 / WB-V9）
             wbV15S: true,                  // 膨胀水柜至吸入总管截止阀（图 WB-V15S）
@@ -113,29 +116,33 @@ function createModel() {
         bandP: CW_DEFAULTS.bandP,
         ti: CW_DEFAULTS.ti,
         deadband: CW_DEFAULTS.deadband,
-        temp: 60,              // 主机缸套水出口温度（系统初始化温度 60 ℃）
-        tcMeas: 60,            // TT 测量值（一阶滞后）
-        manip: 0,              // 冷却口实际开度（阀位）：初始 0 %（全旁通）
-        outCmd: 0,             // PID 调节器输出（指令值），初始 0 %
+        temp: 85,              // 主机缸套水出口温度：默认稳定在设定值 85 ℃
+        tcMeas: 85,            // TT 测量值（一阶滞后）
+        manip: 32,             // 冷却口实际开度（阀位）：50 % 负荷稳态约 32 %
+        outCmd: 32,            // PID 调节器输出（指令值）
         integral: 0,           // 积分项
-        manualOut: 0,          // 手动给定开度（冷却口开度），初始 0 %
+        manualOut: 32,         // 手动给定开度（冷却口开度）
         tempCtrl: 'AUTO',      // TEMP 行控制方式：AUTO / MANU
         held: false,           // 积分分离标志
         loadNom: null,         // 运行时自动学习到的"设计负荷"（使前馈与当前热平衡匹配）
 
         // ── 泵 / 压力 / 流量 ──
-        pumps: { cw1: mkPump('cw1', '1 号高温冷却淡水泵'), cw2: mkPump('cw2', '2 号高温冷却淡水泵') },
-        psUp: false,           // 水流开关 PS
+        // 默认工况：两台泵都打在 AUTO，1# 泵运行、2# 泵备用
+        pumps: {
+            cw1: Object.assign(mkPump('cw1', '1 号高温冷却淡水泵'), { mode: 'AUTO', run: true, current: 18.5 }),
+            cw2: Object.assign(mkPump('cw2', '2 号高温冷却淡水泵'), { mode: 'AUTO' }),
+        },
+        psUp: true,            // 水流开关 PS（默认已建立）
         autoTimer: 0,          // PS 低压力延时计时（s）：累计 3 s 发出自动起动信号
-        autoLead: null,        // 自动方式下被选定为运行机组（另一台备用）
-        pressIn: 0,            // 吸入侧压力 bar（P 3.8）
-        pressOut: 0,           // 排出侧压力 bar（P 2.1）
-        flow: 0,               // 冷却水流量 m³/h
+        autoLead: 'cw1',       // 自动方式下被选定为运行机组（另一台备用）
+        pressIn: 3.8,          // 吸入侧压力 bar（P 3.8）
+        pressOut: 2.05,        // 排出侧压力 bar（P 2.1）
+        flow: 41,              // 冷却水流量 m³/h
 
         // ── 边界条件（演示/工作流可调）──
         load: 50,              // 主机负荷 %（柴油机起动默认 50 %，可由控制盒旋钮调节 0~110）
-        engineSw: false,       // 柴油机起停开关位置（默认停车位）
-        engineOn: false,       // 柴油机实际运转（开关在运行位且起动联锁允许）
+        engineSw: true,        // 柴油机起停开关位置（默认运行位）
+        engineOn: true,        // 柴油机实际运转（开关在运行位且起动联锁允许）
         seaTemp: 28,           // 海水温度 ℃
         heatherOn: false,      // 缸套水加热器（蒸汽）投入
         steamPress: 0,         // 加热器蒸汽压力 bar（图 g 191.5）
@@ -335,7 +342,8 @@ export class CoolingWaterSolver {
         m.tcMeas += (m.temp - m.tcMeas) * clamp(dts / m.tauSensor, 0, 1);
         const tcVal = m.faults.tt ? NaN : m.tcMeas;
 
-        // ── 5. 主机保护（水流开关 PS 断开 20 s → 主机停车；柴油机停机时不触发）──
+        // ── 5. 主机保护：缸套冷却水进口低压 —— 压力开关 PS 断开 → 延时 10 s → 主机自动停车 ──
+        //    （柴油机已停机时只停止计时，跳闸标志保持到 PS 恢复）
         if (m.psUp) {
             m.t.trip = 0;
             if (m.tripped) {
@@ -346,12 +354,31 @@ export class CoolingWaterSolver {
             m.t.trip = 0;          // 柴油机已停机：只停止计时，跳闸标志保持到 PS 恢复
         } else {
             m.t.trip = (m.t.trip || 0) + dts;
-            if (m.pressOut < 0.3 && m.t.trip > 20 && !m.tripped) {
+            if (m.t.trip >= PS_TRIP_DELAY && !m.tripped) {
                 m.tripped = true;
                 m.engineOn = false;
-                m.tripCause = (m.faults.pump1 && m.faults.pump2) ? '两台冷却泵电机故障' : '冷却水压力低（水流开关 PS 断开）';
-                this._tip(`🚨 主机保护：${m.tripCause}，柴油机自动停车`);
+                m.tripCause = (m.faults.pump1 && m.faults.pump2)
+                    ? '两台冷却泵电机故障' : '缸套冷却水进口压力低（PS 断开）';
+                this._tip(`🚨 主机保护：${m.tripCause}，延时 ${PS_TRIP_DELAY} s 到 → 主机自动停车`);
                 if (this.sys && typeof this.sys.coolingHostTrip === 'function') this.sys.coolingHostTrip(true);
+            }
+        }
+
+        // ── 5b. 缸套水出口温度高 → 延时 6 s 主机自动减速（< 88 ℃ 还原）──
+        const acSld = this.sys && this.sys.ac600;
+        if (acSld && typeof acSld.safetyAction === 'function') {
+            if (m.temp > CW_SLD_ON) {
+                m.t.sld = (m.t.sld || 0) + dts;
+                if (m.t.sld >= CW_SLD_DELAY && !m.sldOn) {
+                    m.sldOn = true;
+                    acSld.safetyAction('SLD', 'CW-T');
+                }
+            } else if (m.temp < CW_SLD_OFF) {
+                m.t.sld = 0;
+                if (m.sldOn) {
+                    m.sldOn = false;
+                    if (typeof acSld.safetyClear === 'function') acSld.safetyClear('SLD', 'CW-T');
+                }
             }
         }
 
