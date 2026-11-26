@@ -1,42 +1,160 @@
 import Konva from 'konva';
 import { BaseComponent } from './BaseComponent.js';
-import { ac600Of, CONTROL_POS } from '../tools/AC600Solver.js';
+import imgAc600 from '../images/ac600.png';   // 由 Vite 处理（构建时复制/内联）
 
 /**
- * Ac600Mimic — 主机遥控系统 AC 600 系统结构 MIMIC（现场总线型）
+ * Ac600Mimic — 主机遥控系统 AC 600 网络结构图（图片版 + 模块识别）
  * ═══════════════════════════════════════════════════════════════
- *  1600 × 800 结构图（照 MAN B&W AC 600 系统结构版式）：
- *    · PORT WING / STB. WING：Bridge Wing Manoeuvring Unit（两翼操纵单元）
- *    · BRIDGE：Bridge Unit + Order Printer（驾驶台操纵单元与命令打印机）
- *    · CONTROL ROOM：Control Room Manoeuvring Unit、Start/Stop Speedset Lever、
- *      Indicating Panel Unit（集控室操纵单元、启停/转速给定手柄、指示面板单元）
- *    · 双 CAN 总线（Dual CAN）连接驾驶台与集控室、机舱
- *    · ENGINE ROOM：Local Control Panel with Engine Telegraph（机旁操纵台）、
- *      Slow Down RAI16、Main Engine Interface MEI、Engine Safety Unit ESU、
- *      nn. 辅助模块、Digital Governor Unit DGU + Servo Unit、Dual RPM Units、
- *      RPM Detectors、Electric Actuator、MAN B&W MC 主机与螺旋桨
+ *  直接加载 images/ac600.png（原图 1024×973），按组件尺寸等比缩放居中显示；
+ *  组件宽 842 × 高 800（与原图等比一致），左右不留空白；整块可拖动。
  *
- *  状态来自 sys.ac600：控制位置（Bridge / ECR / Local）在对应单元上亮灯，
- *  主机运行时 DGU 伺服、电动执行器、转速检测、螺旋桨转动。
+ *  **模块识别**：图上各装置（BMU / CMU / MEI / ESU / DGU / RPMU / LCP …）都注册成
+ *  可点击部件（`addClickablePart`），点击即在图上框出该模块并弹出中英文名称与功能说明，
+ *  同时记录 `sys.lastClickedId`；工作流 `find` 步骤可直接用 `subTarget:'<部件 id>'`
+ *  让箭头指向该模块（由 `getClickablePartCenter()` 换算绝对坐标）。
+ *  部件 id 一览见下方 PARTS 表。
  *
- *  部件 id：bw-port bw-stb bridge-unit order-printer cr-unit cr-lever cr-indicator
- *          local-panel mei esu rai dgu servo rpm-units actuator engine prop
+ *  若希望图片铺满整个组件（拉伸），把 `_FIT = 'contain'` 改为 `'fill'` 即可。
  * ═══════════════════════════════════════════════════════════════
  */
 
-const W = 1600, H = 800;
+const W = 842, H = 800;        // 宽度按图片等比缩放后的实际宽度（1024×973 → 高 800 时宽 842），不留左右空白
+const IMG_SRC = imgAc600;
+const _FIT = 'contain';        // 'contain' 等比缩放居中 / 'fill' 拉伸铺满
 
-const _rect = (o) => new Konva.Rect(Object.assign({ listening: false }, o));
-const _text = (o) => new Konva.Text(Object.assign({ listening: false, fontFamily: 'Arial, Microsoft YaHei' }, o));
-const _line = (o) => new Konva.Line(Object.assign({ listening: false }, o));
-const _circle = (o) => new Konva.Circle(Object.assign({ listening: false }, o));
+// 原图像素尺寸与"图片坐标 → 组件坐标"的换算（contain 居中，左右或上下可能留极窄边）
+const IMG_W = 1024, IMG_H = 973;
+const K = Math.min(W / IMG_W, H / IMG_H);
+const OX = (W - IMG_W * K) / 2;
+const OY = (H - IMG_H * K) / 2;
+const mx = (x) => OX + x * K;      // 图片 x（像素） → 组件 x
+const my = (y) => OY + y * K;      // 图片 y（像素） → 组件 y
 
-const C_BG = '#f0f2f4';
-const C_BOX = '#dfe3e6';
-const C_BOX_D = '#b6bcc2';
-const C_EDGE = '#5f6a73';
-const C_CAN = '#3c4550';
-const C_GREEN = '#1faa3c';
+/**
+ * 螺旋桨动画几何（原图像素）：原图叶片已被抹掉，改画可按主机转速旋转的螺旋桨。
+ *   hubX/hubY : 桨毂中心（旋转中心）
+ *   L / W     : 叶片长度（半径）/ 最大半宽
+ */
+const PROP = { hubX: 918, hubY: 913, L: 52, W: 14 };   // 桨毂中心与尾轴中心线对齐，三片桨叶 120° 均布
+/** 抹掉原图螺旋桨（含阴影）的白色遮罩矩形，避开左侧「Propeller」文字（文字右缘约 x=916） */
+/** 双击跳页：双击图上某个模块 → 跳到对应装置页（0 索引页不提；页码与 PROJECT_PAGES 一致） */
+const DBL_PAGE = {
+    bmu: 1,      // 桥楼操纵单元 → 第 1 页 主机遥控系统 AC 600 驾控台
+    cmu: 2,      // 集控室操纵单元 → 第 2 页 AC 600 集控台
+    lcp: 3,      // 机旁控制面板 → 第 3 页 机旁面板
+    engine: 4,   // MAN B&W MC 主机 → 第 4 页 主机气动操纵系统
+};
+const PROP_MASK = [
+    [898, 816, 1006, 901],
+    [900, 901, 1006, 933],
+    [917, 933, 1006, 974],
+    [824, 922, 920, 966],      // 「Propeller」文字区：抹掉后由组件重画（文字要在桨叶之上）
+];
+
+/**
+ * 可识别模块表：坐标按**原图像素**填写（x1,y1,x2,y2），由 mx/my 换算成组件坐标。
+ *   id  : 部件 id（工作流 subTarget / op.part 使用）
+ *   en  : 图上英文名称
+ *   cn  : 中文名称
+ *   fn  : 一句话功能说明
+ */
+const PARTS = [
+    {
+        id: 'bmu', x1: 403, y1: 58, x2: 648, y2: 162,
+        en: 'Bridge Manoeuvring Unit (BMU)', cn: '桥楼操纵单元',
+        fn: '驾驶台主操车台：车钟、起动/停车、限制与安全指示',
+    },
+    {
+        id: 'cmu', x1: 413, y1: 323, x2: 662, y2: 432,
+        en: 'Control Room Manoeuvring Unit (CMU)', cn: '集控室操纵单元',
+        fn: '集控室主操车台，控制权转到 ECR 时由此操车',
+    },
+    {
+        id: 'bwu-port', x1: 18, y1: 33, x2: 214, y2: 157,
+        en: 'Bridge Wing Manoeuvring Unit (PORT)', cn: '左舷桥翼操纵单元',
+        fn: '桥翼操车面板，靠离泊时在船侧直接操车',
+    },
+    {
+        id: 'bwu-stb', x1: 818, y1: 33, x2: 1022, y2: 157,
+        en: 'Bridge Wing Manoeuvring Unit (STB.)', cn: '右舷桥翼操纵单元',
+        fn: '桥翼操车面板，靠离泊时在船侧直接操车',
+    },
+    {
+        id: 'op', x1: 298, y1: 58, x2: 374, y2: 112,
+        en: 'Order Printer', cn: '车令打印机',
+        fn: '打印车钟车令与应答记录（时间、车令、执行机构）',
+    },
+    {
+        id: 'ssl', x1: 678, y1: 283, x2: 762, y2: 442,
+        en: 'Start/Stop Speedset Lever', cn: '起动/停车与转速设定手柄',
+        fn: '集控室的起动/停车手柄与转速设定（Speedset）',
+    },
+    {
+        id: 'ipu', x1: 773, y1: 318, x2: 902, y2: 432,
+        en: 'Indicating Panel Unit (IPU)', cn: '指示面板单元',
+        fn: '集控室指示面板：车令、实际转速、转向等状态显示',
+    },
+    {
+        id: 'lcp', x1: 14, y1: 698, x2: 186, y2: 822,
+        en: 'Local Control Panel with Engine Telegraph (LCP)', cn: '机旁控制面板（带主机车钟）',
+        fn: '机舱机旁操车台，控制权转到 LOCAL 时由它操纵主机',
+    },
+    {
+        id: 'dpu', x1: 212, y1: 683, x2: 288, y2: 724,
+        en: 'DPU nn. (Distributed Processing Unit)', cn: '分布式处理单元（编号 nn.）',
+        fn: '通用 DPU 模块：采集/处理本站 I/O 并经 CAN 总线与系统通信，nn. 为站号',
+    },
+    {
+        id: 'rai16', x1: 332, y1: 683, x2: 402, y2: 724,
+        en: 'RAI16 (Slow Down)', cn: '遥控模拟量输入模块',
+        fn: '16 路模拟量输入，采集主机参数供 Slow Down 判断',
+    },
+    {
+        id: 'mei', x1: 436, y1: 683, x2: 514, y2: 724,
+        en: 'Main Engine Interface (MEI)', cn: '主机接口单元',
+        fn: '遥控系统与主机 ECS 的接口：传车令、转速给定与主机状态',
+    },
+    {
+        id: 'esu', x1: 553, y1: 683, x2: 617, y2: 724,
+        en: 'Engine Safety Unit (ESU)', cn: '主机安全单元',
+        fn: '安全保护：超速、油压低等自动停车/减速（SHD/SLD）',
+    },
+    {
+        id: 'dgu', x1: 893, y1: 718, x2: 987, y2: 754,
+        en: 'Digital Governor Unit (DGU)', cn: '数字调速器单元',
+        fn: '电子调速器：按转速给定计算并输出燃油指数',
+    },
+    {
+        id: 'servo', x1: 848, y1: 753, x2: 932, y2: 797,
+        en: 'Servo Unit', cn: '伺服单元',
+        fn: '伺服油执行机构，驱动燃油升压泵齿条',
+    },
+    {
+        id: 'actuator', x1: 536, y1: 760, x2: 640, y2: 805,
+        en: 'Electric Actuator', cn: '电动执行器',
+        fn: '主机执行机构，按调速器输出动作（燃油量控制）',
+    },
+    {
+        id: 'rpmu', x1: 728, y1: 813, x2: 827, y2: 887,
+        en: 'Dual RPM Units (incl. Overspeed)', cn: '双转速单元（含超速保护）',
+        fn: '两路转速测量与超速保护回路，超速时切断燃油',
+    },
+    {
+        id: 'rpmdet', x1: 686, y1: 862, x2: 758, y2: 900,
+        en: 'RPM Detectors', cn: '转速探头',
+        fn: '装在主机/轴上的转速传感器，供转速与超速回路使用',
+    },
+    {
+        id: 'engine', x1: 195, y1: 745, x2: 690, y2: 955,
+        en: 'MAN B&W MC Engine', cn: 'MAN B&W MC 主机',
+        fn: '低速二冲程柴油机，转向决定正/倒车',
+    },
+    {
+        id: 'prop', x1: 900, y1: 828, x2: 1015, y2: 955,
+        en: 'Propeller', cn: '螺旋桨',
+        fn: '定距螺旋桨，推力方向由主机转向决定',
+    },
+];
 
 export class Ac600Mimic extends BaseComponent {
     constructor(config, sys) {
@@ -47,9 +165,9 @@ export class Ac600Mimic extends BaseComponent {
         this.width = W;
         this.height = H;
         this.type = 'ac600_mimic';
-        this.cache = 'fixed';
 
-        this.model = ac600Of(sys);
+        this._idGroup = null;        // 当前识别框（点击模块时临时绘制）
+        this._idTimer = null;
 
         this._initGroups();
         this._init();
@@ -57,10 +175,7 @@ export class Ac600Mimic extends BaseComponent {
         this.config = { id: this.id };
     }
 
-    _tip(msg, ms) {
-        if (this.sys && this.sys._suppressComponentTips) return;
-        if (this.sys && this.sys.showFloatingTip) this.sys.showFloatingTip(msg, ms || 2200);
-    }
+    _tip() { /* 图片组件不弹提示（识别信息由画布上的标注框给出） */ }
 
     _redraw() {
         if (this.sys && this.sys.requestRedraw) this.sys.requestRedraw();
@@ -68,9 +183,76 @@ export class Ac600Mimic extends BaseComponent {
 
     _init() {
         this._drawStatic();
-        this._createDynamic();
-        this._bindInteraction();
         this._addDragPlate();
+        this._drawPropeller();
+        this._addParts();
+    }
+
+    /**
+     * 螺旋桨动画：先用白块遮掉原图叶片，再画可旋转的螺旋桨（桨毂固定、叶片组旋转）。
+     * 转速与转向跟随 `sys.ac600.rpm`（正车顺时针、倒车逆时针，角速度 = rpm × π/30，与真机一致）。
+     */
+    _drawPropeller() {
+        const g = this._dynamicGroup;
+        // ① 白色遮罩（只有遮罩区域被替换，左侧「Propeller」文字保留）
+        PROP_MASK.forEach(([x1, y1, x2, y2]) => {
+            g.add(new Konva.Rect({
+                x: mx(x1), y: my(y1), width: (x2 - x1) * K, height: (y2 - y1) * K,
+                fill: '#ffffff', listening: false,
+            }));
+        });
+
+        // ② 叶片组（绕桨毂中心旋转）：两片对称叶片
+        const spin = new Konva.Group({ x: mx(PROP.hubX), y: my(PROP.hubY), listening: false });
+        const L = PROP.L * K, Wd = PROP.W * K;
+        [0, 120, 240].forEach((deg) => {
+            const blade = new Konva.Shape({
+                rotation: deg,
+                listening: false,
+                sceneFunc: (ctx, shape) => {
+                    ctx.beginPath();
+                    ctx.moveTo(-7 * K, -8 * K);
+                    ctx.bezierCurveTo(-Wd * 0.95, -L * 0.30, -Wd * 0.95, -L * 0.72, -Wd * 0.45, -L * 0.93);
+                    ctx.quadraticCurveTo(0, -L * 1.04, Wd * 0.45, -L * 0.93);
+                    ctx.bezierCurveTo(Wd * 0.95, -L * 0.72, Wd * 0.95, -L * 0.30, 7 * K, -8 * K);
+                    ctx.closePath();
+                    ctx.fillStrokeShape(shape);
+                },
+                fillLinearGradientStartPoint: { x: -Wd, y: -L },
+                fillLinearGradientEndPoint: { x: Wd, y: -L * 0.15 },
+                fillLinearGradientColorStops: [0, '#f7e08b', 0.5, '#dcb553', 1, '#a9741a'],
+                stroke: '#3a1d00', strokeWidth: 1.5,
+            });
+            spin.add(blade);
+        });
+        g.add(spin);
+        this._propSpin = spin;
+        this._propAngle = 0;
+
+        // ③ 桨毂（固定不转，遮住叶片根部）+ 尾锥
+        g.add(new Konva.Rect({
+            x: mx(894), y: my(902), width: (940 - 894) * K, height: (925 - 902) * K,
+            cornerRadius: 5 * K, listening: false,
+            fillLinearGradientStartPoint: { x: 0, y: my(902) },
+            fillLinearGradientEndPoint: { x: 0, y: my(925) },
+            fillLinearGradientColorStops: [0, '#f2da92', 0.45, '#dcb553', 1, '#9c6a12'],
+            stroke: '#3a1d00', strokeWidth: 1.4,
+        }));
+        // 尾锥：自桨毂右端收进，指向船尾
+        g.add(new Konva.Rect({
+            x: mx(936), y: my(905), width: (960 - 936) * K, height: (921 - 905) * K,
+            cornerRadius: 8 * K, listening: false,
+            fillLinearGradientStartPoint: { x: 0, y: my(905) },
+            fillLinearGradientEndPoint: { x: 0, y: my(921) },
+            fillLinearGradientColorStops: [0, '#e8c977', 0.5, '#c89838', 1, '#8d5f0e'],
+            stroke: '#3a1d00', strokeWidth: 1.2,
+        }));
+
+        // ④ 重画「Propeller」标注（画在桨叶之上，桨叶扫过时文字仍清晰）
+        g.add(new Konva.Text({
+            x: mx(831), y: my(929.5), text: 'Propeller', listening: false,
+            fontSize: 21 * K, fontFamily: 'Arial', fontStyle: 'normal', fill: '#000000',
+        }));
     }
 
     _addDragPlate() {
@@ -79,238 +261,150 @@ export class Ac600Mimic extends BaseComponent {
         plate.moveToBottom();
     }
 
-    // ═══════════════════════════════════════════════════════
-    //  图元
-    // ═══════════════════════════════════════════════════════
-
-    /** 设备框（灰底 + 边框 + 标题 + 副标题） */
-    _box(s, x, y, w, h, title, sub) {
-        s.add(_rect({ x, y, width: w, height: h, fill: C_BOX, stroke: C_EDGE, strokeWidth: 1.6, cornerRadius: 3 }));
-        s.add(_rect({ x: x + 3, y: y + 3, width: w - 6, height: 16, fill: '#cfd4d9', stroke: C_BOX_D, strokeWidth: 1, cornerRadius: 2 }));
-        s.add(_text({ x: x + 4, y: y + 3, width: w - 8, align: 'center', fontSize: 11.5, fill: '#1b1f23', text: title }));
-        if (sub) s.add(_text({ x: x + 4, y: y + 22, width: w - 8, align: 'center', fontSize: 10.5, fill: '#3d464e', text: sub }));
-    }
-
-    /** 双 CAN 总线（两条平行粗线） */
-    _dualCan(s, pts, gap = 7) {
-        s.add(_line({ points: pts, stroke: C_CAN, strokeWidth: 4, lineCap: 'round', lineJoin: 'round' }));
-        s.add(_line({ points: pts.map((v, i) => (i % 2 === 0 ? v + gap : v + gap)), stroke: C_CAN, strokeWidth: 2.4, lineCap: 'round', lineJoin: 'round', opacity: 0.75 }));
-    }
-
-    /** 区域标题 */
-    _zone(s, x, y, text, w = 300) {
-        s.add(_text({ x, y, width: w, align: 'center', fontSize: 19, fontStyle: 'bold', fill: '#1b1f23', text }));
-    }
-
-    // ═══════════════════════════════════════════════════════
-    //  静态图
-    // ═══════════════════════════════════════════════════════
-
     _drawStatic() {
         const s = this._staticGroup;
-        s.add(_rect({ x: 0, y: 0, width: W, height: H, fill: C_BG }));
+        s.add(new Konva.Rect({ x: 0, y: 0, width: W, height: H, fill: '#f4f5f6', listening: false }));
 
-        // ── 驾驶台区域 ──
-        this._zone(s, 60, 8, 'PORT WING', 260);
-        this._zone(s, 600, 4, 'BRIDGE', 260);
-        this._zone(s, 1200, 8, 'STB. WING', 260);
+        // 图片节点（先放占位框，加载完再贴上图片）
+        this._imgNode = new Konva.Image({ x: 0, y: 0, width: W, height: H, listening: false });
+        s.add(this._imgNode);
+        this._fitImage(W, H);
 
-        // 两翼操纵单元
-        this._box(s, 60, 40, 260, 120, 'Bridge Wing', 'Manoeuvring Unit');
-        this._box(s, 1200, 40, 260, 120, 'Bridge Wing', 'Manoeuvring Unit');
-
-        // 驾驶台操纵单元 + 命令打印机
-        this._box(s, 620, 30, 300, 150, 'Bridge Unit', '驾驶台操纵单元');
-        this._box(s, 470, 40, 120, 70, 'Order', 'Printer');
-
-        // ── 集控室区域 ──
-        this._zone(s, 470, 212, 'CONTROL ROOM', 460);
-        this._box(s, 470, 246, 260, 130, 'Control Room', 'Manoeuvring Unit');
-        this._box(s, 760, 246, 110, 130, 'Start/Stop', 'Speedset Lever');
-        s.add(_rect({ x: 800, y: 292, width: 10, height: 60, fill: '#b6bcc2', stroke: C_EDGE, strokeWidth: 1.2 }));
-        s.add(_rect({ x: 792, y: 300, width: 26, height: 12, fill: '#6b7681', stroke: C_EDGE, strokeWidth: 1.2, cornerRadius: 2 }));
-        this._box(s, 900, 246, 200, 130, 'Indicating Panel', 'Unit');
-
-        // ── 机舱区域 ──
-        this._zone(s, 210, 404, 'ENGINE ROOM', 380);
-
-        // 机旁操纵台
-        this._box(s, 40, 470, 240, 200, 'Local Control Panel', 'with Engine Telegraph');
-
-        // 主机（MAN B&W MC）
-        const engX = 470, engY = 470, engW = 470, engH = 220;
-        s.add(_rect({ x: engX, y: engY, width: engW, height: engH, fill: '#cfd4d9', stroke: C_EDGE, strokeWidth: 1.8 }));
-        s.add(_text({ x: engX, y: engY + engH - 34, width: engW, align: 'center', fontSize: 17, fontStyle: 'bold', fill: '#1b1f23', text: 'MAN B&W   MC' }));
-        // 6 个气缸
-        for (let i = 0; i < 6; i++) {
-            s.add(_rect({ x: engX + 16 + i * 74, y: engY + 60, width: 52, height: 96, fill: '#e8ebee', stroke: C_BOX_D, strokeWidth: 1.4 }));
-            s.add(_circle({ x: engX + 42 + i * 74, y: engY + 108, radius: 16, fill: '#f4f6f8', stroke: C_BOX_D, strokeWidth: 1.2 }));
-        }
-        // 扫气箱/曲拐箱
-        s.add(_rect({ x: engX + 8, y: engY + 26, width: engW - 16, height: 26, fill: '#b6bcc2', stroke: C_BOX_D, strokeWidth: 1 }));
-        s.add(_text({ x: engX, y: engY + 32, width: engW, align: 'center', fontSize: 10.5, fill: '#2b3136', text: 'Scavenge air / Cylinder cover' }));
-
-        // 凸轮轴 / 电动执行器
-        this._box(s, 960, 430, 90, 70, 'Electric', 'Actuator');
-        s.add(_line({ points: [1005, 500, 1005, 520], stroke: C_EDGE, strokeWidth: 2 }));
-
-        // 机舱控制单元
-        this._box(s, 300, 470, 70, 70, 'nn.', '');
-        this._box(s, 385, 470, 76, 70, 'Slow Down', 'RAI16');
-        this._box(s, 385, 560, 76, 70, 'Main Engine', 'Interface MEI');
-        this._box(s, 300, 560, 70, 70, 'Engine', 'Safety ESU');
-
-        // 调速器
-        this._box(s, 1290, 470, 200, 80, 'Digital Governor', 'DGU');
-        this._box(s, 1330, 560, 120, 60, 'Servo', 'Unit');
-        this._box(s, 1290, 700, 200, 76, 'Dual RPM Units', '含超速保护系统');
-        this._box(s, 1150, 700, 120, 76, 'RPM', 'Detectors');
-
-        // 螺旋桨
-        s.add(_line({ points: [940, 580, 1030, 580], stroke: C_EDGE, strokeWidth: 5 }));
-        const px = 1100, py = 580;
-        s.add(_circle({ x: px, y: py, radius: 12, fill: '#b6bcc2', stroke: C_EDGE, strokeWidth: 1.6 }));
-        for (let i = 0; i < 4; i++) {
-            const a = Math.PI / 4 + i * Math.PI / 2;
-            s.add(_line({
-                points: [px, py, px + Math.cos(a) * 46, py + Math.sin(a) * 46],
-                stroke: C_EDGE, strokeWidth: 7, lineCap: 'round',
+        this._img = new Image();
+        this._img.onload = () => {
+            this._imgNode.image(this._img);
+            this._fitImage(this._img.naturalWidth || this._img.width, this._img.naturalHeight || this._img.height);
+            if (this.sys && this.sys.layer) this.sys.layer.batchDraw();
+            this._redraw();
+        };
+        this._img.onerror = () => {
+            s.add(new Konva.Text({
+                x: 0, y: H / 2 - 12, width: W, align: 'center', fontSize: 18,
+                fill: '#c40000', text: `结构图加载失败：${IMG_SRC}`, listening: false,
             }));
+        };
+        this._img.src = IMG_SRC;
+    }
+
+    /** 按原图比例摆放（contain 居中 / fill 拉伸） */
+    _fitImage(iw, ih) {
+        if (!iw || !ih) return;
+        if (_FIT === 'fill') {
+            this._imgNode.x(0); this._imgNode.y(0);
+            this._imgNode.width(W); this._imgNode.height(H);
+            return;
         }
-
-        // ── 双 CAN 总线 ──
-        // 两翼 → 驾驶台
-        this._dualCan(s, [320, 100, 400, 100, 400, 96, 620, 96]);
-        this._dualCan(s, [1200, 100, 1120, 100, 1120, 96, 920, 96]);
-        // 驾驶台 → 集控室
-        this._dualCan(s, [770, 180, 770, 300]);
-        // 集控室 → 机舱
-        this._dualCan(s, [600, 376, 600, 470]);
-        this._dualCan(s, [860, 376, 860, 430, 350, 430, 350, 470]);
-        // 集控室 → 调速器
-        this._dualCan(s, [1000, 376, 1000, 440, 1390, 440, 1390, 470]);
-        // 机旁操纵台 → 机舱控制
-        this._dualCan(s, [160, 470, 160, 440, 320, 440, 320, 470]);
-        // DGU → 执行器
-        this._dualCan(s, [1300, 500, 1050, 500]);
-        // 转速检测 → 双测速单元
-        this._dualCan(s, [1210, 738, 1290, 738]);
-        // 主机 → 转速检测
-        this._dualCan(s, [940, 660, 1150, 700]);
-
-        // 图注
-        s.add(_text({ x: 40, y: 736, width: 620, fontSize: 11.5, fill: '#3d464e', text: '图注：粗双线为 Dual CAN 现场总线；驾驶台 / 集控室 / 机旁三个操纵位置经总线共享主机操纵权。' }));
+        const k = Math.min(W / iw, H / ih);
+        const w = iw * k, h = ih * k;
+        this._imgNode.x((W - w) / 2);
+        this._imgNode.y((H - h) / 2);
+        this._imgNode.width(w);
+        this._imgNode.height(h);
     }
 
-    // ═══════════════════════════════════════════════════════
-    //  动态
-    // ═══════════════════════════════════════════════════════
+    /** 注册各装置的识别热区（点击框选 + 弹出名称与功能） */
+    _addParts() {
+        this._partMap = {};
+        PARTS.forEach((p) => {
+            const x = mx(p.x1), y = my(p.y1);
+            const w = (p.x2 - p.x1) * K, h = (p.y2 - p.y1) * K;
+            this._partMap[p.id] = { ...p, x, y, w, h };
+            const hit = this.addClickablePart(p.id, x, y, w, h);
+            if (hit) {
+                // 基类给每个热区加了一层 3% 绿底；本图大片白底上会显成淡绿方块，
+                // 改为「仅悬停时显示」，常态完全透明
+                const bg = hit.getParent().getChildren()[0];
+                bg.visible(false);
+                hit.on('mouseenter', () => { bg.visible(true); this._redraw(); });
+                hit.on('mouseleave', () => { bg.visible(false); this._redraw(); });
+                // 追加识别动作（基类已做绿色闪光与 lastClickedId 记录）
+                hit.on('click tap', () => { this._identify(p.id); });
+                // 双击跳页（BMU / CMU / LCP / 主机）
+                const pg = DBL_PAGE[p.id];
+                if (pg) {
+                    hit.on('dblclick', (e) => {
+                        if (e) e.cancelBubble = true;
+                        this._hideIdentify();
+                        this.goPage(pg);
+                    });
+                }
+            }
+        });
+    }
 
-    _createDynamic() {
-        const d = this._dynamicGroup;
+    /** 点击识别：框出模块 + 标注中英文名称与一句话功能，4 s 后自动淡出 */
+    _identify(id) {
+        const p = this._partMap && this._partMap[id];
+        if (!p) return;
+        this._hideIdentify();
 
-        // 各操纵单元的控制位置指示灯
-        this._lamp = {};
-        const addLamp = (key, x, y) => {
-            const c = _circle({ x, y, radius: 8, fill: '#3a3f42' });
-            d.add(c);
-            this._lamp[key] = c;
-        };
-        addLamp('bw-port', 190, 148);
-        addLamp('bw-stb', 1330, 148);
-        addLamp('bridge', 770, 166);
-        addLamp('ecr', 600, 362);
-        addLamp('local', 160, 656);
-
-        // DGU 伺服指示
-        this._servoLamp = _circle({ x: 1490, y: 590, radius: 8, fill: '#3a3f42' });
-        d.add(this._servoLamp);
-
-        // 主机运行指示
-        this._engLamp = _circle({ x: engLampX(), y: 470 + 12, radius: 7, fill: '#3a3f42' });
-        d.add(this._engLamp);
-        function engLampX() { return 470 + 24; }
-
-        // 螺旋桨旋转标记
-        this._propMark = new Konva.Group({ x: 1100, y: 580, rotation: 0, listening: false });
-        this._propMark.add(new Konva.Arc({
-            x: 0, y: 0, innerRadius: 52, outerRadius: 56, angle: 240, rotation: 30,
-            fill: 'rgba(0,0,0,0)', stroke: '#2f7d32', strokeWidth: 3, listening: false,
+        const g = new Konva.Group({ listening: false });
+        // ① 框选
+        g.add(new Konva.Rect({
+            x: p.x, y: p.y, width: p.w, height: p.h,
+            stroke: '#00b400', strokeWidth: 3, cornerRadius: 3,
+            fill: 'rgba(0,220,0,0.12)',
         }));
-        d.add(this._propMark);
-
-        // 转速文本
-        this._rpmTxt = _text({ x: 1150, y: 756, width: 120, align: 'center', fontSize: 14, fontStyle: 'bold', fill: '#1b4f1f', text: '68.0' });
-        d.add(this._rpmTxt);
-        this._rpmCmdTxt = _text({ x: 760, y: 352, width: 110, align: 'center', fontSize: 15, fontStyle: 'bold', fill: '#1b4f1f', text: '68' });
-        d.add(this._rpmCmdTxt);
-    }
-
-    // ═══════════════════════════════════════════════════════
-    //  交互
-    // ═══════════════════════════════════════════════════════
-
-    _bindInteraction() {
-        const M = this.model;
-        const mk = (id, x, y, w, h, onClick) => {
-            const hit = this.addClickablePart(id, x, y, w, h);
-            if (onClick) hit.on('click tap', (e) => { e.cancelBubble = true; onClick(); this._redraw(); });
-            return hit;
-        };
-
-        mk('bw-port', 60, 40, 260, 120, () => this._setPos(CONTROL_POS.BRIDGE, '驾驶台（左翼）'));
-        mk('bw-stb', 1200, 40, 260, 120, () => this._setPos(CONTROL_POS.BRIDGE, '驾驶台（右翼）'));
-        mk('bridge-unit', 620, 30, 300, 150, () => this._setPos(CONTROL_POS.BRIDGE, '驾驶台'));
-        mk('order-printer', 470, 40, 120, 70, () => this._tip('命令打印机：记录车钟命令与主机响应'));
-        mk('cr-unit', 470, 246, 260, 130, () => this._setPos(CONTROL_POS.ECR, '集控室'));
-        mk('cr-lever', 760, 246, 110, 130, () => { M.stepLever(-1, CONTROL_POS.ECR); this._tip(`集控室转速手柄：${M.lever.label}`); });
-        mk('cr-indicator', 900, 246, 200, 130, () => this._tip('指示面板单元：显示主机转速、负荷与报警'));
-        mk('local-panel', 40, 470, 240, 200, () => this._setPos(CONTROL_POS.LOCAL, '机旁'));
-        mk('mei', 385, 560, 76, 70, () => this._tip('MEI 主机接口：采集主机状态并送入总线'));
-        mk('esu', 300, 560, 70, 70, () => this._tip('ESU 主机安全单元：慢降 / 停车保护'));
-        mk('rai', 385, 470, 76, 70, () => this._tip('Slow Down RAI16：远程模拟量输入模块'));
-        mk('dgu', 1290, 470, 200, 80, () => this._tip('DGU 数字调速器：输出执行器位置指令'));
-        mk('servo', 1330, 560, 120, 60, () => this._tip('Servo Unit 伺服单元：驱动燃油调节执行器'));
-        mk('rpm-units', 1290, 700, 200, 76, () => this._tip('双测速单元（含超速保护）'));
-        mk('actuator', 960, 430, 90, 70, () => this._tip('电动执行器：调节主机燃油量'));
-        mk('engine', 470, 470, 470, 220, () => this._tip(`主机：${M.stateText}，${M.rpm.toFixed(1)} rpm，负荷 ${M.load.toFixed(1)} %`));
-        mk('prop', 1046, 534, 108, 92, () => this._tip('螺旋桨：转速随主机变化'));
-    }
-
-    _setPos(pos, name) {
-        const M = this.model;
-        const ok = M.setControlPos(pos);
-        this._tip(ok ? `控制位置切到${name}` : `控制位置已在${name}`);
-    }
-
-    // ═══════════════════════════════════════════════════════
-    //  每帧刷新
-    // ═══════════════════════════════════════════════════════
-
-    tick() {
-        const M = this.model;
-        if (!M) return;
-
-        const posOn = M.controlPos;
-        this._lamp['bw-port'].fill(posOn === CONTROL_POS.BRIDGE ? C_GREEN : '#3a3f42');
-        this._lamp['bw-stb'].fill(posOn === CONTROL_POS.BRIDGE ? C_GREEN : '#3a3f42');
-        this._lamp['bridge'].fill(posOn === CONTROL_POS.BRIDGE ? C_GREEN : '#3a3f42');
-        this._lamp['ecr'].fill(posOn === CONTROL_POS.ECR ? C_GREEN : '#3a3f42');
-        this._lamp['local'].fill(posOn === CONTROL_POS.LOCAL ? C_GREEN : '#3a3f42');
-
-        // 伺服 / 主机运行 / 螺旋桨
-        this._servoLamp.fill(M.running ? C_GREEN : '#3a3f42');
-        this._engLamp.fill(M.running ? C_GREEN : '#3a3f42');
-
-        const spin = M.running ? (Math.abs(M.rpm) * 0.6) : 0;
-        this._propMark.rotation((this._propMark.rotation() + spin * 0.02) % 360);
-        this._propMark.visible(M.running);
-
-        this._rpmTxt.text(M.rpm.toFixed(1));
-        this._rpmCmdTxt.text(String(Math.round(M.rpmCmd)));
-
-        this.markDirty();
-        this._refreshIfDirty();
+        // ② 标注框（默认放在模块下方，下方空间不足时移到上方）
+        const cw = 272, ch = 76;
+        let cy = p.y + p.h + 6;
+        if (cy + ch > H - 4) cy = Math.max(4, p.y - ch - 6);
+        let cx = p.x + p.w / 2 - cw / 2;
+        cx = Math.max(4, Math.min(W - cw - 4, cx));
+        g.add(new Konva.Rect({
+            x: cx, y: cy, width: cw, height: ch,
+            fill: 'rgba(20,32,44,0.92)', stroke: '#00b400', strokeWidth: 2, cornerRadius: 4,
+        }));
+        g.add(new Konva.Text({
+            x: cx + 8, y: cy + 6, width: cw - 16,
+            fontSize: 11.5, fontStyle: 'bold', fill: '#7ef08a', text: p.en, wrap: 'word',
+        }));
+        g.add(new Konva.Text({
+            x: cx + 8, y: cy + 22, width: cw - 16,
+            fontSize: 14, fontStyle: 'bold', fill: '#ffffff', text: p.cn,
+        }));
+        g.add(new Konva.Text({
+            x: cx + 8, y: cy + 42, width: cw - 16, height: ch - 46,
+            fontSize: 11.5, fill: '#d7e2ea', text: p.fn, wrap: 'word', lineHeight: 1.15,
+        }));
+        this._dynamicGroup.add(g);
+        this._idGroup = g;
         this._redraw();
+
+        this._idTimer = setTimeout(() => this._hideIdentify(), 4000);
+    }
+
+    /** 清除识别框 */
+    _hideIdentify() {
+        if (this._idTimer) { clearTimeout(this._idTimer); this._idTimer = null; }
+        if (this._idGroup) {
+            this._idGroup.destroy();
+            this._idGroup = null;
+            this._redraw();
+        }
+    }
+
+    /** 跳到指定页（双击模块时调用） */
+    goPage(n) {
+        const s = this.sys;
+        if (!s || !s.pageMgr) return false;
+        if (typeof s.navigateTo === 'function') s.navigateTo(n);
+        else s.pageMgr.navigateTo(n);
+        return true;
+    }
+
+    /** 便于外部（自动演示）直接触发识别 */
+    identifyPart(id) {
+        this._identify(id);
+        return !!(this._partMap && this._partMap[id]);
+    }
+
+    tick(dt) {
+        // 螺旋桨随主机转速旋转：角速度 = rpm × π/30（rad/s），倒车为负 → 反转
+        const d = (typeof dt === 'number' && dt > 0) ? dt : 1 / 20;
+        const M = this.sys && this.sys.ac600;
+        const rpm = M ? (M.rpm || 0) : 0;
+        this._propAngle = (this._propAngle || 0) + rpm * Math.PI / 30 * d;
+        if (this._propSpin) this._propSpin.rotation(this._propAngle * 180 / Math.PI);
     }
 }

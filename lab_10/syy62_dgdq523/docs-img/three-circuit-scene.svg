@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560" font-family="Microsoft YaHei,PingFang SC,sans-serif">
+  <defs>
+    <marker id="axG" markerWidth="9" markerHeight="9" refX="7" refY="2.6" orient="auto">
+      <path d="M0,0 L7,2.6 L0,5.2 Z" fill="#7f8c8d"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="980" height="560" fill="#fbfcfe"/>
+
+  <text x="24" y="34" font-size="20" font-weight="bold" fill="#0e6655">图 2 · 3D 场景布局（俯视图）</text>
+  <text x="24" y="58" font-size="13" fill="#7f8c8d">世界坐标：x 沿桌长边（右为正）· z 沿桌短边（+z 朝前，即俯视图向下）· y 向上，单位≈米</text>
+
+  <!-- 桌腿 -->
+  <g fill="#c8a97e" opacity="0.5">
+    <rect x="182" y="147" width="26" height="26"/>
+    <rect x="732" y="147" width="26" height="26"/>
+    <rect x="182" y="427" width="26" height="26"/>
+    <rect x="732" y="427" width="26" height="26"/>
+  </g>
+  <!-- 桌面 3.2 × 1.7 -->
+  <rect x="182" y="147" width="576" height="306" rx="6" fill="#f7ead8" stroke="#a9743f" stroke-width="3"/>
+
+  <!-- 坐标轴（桌面左上角） -->
+  <g stroke="#7f8c8d" stroke-width="2" marker-end="url(#axG)">
+    <line x1="206" y1="174" x2="286" y2="174"/>
+    <line x1="206" y1="174" x2="206" y2="252"/>
+  </g>
+  <text x="292" y="179" font-size="12" fill="#5d6d7e">+x</text>
+  <text x="212" y="266" font-size="12" fill="#5d6d7e">+z</text>
+
+  <!-- 四条标准连线 -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M252,330 C 302,262 382,206 445,200" stroke="#c0392b" stroke-width="3"/>
+    <path d="M497,250 C 542,292 500,332 396,344" stroke="#566573" stroke-width="2.5"/>
+    <path d="M558,350 C 580,350 602,350 626,350" stroke="#566573" stroke-width="2.5"/>
+    <path d="M682,381 C 700,420 672,440 630,440 L344,440 C 322,440 316,416 322,396" stroke="#566573" stroke-width="2.5"/>
+  </g>
+
+  <!-- 器件足迹 -->
+  <g stroke-width="2">
+    <rect x="227" y="316" width="108" height="76" rx="6" fill="#dfeaf7" stroke="#2c5f9e"/>
+    <rect x="420" y="195" width="99" height="58" rx="6" fill="#e3e8ea" stroke="#42525e"/>
+    <rect x="384" y="334" width="171" height="54" rx="6" fill="#f6e7d2" stroke="#a9743f"/>
+    <rect x="628" y="323" width="61" height="62" rx="6" fill="#e6f0e5" stroke="#3d7a4a"/>
+    <rect x="668" y="207" width="71" height="34" rx="4" fill="#e9e4ef" stroke="#6c5b7b"/>
+  </g>
+
+  <!-- 器件名 -->
+  <g font-size="13.5" font-weight="bold" fill="#2c3e50" text-anchor="middle">
+    <text x="281" y="412">电池</text>
+    <text x="470" y="272">闸刀开关</text>
+    <text x="470" y="407">滑动变阻器</text>
+    <text x="659" y="404">灯泡</text>
+    <text x="704" y="260">万用表</text>
+  </g>
+  <g font-size="10.5" fill="#7f8c8d" text-anchor="middle">
+    <text x="281" y="426">bat</text>
+    <text x="470" y="286">sw</text>
+    <text x="470" y="421">rhe</text>
+    <text x="659" y="418">bulb</text>
+    <text x="704" y="274">mm</text>
+  </g>
+
+  <!-- 端子 -->
+  <g fill="#c0392b">
+    <circle cx="252" cy="330" r="4.5"/>
+    <circle cx="497" cy="246" r="4.5"/>
+  </g>
+  <g fill="#2c3e50">
+    <circle cx="445" cy="200" r="4.5"/>
+    <circle cx="404" cy="343" r="4.5"/>
+    <circle cx="548" cy="350" r="4.5"/>
+    <circle cx="626" cy="350" r="4.5"/>
+    <circle cx="676" cy="378" r="4.5"/>
+    <circle cx="322" cy="398" r="4.5"/>
+  </g>
+
+  <!-- 尺寸标注 -->
+  <g stroke="#95a5a6" stroke-width="1.4" marker-end="url(#axG)">
+    <line x1="182" y1="474" x2="758" y2="474"/>
+  </g>
+  <text x="470" y="490" font-size="12" fill="#7f8c8d" text-anchor="middle">桌面 3.2 m</text>
+  <line x1="160" y1="147" x2="160" y2="453" stroke="#95a5a6" stroke-width="1.4" marker-end="url(#axG)"/>
+  <text x="148" y="300" font-size="12" fill="#7f8c8d" text-anchor="middle" transform="rotate(-90 148 300)">桌面 1.7 m</text>
+
+  <!-- 连线图例 -->
+  <rect x="772" y="288" width="188" height="132" rx="8" fill="#ffffff" stroke="#d5dbdb"/>
+  <text x="786" y="310" font-size="12.5" font-weight="bold" fill="#2c3e50">标准回路（自动接线）</text>
+  <g stroke-width="3" fill="none">
+    <line x1="786" y1="330" x2="816" y2="330" stroke="#c0392b"/>
+    <line x1="786" y1="352" x2="816" y2="352" stroke="#566573"/>
+    <line x1="786" y1="374" x2="816" y2="374" stroke="#566573"/>
+    <line x1="786" y1="396" x2="816" y2="396" stroke="#566573"/>
+  </g>
+  <g font-size="11.5" fill="#3d566e">
+    <text x="824" y="334">电池正极 → 开关左端</text>
+    <text x="824" y="356">开关右端 → 变阻器左端</text>
+    <text x="824" y="378">变阻器右端 → 灯泡左端</text>
+    <text x="824" y="400">灯泡右端 → 电池负极</text>
+  </g>
+
+  <text x="24" y="522" font-size="12" fill="#7f8c8d">十字布局：电池左前 · 开关后中 · 变阻器中前 · 灯泡右前 · 万用表右后 —— 四条标准连线路径互不重合，避免在桌面重叠。</text>
+  <text x="24" y="542" font-size="12" fill="#7f8c8d">桌顶面 y = WORLD.tableTop = 0.82 m；器件 root 的局部 y = 0 即底面，天然贴合桌面（约定式贴合，非运行时吸附）。</text>
+</svg>

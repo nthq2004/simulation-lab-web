@@ -320,7 +320,7 @@ export class CoolingWaterPID extends BaseComponent {
         const sv = this._solver();
         if (!sv) return;
         const m = sv.m;
-        if (m.mode === 'AUTO') sv.setSetpoint(clamp(m.setTemp + dir * 0.5, 60, 95));   // 每次 0.5 ℃
+        if (m.mode === 'AUTO') sv.setSetpoint(clamp(m.setTemp + dir * 1, 60, 95));     // 每次 1 ℃
         else sv.stepManip(dir);
     }
 

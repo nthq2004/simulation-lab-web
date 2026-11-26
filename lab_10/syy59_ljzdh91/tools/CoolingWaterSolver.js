@@ -368,13 +368,28 @@ export class CoolingWaterSolver {
         const acSld = this.sys && this.sys.ac600;
         if (acSld && typeof acSld.safetyAction === 'function') {
             if (m.temp > CW_SLD_ON) {
-                m.t.sld = (m.t.sld || 0) + dts;
-                if (m.t.sld >= CW_SLD_DELAY && !m.sldOn) {
-                    m.sldOn = true;
-                    acSld.safetyAction('SLD', 'CW-T');
+                if (acSld.sldCancelled && !acSld.slowDown) {
+                    m.t.sld = 0;
+                    m.sldPre = false;
+                } else {
+                    if (!m.sldPre) {
+                        m.sldPre = true;
+                        if (typeof acSld.sldPreAlarm === 'function') acSld.sldPreAlarm('CW-T');
+                    }
+                    m.t.sld = (m.t.sld || 0) + dts;
+                    const sldDelay = (typeof acSld.getSafetyDelay === 'function')
+                        ? acSld.getSafetyDelay('sld-cw-t', CW_SLD_DELAY) : CW_SLD_DELAY;
+                    if (m.t.sld >= sldDelay && !m.sldOn) {
+                        m.sldOn = true;
+                        acSld.safetyAction('SLD', 'CW-T');
+                    }
                 }
             } else if (m.temp < CW_SLD_OFF) {
                 m.t.sld = 0;
+                if (m.sldPre) {
+                    m.sldPre = false;
+                    if (typeof acSld.sldPreAlarmClear === 'function') acSld.sldPreAlarmClear('CW-T');
+                }
                 if (m.sldOn) {
                     m.sldOn = false;
                     if (typeof acSld.safetyClear === 'function') acSld.safetyClear('SLD', 'CW-T');
@@ -606,7 +621,7 @@ export class CoolingWaterSolver {
             m.manualOut = 0;
             return 0;
         }
-        m.manualOut = clamp(((m.manualOut == null ? m.manip : m.manualOut) + (dir > 0 ? 2 : -2)), U_MIN, U_MAX);
+        m.manualOut = clamp(((m.manualOut == null ? m.manip : m.manualOut) + (dir > 0 ? 1 : -1)), U_MIN, U_MAX);   // 每次 ±1 %
         if (m.mode === 'AUTO' && (m.tempCtrl || 'AUTO') === 'AUTO') {
             this._tip('手动增减操作量需先切到 Manual（面板 Ctrl）');
             return m.manualOut;

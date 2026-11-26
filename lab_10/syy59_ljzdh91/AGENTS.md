@@ -38,6 +38,11 @@ pnpm run preview  # 预览构建产物
 > （合成点击没有指针位置，无法用"按指针判断左右半"的写法）。参考：`VacuumCircuitBreaker.js`
 > 的 `dial-cw` / `dial-ccw`、`HvGenRemotePanel.js` 的 `start` / `stop`、`close` / `open`。
 
+> **部件中心取命中节点实际位置（硬性要求）**：`BaseComponent.getClickablePartCenter()` 在部件登记了命中节点时
+> 直接取节点中心（`getNodeCenter()`），只有在没有节点时才退回 `p.x + w/2` 再套组件绝对变换。
+> 组件内部若把 `_staticGroup` / `_dynamicGroup` / `_interactGroup` 整体平移（如
+> `MainEngineLubeOilMimic` 三层统一 `y(60)`），只用 `p.x/p.y` 算出来的箭头会整体偏掉
+> （实测偏高 60 px，箭头指不到「手动」「▼」）。
 > **旋转/缩放组件定位（硬性要求）**：凡组件带有 `rotation`（含配置旋转、运行时右键/代码
 > 旋转）或 `scale`，指示箭头/圈选的部件坐标**必须按组件的绝对变换换算**——把部件坐标当作
 > 组件**本地坐标**，用 `comp.group.getAbsoluteTransform().point({ x, y })` 换算成画布绝对坐标
@@ -59,9 +64,52 @@ pnpm run preview  # 预览构建产物
 ## 本工程：10 页工程（`project/sys_ljdq9-1.js`，生效项目文件）
 
 `consys.js:50` 与 `lib/WorkflowManager.js:4` 均引用 `project/sys_ljdq9-1.js`（与 `project/sys_ljdq10-4.js`
-内容相同，为同一工程的副本）。**共 12 页（页 0 索引 + 11 个电路页），现有 0 条工作流**
-（原「模拟量参数的修改」「开关量参数的修改」两条流程已按要求删除，`PROJECT_WORKFLOWS = {}`，
-辅助函数 `_click` `_openParamByTag` `_turnScrew` 等仍保留供后续复用）。
+内容相同，为同一工程的副本）。**共 12 页（页 0 索引 + 11 个电路页），现有 4 条工作流**
+（K-Chief 的「模拟量参数的修改」「开关量参数的修改」两条流程已删除，辅助函数 `_click` `_openParamByTag`
+`_turnScrew` 等仍保留供后续复用）：
+· **`alarm-ack`「1. 报警信息获取及报警应答」**（6 步，跨页：10 → 1 → 1 → 1 → 10 → 1）：
+   ① 第 10 页 TIC-101 切**手动**、按 ▼ 把冷却口 OUT 降到 **< 5 %**（`_lowerCoolingOut()` 循环点击直到达标），
+      观察滑油温度上升；② 回第 1 页等 `MAIN L.O.INLET TEMP HIGH` 触发**自动减速**（不越控）；
+   ③ Alarms → **Alarm History** 看全部报警；④ 按**消音** + **ACK**；⑤ 回第 10 页 TIC-101 切**自动**，
+      温度回落到 45 ℃ 附近（< 52 ℃）；⑥ 回驾控台开 Alarm History，**按住车钟手柄真实拖动到 SLOW 档**
+      （`_dragTelegraphTo()`：向画布派发 mousedown → 逐段 mousemove → mouseup；坐标用 `getAbsoluteTransform()`
+      换成 **CSS 像素**，不能再乘 canvas 像素比，否则 dpr=1.5 时拖不动）→ `rpmCmd = 27`、`leverIdx = 3`，复位自动减速。
+   驾驶台面板另有两个仅供演示定位的部件：`alarm-bar`（报警信息栏 126,504,1020,78，第 2 步箭头指向它）、
+   `telegraph`（车钟整列，`getClickablePartCenter()` 已重写为返回**手柄当前位置**，第 6 步箭头指向手柄）。
+   每步 `check()` 逐项对应文案要求（手动态 OUT<5、`slowDown`、`_subPage==='history'`、`silenced&&acked`、
+   `pid.auto && temp<55`、`!slowDown && !sldAwaitReset && |rpmCmd|<40`）。
+· **`ctrl-transfer`「2. 操纵地点转换」**（4 步，跨页：1 → 2 → 2 → 3）：
+   ① 驾控台按 `pos-ecr` → `transferReq = { from:'BRIDGE', to:'ECR', by:'give' }`（ECR 按钮闪烁、状态条
+      `Control Transfer`）；② 到集控台**用 `_dragTelegraphTo()` 真实拖车钟**到与驾驶台一致的档位
+      （档位由 `M._idxOf(M.leverRpm.BRIDGE)` 实时算，不写死），再按 `pos-ecr` 接管 → `controlPos = 'ECR'`；
+   ③ 集控台按 `pos-local` 发出交出请求（`by:'give'`，目标 LOCAL）；④ 到机旁面板按 `tel-<idx>`（同名档位，
+      与驾驶台一致）→ 用 `_dragLocalDialTo()` 把调速手柄拖到同一转速 → 按 `pos-local` 接管 → `controlPos = 'LOCAL'`
+      （机旁用 `localCompatible` 判据：ECR 不在 STOP 时档位差 ≤2 即相容）。
+· **`cancel-sld`「3. 主机遥控系统的越控操作」**（**6 步**，跨页：1 → 11 → 1 → 1 → 11 → 1）：
+   ① 驾控台 `btn-param` → `sub-psafety`，**双击 `sdel-sld-cw-t` 行**把缸套水出口温度高的 SLD 延时改为 **15 s**，
+      最后按 `sub-home` **退回主界面**（`check()`：`getSafetyDelay('sld-cw-t')===15` 且 `!subPage`；
+      ⚠ 按 Home 后 `_openSub('home')` 会把 **`_menuPage` 和 `_subPage` 都置 null**，
+      所以判据只能写 `!subPage`，**不能**再要求 `_menuPage === 'btn-param'`，否则演练模式永远判不过）；
+   ② 第 11 页按 LDCL 的 `am` 切**手动**、按 `down` 把冷却口开度减到 **< 25 %**（`manualOut` 每按 −1 %），
+      等温度升到 86 ℃ 左右；③ 回驾控台等**预报警**（`M.sldPre`，弹 `SLOW DOWN ACTIVE / CANCELLABLE`）
+      立即按 `cancel-sld`（面板按钮是"按一次越控、再按一次复位"，act 里最多点两次保证处于越控态）
+      → `cancelSLD && sldCancelled && !slowDown`；④ 消音 + ACK；⑤ 第 11 页 `am` 切回自动，等温度 < 88 ℃；
+   ⑥ 回驾控台**再按一次 `cancel-sld` 复位（释放）越控** —— 本次已越控、没有发生自动减速，
+      **不需要动车钟**（不必拉到 SLOW 再推回）；按钮是切换型，act 里按到 `M.cancelSLD === false` 为止
+      （最多两次），面板 Cancel 指示灯随之熄灭。`check()`：`!cancelSLD && !slowDown && !sldAwaitReset`。
+· **`auto-stop-reset`「4. 自动停车故障的排除及复位」**（5 步，跨页：10 → 10 → 1 → 10 → 1）：
+   ① 第 10 页点 `cv3c` 把压力开关取压切到手摇泵（`m.sw3b='pump'`）；
+   ② 按 `hp2-dn` 把 `m.handP2` 降到 **0.14 MPa**（每次 −0.01），`psw1.getSwitchOutput() === 1`（NC 触点闭合）；
+   ③ 回驾控台等安保延时到 → `M.shutDown`，报警 `MAIN L.O. LOW-LOW PRESS, SHUTDN`，消音 + ACK；
+   ④ 第 10 页按 `hp2-up` 升到 **0.21 MPa**（`getSwitchOutput() === 0` 复位），再点 `cv3c` 切回滑油入口（`'line'`）；
+   ⑤ 回驾控台**把车钟手柄拖回 STOP**（`_dragTelegraphTo(..., 5)`）→ 自动停车复位：
+      `shutDown / loLowLowShd` 清除、`engineReady` 恢复、报警按应答状态清除。
+   ⚠ **自动停车的车钟复位规则**（`AC600Solver`）：`safetyAction('SHD')` 置 `shdResetArmed = true`、并把
+      `rpmCmd` 直接清零（**这不算人工拉 STOP**）；只有在 `shdResetArmed` 期间**车钟被人工命令到 STOP**
+      （`setLeverAt/setLeverById` 里 `|rpmCmd| < 0.5` → `_shdStopAck = true`）才解除 `shutDown`、
+      清 `loLowLowShd / jcwLowShd / overspeedTripped`、恢复备车并调 `_shutAlarmReturn()`。
+**启动后默认进入第 1 页**（主机遥控系统 AC 600 驾控台）—— `consys.js` 的 `init()` 中为
+`this.pageMgr.navigateTo(1)`；如需改默认页，改这一处即可（索引页仍在，可用工具栏「主页」回到页 0）。
 
 | 页 | 组件 id | 主题 |
 |---|---|---|
@@ -103,6 +151,14 @@ pnpm run preview  # 预览构建产物
   · 升速：`setp < 57` 走加速度限制（2 rpm/s，`Accel. Lim.`），`≥57` 走 Load Up 程序（57→68 / 3 min ≈ 0.061 rpm/s，`Load Up`）；
   · 降速：`setp > 57` 走 Load Down 程序（68→57 / 2 min，`Load Down`），`≤57` 走减速度限制（3 rpm/s，`Decel. Lim.`）；
   · `setp` 不取整（程序速率很慢，取整会卡住）；`limits` 字段由 Limiters 面板 SAVE 同步；
+  · **最低稳定运行转速（MSRS）**：车令不是 0、但**低于 `limits.steadyMin`（默认 21 rpm）**时，
+    调速器输出给定 `setp` **保持在 ±21 rpm**（`activeLimiter = 'Min. Speed'`，SETP 柱与数值即显示 21）；
+    正/倒车对称（−5 rpm 的车令给 −21）；**车令 = 0（STOP）仍给 0**，主机照常停车。
+    **机旁调速手柄**（`localSpeed` → `rpmCmd`）走同一条链路，同样受限。
+    ⚠ **只在主机起动成功、开始点火之后才生效**：`msrsActive = !_airTurn && !_tgDriven && (running || starting)`
+    —— **冲车 / 慢转（起动空气带转）与盘车机带转一律不遵循**（实测冲车 20 rpm、慢转 5 rpm、盘车时
+    `setp` 保持车令值，不会被抬到 21）。
+    取 `starting` 是为了在转车结束后 `setp` 已 ≥ MSRS，否则转速会从 12 rpm 被 setp=0 拉回到停车。
   · **Cancel Limits 越控**（`model.cancelLimits`）时 `_stepSetp()` 直接令 `setp = 目标值`（加速/减速/Load Up·Down 速率限制全部取消），
     仅保留临界转速避让与最低稳定转速；
   · **主机惯性最大变速率 `model.inertiaRate = 68/15 ≈ 4.53 rpm/s`**：`rpm` 追随 `setp` 时按此速率升降
@@ -124,6 +180,36 @@ pnpm run preview  # 预览构建产物
   - **第 1 级**：菜单区 9 个主菜单（Alarms / Limiters / Control Pos. / Misc Menu / Safety System /
     Engine State / B&W Modes / Param. Change / Home），点某项后**菜单区整体切换成该菜单的二级按钮组**，
     液晶区仍显示主页图形（与真机一致，不是弹出浮层）。
+  - **状态条第 3 段 = 控制位置**：`Bridge` 绿底白字（`#0aaa20`）/ `ECR` 黄底黑字（`#ffee00`）/ `Local` 红底白字（`#d81e1e`），
+    由 `tick()` 每帧按 `M.controlPos` 重设文字与底色（`_segHi[2].opacity(1)`）；
+    **转移过程中该段显示 `Control Transfer`（黄底黑字）**。
+  - **控制权转移流程**（统一走 `M.pressPosButton(me, pos)`，`me` = 本面板位置，`pos` = 被按下的位置键）：
+    `transferReq = { from, to, by }`，`by = 'give'`（控制位置面板发出）或 `'take'`（目标位置面板发出）。
+    请求期间三块面板状态条显示 `Control Transfer`、**目标位置灯闪烁**、蜂鸣器鸣响；**车钟一致（≤1 rpm；转机旁用 `localCompatible`）**
+    才允许接管，接管后面板显示新位置、蜂鸣器停。再次按同一目标（发起方）→ 取消。
+    · **驾驶台 ↔ 集控室：双向自由，任意一侧都可以发起** ——
+      控制位置按对方位置 = **GIVE**（对方面板按自己位置确认 TAKE）；
+      对方面板按自己位置 = **TAKE**（控制位置面板按自己位置确认 GIVE）。
+    · **集控室 ↔ 机旁**：控制权在**集控室**时，集控室按 `Local` = GIVE、机旁按 `Local` = TAKE **都有效**；
+      **控制权在机旁时，其它位置按自己的位置键 TAKE 无效**（返回 `'blocked'`），
+      **只有机旁按目标位置键 GIVE 才有效**（随后由目标位置确认接管）。
+  - **车钟报警蜂鸣器 `M.buzzerOn`（唯一蜂鸣源）**：**只有『车钟操作 / 控制权转换 / 副车钟操作』条件满足才响，
+    任何其它报警都不触发蜂鸣器**：① 控制权转换进行中；② **控制权在 ECR：|ECR 车令 − 驾驶台车令| > 1 rpm** 才响（与机旁无关）；
+    ③ **控制权在 LOCAL：按"机旁按键式车钟"（副车钟）相容规则** —— ECR 在 STOP 时机旁必须 STOP，
+    ECR 不在 STOP 时两边**档位差 ≤ 2 档**即相容（用 `localCompatible`，档位按 `TELEGRAPH` 索引）；
+    ④ 控制权在驾驶台：不响。
+    `tick()` 中 `_buzzGlow` **只由 `M.buzzerOn` 驱动**（已去掉 `M.alarm && !M.silenced`），
+    `_bellRing` 仍为报警视觉指示（紧急停车期间一并抑制）。
+  - **副车钟（航行工况 At Sea / Stand By / FWE）—— 只在驾驶台与集控室之间两步回令切换，机旁只显示不参与**：
+    `M.requestEngineMode(mode, by)`（`by` = BRIDGE / ECR）：一方按下 → `modeReq = {to, by}`（该工况灯闪烁、蜂鸣器响）；
+    **另一方按同一工况回令** → 生效（`engineMode` 常亮）、请求清除；再按一次同一请求 / 按当前工况 → 取消。
+    **切换条件**（`M.canSelectMode`）：`SEA` 需**驾驶台车钟在 NAV FULL**；`STANDBY` 需**主机已停车**（`!running && |rpm|<1`）；
+    `FWE` 需**主起动阀与空气分配器都关闭**（`!mainStartValveOk && !airDistributorOk`）；不满足返回 `'blocked'`。
+    **默认工况 STANDBY**（`reset()` 置 `engineMode='STANDBY'`）。机旁面板三个工况按钮已改为**纯显示**（热区无动作）。
+  - **转 Local 的接管条件**用 `localCompatible`（不要求连续一致），其余位置仍要求 ≤1 rpm。
+  - **机旁面板同样闪烁**：`Ac600LocalPanel.tick()` 中 `pos-bridge/pos-ecr/pos-local` 三个指示灯，
+    当 `M.transferReq.to === 该位置` 时按 `M.blink` 闪烁（ECR→机旁时 Local 灯闪烁），接管后常亮、其余熄灭；
+  - **圆形指示灯填充**：底部**弓形**（`Konva.Shape` + sceneFunc，弧 + 水平弦），**高度 = 直径的 1/3、顶面水平**（原为半圆）。
   - **第 2 级**：`_subMenuCells()` 定义各项的二级按钮（Alarms：Sys. Critical / Sys. Non-Crit. / ComErr Crit. /
     ComErr Non-Crit. / I/O Fail / Alarm History；Limiters：Overview·Set limiter；Control Pos.：Overview·Transfer；
     Limiters 二级按钮为 `Set Limiters` / `Show Limiters`；**Show Limiters 共 12 项**（扫气压力/转矩/燃油指数/慢降/最低稳定转速/
@@ -160,13 +246,20 @@ pnpm run preview  # 预览构建产物
     **Slow Down 23 项**：**所有项目都有 A+C 灯**，只有 4 个回路带 Loop fail 灯 —— AXIAL VIBRATION HIGH、OIL MIST HIGH IN CRANKCASE、
     EICU A SLOWDOWN、EICU B SLOWDOWN〔A+C+L〕；
     **Emg. Stop 6 项**：仅第一行 FUEL CUT-OUT SOL. V/V 三灯皆无，其余 5 处 EMERGENCY STOP SWITCH 为〔A+L〕（急停不可越控，无 Cancelled 灯）；
+    **⚠ 三个 Cancel 的"按钮灯各面板独立、报警与动作系统同步"**：
+    无论本面板是否拥有控制权，按下都**立即作用于系统**（`M.setCancel()` → 报警 `SHUTDOWN/SLOWDOWN/LIMITS CANCELLED` 与
+    主机越控/取消限制全部同步生效）；**只有按钮自身的指示灯是各面板独立的**——在集控室按下 Cancel Limits，
+    集控室该灯亮、驾驶台该灯不亮（`this._cancel` 各面板自持）。
+    例外：**应急倒车**等"系统自动越控"用 `M.autoCancelLimits` 标记，只点亮**控制权面板**的 Cancel Limits 指示灯，人工按下后清除该标记。
     **三个 Cancel 按钮各面板独立（不同步）**：面板自己存 `this._cancel = { shd, sld, lim }` 驱动本面板 Cancel 指示灯与本站点安全页；
     模型侧按位置记录 `cancelSHDBy / cancelSLDBy / cancelLimBy`（`setCancel(kind, on, posKey)`），**任一位置按下即生效**（`cancelSHD = any(...)`），
     某位置取消时若其它位置仍在越控则系统保持越控状态；
     **每个 Cancel 都会产生报警**：`SHUTDOWN CANCELLED, ACTIVE` / `SLOWDOWN CANCELLED, ACTIVE` / `LIMITS CANCEL FROM ACP, ACTIVE`
     （`setCancelAlarm(kind, on)`：进入报警栏，并在 Alarms → Sys. Non-Crit 里对应项变 `ACTIVE` + `AL. CLOSE`；
     取消越控时若已应答则清除、未应答转 `, NORMAL`；已存在则不重复报警）；
-    Sys. Non-Crit 的 `SHUTDOWN CANCELLED` / `SLOWDOWN CANCELLED` / `LIMITS CANCEL FROM ACP` 三项**按本面板 `_cancel` 显示**（面板之间互不影响）；
+    Sys. Non-Crit 的 `SHUTDOWN CANCELLED` / `SLOWDOWN CANCELLED` / `LIMITS CANCEL FROM ACP` 三项**跟随模型状态**
+    （`M.cancelSHD / M.cancelSLD / M.cancelLimits`），因此**两块面板都会显示 ACTIVE、Alarms 菜单灯两侧同时亮红**；
+    只有 Cancel **按钮自身的指示灯**按本面板 `_cancel` 独立显示；
     Cancel SHD / Cancel SLD 点击时还会调 `_safCancelAll(page, on)` 把该页**所有带 Cancelled 灯的项目一次性越控**
     （Cancelled 灯全部变红，自动停车/减速功能取消），再点一次全部还原（灯回白）；
     **最低稳定转速（Minimum stable running speed）**：默认 `INACTIVE`，只有**车钟不在 STOP（`|rpmCmd| > 0.5`）且给定转速绝对值小于该值**时才 `ACTIVE`；
@@ -223,7 +316,17 @@ pnpm run preview  # 预览构建产物
     **BRIDGE 面板该页只显示、不注册任何热区**（编辑框/Reset/OFF 全部无响应），底部提示「本面板（BRIDGE）该页仅作显示…」；
     Rpm Simulate 接通时 4 路 Pickup 与 Engine Rpm 显示模拟转速；编辑期间暂停 500 ms 页面自动重建（`_detEditing`）。
     B&W：Engine modes·**Running mode**·Slow turning·Cyl. lubrication；
-    Param.：Start/Stop·Reversing·Crash astern·Governor (DGU PID)）。Home 固定在第 2 行第 7 列。
+    Param.：Start/Stop·Reversing·Crash astern·Governor (DGU PID)·**Safety**）。Home 固定在第 2 行第 7 列。
+    **`Param. Change → Safety` 页**（`_subPage === 'psafety'`，`SAFETY_DELAY_ROWS`）：6 行安保延时设置，
+    自动停车 SHD：`thrust pad 高高温` / `增压器滑油低低压` / `缸套水进口低压`；
+    自动减速 SLD：`主滑油进口温度高` / `缸套水出口温度高` / `曲轴箱油雾浓度高`，**默认都是 6 s**。
+    行部件 `sdel-<key>`（key = `shd-thrust` `shd-tclo` `shd-jcw` `sld-lo-t` `sld-cw-t` `sld-mist`），
+    **双击该行 → DOM 输入框（id `ac600_delay_<key>`）→ 回车提交**（`_beginSafetyDelayEdit()`，
+    编辑期间 `_limEditing` 暂停自动重建）；数值存 `M.delays`，读 `M.getSafetyDelay(key)`、写 `M.setSafetyDelay(key, s)`（0~120 s）。
+    ⚠ **页面内新增的 `addClickablePart` 热区 id 必须 `push` 到 `this._menuHitIds`**，否则 `_clearMenuHits()`
+    不会销毁它，每重建一次页面就多叠一层 `rgba(0,180,0,0.03)` 的绿底（6 行 × 多次进出后液晶区会整片发绿）。
+    **实际生效的两项**：`sld-cw-t` 被 `CoolingWaterSolver` 用作缸套水高温 SLD 延时、
+    `sld-lo-t` 被 `MainEngineLubeOilMimic` 用作滑油高温 SLD 延时（原来是写死 6 s 的常量）。
     ⚠ **Engine State 没有子菜单**：点一下直接在液晶区显示「STATE / START FAIL/BLOCK / ENGINE NOT READY」
     三个白边圆角框 + 指示灯列表（`_directPage = 'estate'`、`_paintEngineState()`），菜单区保持主菜单；
     **指示灯随主机实际状态动态刷新**（tick 的 500 ms 节流条件包含 `_directPage`，每帧按模型重算亮/灭），
@@ -242,7 +345,13 @@ pnpm run preview  # 预览构建产物
     数据由 `_alarmItems(kind)` 生成（项目名照真机：ACP600 ECR、ESU MAIN POWER FAILURE、AUX BLOWER FAILURE、DPU 1920~1931 系列、TELEGRAPH SYS FAILURE、
     EMERGENCY STOP SWITCH <位置>、RPM PICKUP 1.1/1.2、COMM ERR BETW. ACP-ECR&… 等）；
     **除 Alarm History 外的五类为两态**：首次显示全部参数 → 再点只显示未复位（报警）项 → 再点回全部（`_alarmViewMode`）；
-    Alarm History 显示全部历史（表头 Nack / Date/Time / Description / Event / Value，数据来自 `sys.ac600.alarmHistory`）。
+    Alarm History 改为**跟踪「本次出现过的报警项」**（表头 Nack / Date/Time / Description / Event / Value，
+    数据存在面板 `_histRows`，由 `_pollAlarms()` 按 `M.messages` 增删同步）：
+    · 每条记录 `{ desc, value, state, t0 }`；新出现的报警按当前时间登记（`YYYY.MM.DD HH:MM:SS`）；
+    · **颜色**：未应答 → 红 `#ff3b30`；已应答但故障仍在 → 黄 `#ffd400`；故障已恢复 → **绿 `#00c000`**，
+      且 Value 改写为 `NORMAL`（自动减速的 `SLOWDOWN ACTIVE` 在车钟拉到 40 rpm 以下复位后才转 NORMAL）；
+    · **Nack 列圆点**：未应答红点、已应答白点；Event 列留空（与真机一致）；
+    · 已恢复的行**保留在列表**（绿色记忆），不清除。
   - **流程指示灯**：7×2 网格固定灯位，**常态一律不显示**，只有该按钮对应存在故障项时亮红灯
     （主菜单按类别：alarms/limiters/misc/safety/estate；Alarms 二级按该子页 `_alarmItems().some(it => it.alarm)`）。
   - 页面软键热区由 `_clearMenuHits()`、按钮热区由 `_clearBandHits()` 在重建前销毁，避免残留与重复点击。
@@ -267,9 +376,14 @@ pnpm run preview  # 预览构建产物
   不依赖 Konva 的 draggable/hit；拖动期间 `group.draggable(false)`，不会拖动整块面板；
   **三处车钟互相独立**（`leverRpm = { BRIDGE, ECR, LOCAL }`）：**任何面板的车钟都能正常拖动**（手柄自由移动，不受操纵权限制），
   但**只有控制位置的车钟会写入主机给定 `rpmCmd`（LEVER）**，其它位置拖动只动手柄、LEVER 不变；
-  **LEVER 柱与数值显示 `rpmCmd`**（不是本面板手柄位置）；`setControlPos()` 切换时把当前 `rpmCmd` 写入新位置手柄（**LEVER 不跳变**），
+  **RPM CMD 大字 = 本面板车钟的实际车令**（`M.leverRpm[posKey]`，无控制权时只在不影响主机）；
+  `RPM CMD` 上下箭头同样只改本面板车钟（`M.setLeverAt(cur±2, posKey)`）；
+  **LEVER 柱与数值显示 `rpmCmd`**（= 拥有控制权面板的车令，不是本面板手柄位置）；`setControlPos()` 切换时把当前 `rpmCmd` 写入新位置手柄（**LEVER 不跳变**），
   之后只有新位置的车钟能改变 LEVER；
-  **应急停车（Crash astern）自动越控**：车钟**从 NAV FULL（68）直接拉到 EM'CY ASTERN（−55）** → 触发 `model.crashAstern()`，
+  **应急停车（Crash astern）自动越控**：车钟**从 NAV FULL（68）直接拉到「倒车全速及以下」**
+  （`CRASH_ASTERN_TO = −50.5`，即 FULL ASTERN −51 或 EM'CY ASTERN −55）→ 触发 `model.crashAstern()`，
+  （模型 `_checkCrashAstern()` 与面板拖动手势用同一阈值；控制权面板的 Cancel Limits 指示灯会自动点亮，
+  非控制面板不亮 —— `tick()` 中把模型侧自动生效的 `cancelLimits/cancelSHD` 同步到控制权面板的 `_cancel`）
   **`cancelLimits` 自动置真**（面板左侧 Cancel Limits 指示灯自动点亮、限制全部取消，主机按惯性最快速率响应）；
   **只有拥有控制权的面板**车钟这样拉才会触发（无控制权拖只会动手柄、`rpmCmd`/`cancelLimits` 都不变）；
   判定两路并用：① 面板拖动手势（`down` 记 `_telDragFrom`，`up` 吸附后要求 `controlPos === posKey && from ≥ 67.5 && to ≤ −54.5`）；
@@ -286,6 +400,184 @@ pnpm run preview  # 预览构建产物
   `btn-safety` `btn-estate` `btn-bwm` `btn-param` `btn-home`、`ack` `silence` `alarm-bell`、
   `pos-bridge` `pos-ecr` `pos-local`、`mode-sea` `mode-standby` `mode-fwe`、`lever-up` `lever-down`
   `em-stop-cover`（玻璃盖）`em-stop`（应急停车，自锁）、`tel-0` … `tel-10`。
+- **机旁面板交互规范（照真机截图）**：
+  · **按钮样式**：黑色操纵板（宽 **390**）上的圆钮（左列 9 个 + 车钟 11 档）统一为**单圈亮白描边**（`#f2f4f5`、`strokeWidth 3`），
+    **不再画内圈白线**；左列按钮由模块常量 `LEFT_BTNS` 定义，**三组内按钮间距 10 px**（圆钮直径 **66**、中心距 76，
+    静态绘制 / 动态指示灯 / 热区三处共用该常量）；第 3 组为 **备用（`spare-1`，位于组内最上方、**无文字**、无动作）** / Wrong Way / Lamp Test；
+  · **两列位置**：左列中心 `COL_LEFT = 112`、右列（车钟）中心 `COL_TEL = 290`（车钟列连同外框整体左移 30，板宽相应 420→390）；
+  · **板高与车钟高度**：黑色操纵板 `BOARD_H = 804`；车钟 11 档 `TEL_Y0 = 60 / TEL_STEP = 70`，跨 31…789，**11 档上下对称**；
+  · **四组白色外框**（`stroke #ffffff 2px`、圆角 22）：左列三组各 236 高、**组 1 距上边缘 15 px（y=23）、组 2 居中（y=292）、
+    组 3 距下边缘 15 px（y=561）**；车钟组 y=23 h=774（上下各留 15 px，四组同跨距 23…797）；
+  · **文字**：左列字号 16（长标签 14.5）+ 加粗；车钟档位文字 `verticalAlign: 'middle'`（高 36）居中、字号 **15** + 加粗；
+  · **指示灯位置**：左列与车钟的指示灯**一律在外圆左上角**，且**圆钮描边正好穿过指示灯圆心**
+    （左列半径 **33** → 偏移 −23, −23；车钟半径 29 → 偏移 −21, −21），半径 **7**；
+  · **指示灯配色**：**不亮 = 暗白 `#c8cccc`**（`C_LAMP_OFF`）；点亮时为**亮色**（`C_LAMP_G #46ff7d` / `C_LAMP_A #fff23c` /
+    `C_LAMP_R #ff4d4d` / `C_LAMP_W #ffffff`）：**Stand By / ECR / 车钟 Stop = 亮黄**，
+    **FWE / Local / Wrong Way / 车钟倒车档（index 6~10）= 亮红**，**Lamp Test = 亮白**，
+    其余（At Sea / Bridge / 备用 / 车钟正车档 index 0~4）= **亮绿**；
+  · **不弹浮动提示**：`Ac600LocalPanel._tip()` 为空实现（与驾控台/集控台面板一致），操作只靠指示灯与面板状态反馈；
+  · **两套灯测试互相独立（不共用模型 `M.lampTest`）**：
+    · 左列 **Lamp Test** 圆钮（`lamp-test`）→ `this._ltBoard`，**只点亮黑色操纵板上的 20 个灯**（左列 9 个圆钮 + 车钟 11 档），
+      点亮时各灯显示**各自的亮色**（黄/绿/红/白），右侧矩阵不受影响；
+    · 中部 **试灯** 按钮（`test-lamp`，热区 446,400,96,74）→ `this._ltPanel`，**只点亮右侧状态矩阵**：
+      20 个格子（含 `mx-force` / `mx-sld-cancel` / `mx-sd-cancel` / `mx-lim-up` 这 4 个**带灯操作按钮**）全部点亮；
+      原按钮内的小试灯指示灯 `_testLamp` 已删除（试灯效果由矩阵整片点亮体现）；
+    · 两者均为**自复位式**（`_bindMomentaryLamp(partId, prop)`）：**mousedown 按下保持灯亮、mouseup 松手即灭**，
+      指针移出按钮再松开也能灭（舞台级 `mouseup` 兜底）；**真实点击不再延时**，
+      仅程序化 `fire('click')`（无 `e.evt`）亮 1.5 s 供自动演示使用；
+  · **EM STOP 外观**：**白色金属外框（护圈 r=32，含内凹阴影圈 r=28/25）+ 红色按钮帽**（动态 `_emCap`：落影圆 + 帽体，
+    **无任何指示灯 / 高光装饰**）；**弹出常态**：帽体 **r=28（大于护圈开口 25，凸起）**、上浮 2 px、亮红 `#d0232c`、
+    底部露出落影（`_emCapShadow` 可见）；**按下**：帽体 **r=27（略小于弹出 28，凹进护圈）**、下沉 4 px、暗红 `#8e1119`、落影隐藏。
+  · **EM STOP 外盖（翻开就立在按钮旁边，可反复开合）**：`em-stop-cover` 点击开/合 ——
+    **合上**：盖板 (472,480) 74×74 盖住按钮帽 —— **不透明金属盖板**（实心浅灰 `#c6ccd0` + 深描边 `#3f464a` 3 px
+    + 内嵌框 `#b6bdc2` + **四角螺钉** + 底部提手 + 加粗「外盖」文字 y=24），遮盖感明显；此时 `em-stop` 无效（提示先开盖）；
+    **打开**：盖板**立在按钮左边缘旁**（侧视窄条 472…485，`scaleX = 0.18`），「外盖」文字隐藏，
+    **热区缩成同宽窄条 (472,480,18×74)**（不挡按钮其余部分，EM STOP 可正常按下）；
+    **再点一次就盖回来**（盖板始终可见，不再隐藏）；
+    ⚠ 热区移动必须移动 `emCoverHit.getParent()`（`addClickablePart` 返回的是组内 Rect，直接改它的 xy 会把命中区推到远处）；
+    **`em-stop` 为自锁型 —— 机旁紧急停车，与"停车激活"无关**：
+    盖打开后**按一次** → `M.pressEmStop(<位置>)` → `M.localEmergencyStop()`：置 `emStopped`、记录 `emStopBy`（LOCAL/ECR/BRIDGE）、
+    `engineReady = false`、`startBlocked = true`（燃油切断、转速快速降到 0、禁止起动/自动起动），
+    报警信息两条 `EMERGENCY STOP SWITCH <位置>, ACTIVE` / `START FAIL/BLOCK, ACTIVE`；
+    **但不置 `shutDown`**，因此矩阵「停车激活」(`sdAct`) 不亮、安保 Shut Down 页的越控逻辑不受影响；
+    **各页故障表现**（与真机一致）：**Sys. Critical 不动作**（`ESU MAIN POWER FAILURE` 恒 NORMAL）；Sys. Non-Crit → `START FAIL/BLOCK`；
+    **I/O Fail → `EMERGENCY STOP SWITCH <按下位置>`**；Shut Down 页 → `ENGINE TRIPPED`(ACTIVE) + `EICU A/B SHUTDOWN
+    NON-CANCELLABLE`(值 NORMAL，**CANCELLABLE 两行不亮**，紧急停车属不可越控停车)；Emg. Stop 页 → `FUEL CUT-OUT SOL. V/V`=OPEN +
+    `EMERGENCY STOP SWITCH <位置>`=PRESSED；Engine State → `Engine Tripped` / `Start Blocked` / `Engine not ready ECS` 红、`Ready for Start` 白；
+    **应答（ACK）后上述项全部转黄**（已应答语义）：`Emg. Stop` 页的 `em:*` 条目也接入了报警状态机
+    （`_emItems` 每项带 `st = _alm('em:<key>', active)`，`_pollAlarms()` 一并轮询 `em:fuel` 与三个开关），
+    点一次 ACK → `_ackAlarms()` 把**所有仍在动作**的项目标记已确认（黄色）；
+    `_alm()` 在故障"新出现"时按 `M.acked` 决定初值——一次确认后同批新出现的项目直接为已确认（不会残留未确认红）；
+    **且完全不动车钟 / 给定**（`rpmCmd`、`leverRpm`、`leverIdx` 均不改），所以对机旁手动调速旋钮毫无影响；
+    **蜂鸣器 / 报警铃不响**：`emStopped || emStopLatched` 期间，驾控台与集控台的 `_buzzGlow`、`_bellRing` 一律置 0
+    （报警仍在：报警栏与各故障页照常显示，`buzzerOn` 的车钟不一致鸣响也一并抑制），复位后恢复正常；
+    **辅助鼓风机随负荷起停**：`auxBlower = load > 25 %` —— 紧急停车后负荷归零，**鼓风机随之停机**（矩阵「辅助鼓风机运行」灯灭）；
+    **矩阵伴随指示**：按下紧急停车 → **「停车激活」/「主机备车未完成」/「起动阻塞」三个格子常亮红灯（不闪烁）**，
+    其中 `sdAct = (shutDown && !cancelSHD) || emStopped`；这三格 `alarm = false`（状态灯语义，不参与未确认闪烁）；
+    **再按一次（弹出）** → 清 `emStopLatched`：**只有 I/O Fail 的 `EMERGENCY STOP SWITCH <位置>` 自动复位**
+    （该项按 `emStopLatched` 判定），**其余故障全部保持**（`emStopped` 未清）；报警与停车保持，不会自动消除 ——
+    **按 ACK 确认也不清除**（`_anyFaultActive()` 已含 `emStopped / emStopLatched`，确认只转黄停声）；
+    必须由**拥有控制权的面板**把**本面板车钟拉回 STOP**（`|leverRpm[controlPos]| < 0.5`）
+    **或机旁调速手柄拉回 STOP**（`|leverRpm.LOCAL| < 0.5`，任一满足即可，solve() 内判定）：
+    清 `emStopped` / `emStopBy` / `alarm` / 报警信息，并恢复 `engineReady = true`、`startBlocked = false`
+    （若同时没有安保停车/超速），Engine State 变为 **Ready for Start**；主机可重新起动；
+    该规则对机旁 / ECR / 驾驶台三块面板一体适用（都走 `M.pressEmStop(<位置>)`）；
+    **三处急停的反应完全一致**（仅 `emStopBy` 决定的项目不同）：置位/报警信息/各页故障/矩阵三灯/鼓风机停机全都相同，
+    只有 **I/O Fail 的 `EMERGENCY STOP SWITCH <位置>`、Emg. Stop 页对应开关行、报警栏文字** 随按下面板变化
+    （`M.emStopBy = 'BRIDGE' | 'ECR' | 'LOCAL'`）；
+    组件外盖状态先同步到 `M.emStopCoverOpen` 再调模型的自锁方法；
+  · **冲车 / 自动 / 慢转起动 为三档转换开关** `start-knob`（BLOW −60° / AUTO 0° / SLOW +60°），
+    点右半区顺时针、左半区逆时针、端点不循环；AUTO → `startEngine(false)`，SLOW → `startEngine(true)`，BLOW → 冲车提示；
+  · **右区重绘（照真机照片）**：① 三只仪表 = **黑色矩形边框 + 白色表面 + 弧形刻度 + 单位（bar/rpm）+ 白色数字框（水平居中、比原来下移 15 px）
+    （`⊙-1.5|☆` 小标）+ 右上 `▽R` 标记 + 右下黑色旋塞**，几何 `GAUGE_Y = -5 / GAUGE_W = 176 / GAUGE_H = 165`（面板 −27…174），
+    表心 `(x + W/2, GAUGE_Y + H − 34)`、指针长 46；② 控制箱的**电源开关** = 黑底方板（ON 绿 / OFF 深红）+ 中央大圆旋钮
+    （白色斜指示条指向 ON）；③ **电流表** = 黑边框白面 A 表（0…150，末端红色高量程弧、指针、白色数字框 0、`▽R`、右下黑旋塞）；
+    ④ 矩阵第 3 行后两位改为**两个转换开关**（原为指示灯）：第 3 列 = **本地/遥控选择开关**（`tg-sel`，指左=本地/指右=遥控），
+    第 4 列 = **加热器通断开关**（`tg-heat`，指右=通/指左=断）；「遥控 / 本地控制」与「空间加热」灯跟随这两个开关；
+    ⑤ **盘车机控制箱电源开关旋钮**（`tg-power-knob`）可点：ON ⇄ OFF（指针 0°/90°），**只切换 `M.turningGearPower`，
+    不改变盘车机脱开/合上**；遥控盒「电源」为**常亮指示**（`tg-power` 无动作），原来的小绿灯已删除；
+    矩阵「电源」灯**恒亮**；「备用 / 本地 / 遥控」三个多余灯已删除（9 个灯 + 2 个开关）。
+    **盘车机默认脱开**（`turningGearOut = true`，ctor 与 `reset()` 都置 true）；**机旁控制箱的任何操作都不改变它** ——
+    矩阵「盘车机脱开」为**纯指示灯**（`mkCell('mx-turn-out', null)`），合上/脱开只在**气动操纵系统**页
+    的 `turning-gear` 部件上操作（`M.toggleTurningGear()`）。
+  · **状态矩阵版式**：4 列 × 5 行按钮 `MX_W = 74 / MX_H = 70`（起点 `MX_X0 = 472 / MX_Y0 = 12`，
+    矩阵占 469…789 × 9…389），按钮之间为 **6 px 黑色分隔**（`MX_GAP`，底板亦为黑色），
+    格子描边 **1.5 px 黑色**（`MX_LINE`）；文字居中（`verticalAlign: 'middle'`、字号 **14**、行距 1.12）；
+  · **每格亮/暗配色**（`mx(id, text, color, key, alarm)`）：`color` = 点亮色、`dim` = 不亮色（按色系自动取暗色）、
+    `alarm` 决定未确认时是否闪烁。**本地控制 = 亮红 `#ff4d4d` / 暗红 `#761d1d`**、
+    **集控室控制 = 亮黄 `#fff23c` / 暗黄 `#6a5f00`**、**负荷限制激活·负荷限制增高 = 亮白 `#ffffff` / 暗白 `#c8cccc`**，
+    其余沿用绿（`#00d24a` / `#134a1f`）与红（`#ea1212` / `#4e1111`）；
+    浅底亮灯时文字用深色 `#101010`（`DARK_TEXT`）；**暗白底不亮时文字用深色 `#2f3538`**（`DIM_DARK_TEXT`，否则灰字看不清）；
+  · **中部控制区（矩阵下方，尺寸/对齐规则）**：试灯 **74×74 方形**(472,400) 与 EM STOP **74×74 方形**(472,480)
+    **左边缘与矩阵按钮左边缘对齐（x = 472 = `MX_X0`）**；冲车-自动-慢转起动面板 **176×154**(610,400)
+    **右边缘与矩阵按钮右边缘对齐（右 = 786）**、**下边缘与 EM STOP 下边缘对齐（y = 554）**，
+    旋钮圆心 (698,488)、热区 (633,423,130,130)；
+    车钟大表盘圆心 (725,**690**)、热区 (620,585,210,210)；
+  · **手动降速请求（机旁）**：`mx-sld-req` → `M.setManualSlowDown(on)` —— **与自动减速完全同一套动作**
+    （`safetyAction('SLD','MANUAL-SLD')`：置 `slowDown`、减速到 40 rpm、报警栏 `MANUAL SLOW DOWN, SLOWDN` + `SLOWDOWN ACTIVE, ACTIVE`；
+    撤销走 `safetyClear`，减速动作锁存到车钟拉到 40 rpm 以下）；
+    `mx-sld-cancel` 按下（on）时同时 `setManualSlowDown(false)` + `_sldActHeld = false`
+    → **手动降速请求灯熄灭、降速取消灯亮**，再按一次降速取消灯熄灭；
+    **降速激活不会自动触发**：`sldAct = slowDown && !cancelSLD && _sldActHeld`，取消后必须**再次按「手动降速请求」**才重新点亮；
+    四个降速格（请求 / 激活 / 取消 / 复位）都是 `alarm = false` —— **常亮、不闪烁**；
+    `mx-sld-reset` 解除减速锁存（清 `slowDown` / `sldAwaitReset`）。
+  · **矩阵中 5 个带灯按钮**：`mx-local`（= 机旁 Local，走转移确认）、`mx-force`（`forceTakeControl()` **直接夺权**，不走常规转移）、
+    `mx-sld-cancel`（= Cancel SLD）、`mx-sd-cancel`（= Cancel SHD）、`mx-lim-up`（= Cancel Limits）——
+    后三者调 `M.setCancel(kind, on, 'LOCAL')` + `M.setCancelAlarm()`，灯亮 = 该越控生效；
+    **`mx-lim-act`（负荷限制激活）是纯指示灯**：`mkCell('mx-lim-act', null)`，只反映 `S.limAct = loadLimit && !cancelLimits`，
+    **按下无效**（原 `M.toggleLoadLimit()` 已移除）；
+  · **机旁车钟与机旁调速手柄互相独立**：
+    · 车钟 `tel-0…tel-10` → `leverRpm.LOCAL`（`setLeverById(id,'LOCAL',true)`，只动手指令、不改 `rpmCmd`）；
+      **只有控制权在机旁（`controlPos === 'LOCAL'`）时按钮才有效**，其它控制位置按下无反应；
+    · 调速手柄（大表盘 `local-dial`）→ 模型独立字段 **`M.localSpeed`**（`M.setLocalSpeed(rpm)`），
+      **不动车钟 `leverRpm.LOCAL`**；控制权在机旁时才改写 `rpmCmd`，否则只移动手柄本身（不影响主机）；
+      指针始终显示 `M.localSpeed`；**控制权转移时机旁调速手柄不自动跟随**（`setControlPos()` 不再改写 `localSpeed`，
+      `_syncCmdFromLever()` 在 LOCAL 下保持 `rpmCmd` 不变）——必须人工拖动手柄后才改写给定；
+      紧急停车复位判定也用 `|localSpeed| < 0.5`（机旁调速手柄回 STOP）。
+  · **机旁车钟档位灯规则**：① 机旁车令所在档 —— **常亮**；② 与**驾驶台**车令一致时，只有该档常亮；
+    ③ 不一致时，**驾驶台对应的档位灯闪烁**（`M.blink` 交替，机旁档仍常亮）；试灯时 11 档全亮；
+    **驾驶台车钟上**：机旁车令与驾驶台车令差 >1 rpm 时，对应机旁请求档位的文字**闪烁**（本机旁档位灯保持常亮）；
+    ⚠ 只在机旁手柄**确实给出车令**（`|leverRpm.LOCAL| > 0.5`，不在 STOP）时才闪烁 ——
+    机旁手柄停在 STOP 属于常态（系统起动默认驾驶台 NAV FULL、集控室/机旁 STOP），
+    若不加这个条件，驾驶台一上电 STOP 档就会一直闪。
+  · **调速旋钮大表盘 `local-dial`**：圆心 **(629, 690)**（与矩阵 16 个按钮的中间对齐）、半径 `DIAL_R = 96`；
+    **刻度跨 −135°…+135°**（`DIAL_MAX`，正上 STOP / 右 AHEAD 0…10 → 0…68 rpm / 左 ASTERN 0…10 → 0…−55 rpm），
+    刻度线 84…94、**数字环半径 72、字号 13**；`STOP` 文字在正上方（比中心上移 5 px），`AHEAD` 在弧的**最右端**、`ASTERN` 在**最左端**；
+    **旋钮 r=30/26 在圆心**（可按住拖动），指针（指示条）长 52、端部小圆头 r=7（外沿 59，**不遮刻度数字**）；
+    **操作方式：只能按住手柄拖动给出车令** —— `mousedown` 落点距圆心 **≤ 64** 才起拖（覆盖旋钮 + 指示条 + 端头整个手柄，
+    端头外沿 59；点刻度盘其它位置无效、单击也不改变转速），起拖后由舞台 `mousemove/touchmove` 连续跟随、`mouseup` 结束；
+    ⚠ 真实鼠标事件由 Konva 挂在**画布元素**上（不是容器 div），测试需向 `stage.container().querySelector('canvas')` 派发 MouseEvent；
+    拖动期间**临时关闭整块面板的 `draggable`**（松手恢复），避免拖旋钮变成拖面板；点击也直接跳到该角度；
+    **手柄任何时候都可拖**（与是否拥有控制权无关）：`setLeverAt(rpm, 'LOCAL')` 只在控制权在机旁时才同步改写主机给定，
+    控制权在别处时**只移动本机旁手柄、不影响主机**（等价于"对车令/预置"）；
+    **指针始终显示本机旁手柄的实际位置**（`leverRpm.LOCAL`），控制权转移时 `setControlPos()` 会把当前给定写入手柄，指针随之无扰对齐。
+- **气动页的机旁操纵复刻件（页 4，`Ac600PneumaticSystem._drawLocalControls()`）**：在「主机转速」框下方
+  两件器具**按机旁面板原尺寸的 2/3 缩放**（`LCP_K = 2/3`，绘制时装在带 scale 的组里，
+  部件坐标/热区/拖动半径都乘 `LCP_K`），**并列摆在「主机转速」框正下方**：
+  `LCP = { boxX: 1205, boxY: 700, boxW: 117.3, boxH: 102.7, knobX: 1263.7, knobY: 758.7,
+  dialX: 1450, dialY: 750, dialMax: 135 }`（整体已右移 30），**原样复制机旁面板的两件操车器具**：
+  ①「冲车 / 自动 / 慢转起动」三档转换开关（部件 `start-knob`，与机旁面板同一套点击逻辑与提示；
+     **旋钮任何控制位置都能转，只是控制权不在机旁时不输出** —— `setStartKnob()` 已不再返回 `'blocked'`，
+     是否驱动电磁阀/起动空气由 `solve()` 里的 `controlPos === LOCAL` 决定）；
+  ②「主机机旁调速手柄」大表盘（部件 `local-dial`，−135°…+135°、STOP 正上 / AHEAD 最右 / ASTERN 最左，
+  按住手柄拖动 → `M.setLocalSpeed()`）。两者**完全靠模型状态同步**（`startKnob` / `localSpeed`），
+  一端操作另一端立即跟随（实测：机旁面板打 SLOW → 气动页手柄同步；气动页拖手柄 → 机旁指针同步）。
+  ⚠ 摆放位置避开慢转控制阀（`V5B` y 612~656）、底部控制空气总管（`BOT_Y = 840`）及其右端立管（x≈1136），
+  否则会盖住气路。
+
+- **机旁起动旋钮（冲车 / 自动 / 慢转）** —— 机旁面板 `start-knob` 三档（左 BLOW / 中 AUTO / 右 SLOW，-60°/0°/+60°）：
+  · **只有控制权在机旁（`controlPos === 'LOCAL'`）时才有效**：其它位置点击不改变旋钮、只提示「控制权不在机旁：操作无效」
+    （模型侧 `setStartKnob(pos, 'LOCAL')` 返回 `'blocked'`）；控制权被拿走时冲车 / 慢转立即中止（电磁阀失电、转速回落）。
+  · **冲车 BLOW**：**起动电磁阀 A（气动页 `abc0`）得电**（`setThreeWay('abc0', true)`，线圈红），
+    主机由起动空气**逐渐加速到 20 rpm 并保持**（`BLOW_RPM` / `BLOW_RATE = 2 rpm/s`），`stateText = 'Blowing'`。
+  · **慢转 SLOW**：**慢转电磁阀 C（`abc2`）得电**，主机以**很低转速正转 5 rpm**（`SLOWTURN_RPM`，同样 2 rpm/s 升速），
+    `stateText = 'Slow Turning'`。
+  · **自动 AUTO**：两个电磁阀都失电、空气带转停止，转速按惯性回落到车令给定（`stateText` 回到 `Ready for Start` 等）。
+  · 空气带转**不算主机运行**：`_airTurn` 期间 `running = false`、`load = 0`、运行小时与转数不计；
+    只有 `!shutDown && !emStopped` 时才允许（安保停车后冲车 / 慢转无效）。
+  · 气动页的同步在 `Ac600PneumaticSystem.tick()` 里：`setThreeWay('abc0', 机旁 && BLOW)`、
+    `setThreeWay('abc2', 机旁 && SLOW)`（`setThreeWay()` 为程序化设定阀位的公开方法，`toggleThreeWay()` 已改为调用它）。
+
+- **盘车机（Turning Gear）运行规则**（`AC600Solver` + `Ac600LocalPanel` 控制箱/遥控盒）：
+  · **机旁车钟档位按钮任何时候都能按**（`tel-0…tel-10`）：按下只把**机旁车令**对到该档
+    （提示「机旁车令预置：xxx」），控制权在机旁时才改写主机给定；因此**没有控制权时也能把手柄对到
+    与驾驶台一致，驾驶台那边的档位闪烁随之消失**（闪烁表示两边车令不一致）。
+  · **控制方式互锁**：`M.turningGearMode` = `'LOCAL'`（机旁控制箱末排 `tg-jog-fwd` / `tg-jog-rev`）
+    / `'REMOTE'`（遥控盒 `tg-fwd` / `tg-rev`），由控制箱的本地/遥控选择开关 `tg-sel` 切换（`toggleTurningGearMode()`）。
+    **当前方式之外的按钮按下无效**（`setTurningGearJog(dir, by)` 里按 `by` 拦截，面板同时弹提示）；
+    **停止命令（dir = 0）任何来源都有效**。
+  · **指示灯与控制方式无关**：`正转`/`倒转` 灯只看 `M.turningGearJog`，`电源`/`空间加热`/`过载` 同理；
+    只有 `遥控`/`本地控制` 两灯反映当前控制方式。
+  · **电机电流**（控制箱电流表 0~150 A）：`M.turningGearCurrent`（由 `tgCurrent` 平滑，τ=0.25 s）——
+    **不转 = 0 A**；**脱开空转 ≈ 6 A**（`TG_FREE_CURRENT`）；**合上带主机 ≈ 92 A**（`TG_LOAD_CURRENT`）。
+    面板 `_gauges.amp` 指针（`_mkNeedle`）与数字框每帧刷新。
+  · **脱开（`turningGearOut = true`）点动**：电机转但**主机不转**（`rpm` 保持 0）；
+    **合上（`turningGearOut = false`）点动**：带动主机**很低速正/反转** —— `rpm → ±4`（`TG_JOG_RPM`），
+    正转 `+4`、倒转 `−4`。
+  · 盘车带转**不算主机运行**：`_tgDriven` 期间 `running = false`、`load = 0`、运行小时与转数不计；
+    `stateText` 不会显示 `Running`（rpm 4 < 5），主机窗仍为 `Ready for Start`。
+  · 盘车机未通电（`turningGearPower = false`）时点动一律无效、电流归零。
+
 - **`Ac600LocalPanel`**（1600 × 800）：左黑色机旁操纵板（At Sea / Stand By / FWE、Bridge / ECR / Local、
   Wrong Way / Lamp Test 圆钮 + 右列车钟档位 11 档）；中状态矩阵 4 列 × 5 行（本地·集控室·驾驶台控制、
   控制权强制获取、手动降速请求/降速激活/降速取消/降速复位、停车激活/停车取消/辅助鼓风机运行/报警、
@@ -297,18 +589,361 @@ pnpm run preview  # 预览构建产物
   `mx-sld-reset` `mx-sd-act` `mx-sd-cancel` `mx-blower-run` `mx-blower-alarm` `mx-turn-out` `mx-air-dist`
   `mx-main-valve` `mx-not-ready` `mx-lim-act` `mx-lim-up` `mx-start-block` `mx-start-fail`；
   另有 `start-auto` `slow-turn` `blow` `test-lamp` `em-stop` `tel-0…tel-10`。
-- **`Ac600PneumaticSystem`**（1600 × 800）：气动操纵系统图（空压机/干燥器组 → 起动空气 28.3 Bar（83）→
-  主起动阀「工作 / 阻塞」→ 慢转起动阀 → 气缸起动阀组 A/B/92（94·93·92）与阀 12·23 →
-  1 号气缸起动阀（06）/26 → 主机转速；下方控制空气 7.0 Bar、40 L 气瓶、阀 1·3·58、盘车机（115）
-  Disengaged、基于主机负荷的缸套冷却水温度控制虚线框）。部件 id：`start-air` `main-valve` `slow-valve`
-  `cyl-valve` `turning-gear` `ctrl-air` `rpm-tag` `bottle` `valve-58`。起动过程中主起动阀"工作"亮绿、
-  起动空气压力下降，盘车机合上时显示 Engaged。
-- **`Ac600Mimic`**（1600 × 800）：系统结构 MIMIC（PORT WING / BRIDGE / STB. WING 的两翼与驾驶台操纵单元、
-  Order Printer、CONTROL ROOM 的操纵单元·Start/Stop Speedset Lever·Indicating Panel Unit、双 CAN 总线、
-  ENGINE ROOM 的机旁操纵台·RAI16·MEI·ESU·nn.·DGU+Servo·双测速单元·测速探头·电动执行器·MAN B&W MC 主机
-  与螺旋桨）。控制位置灯随 `controlPos` 点亮，主机运行时伺服、执行器、螺旋桨标记转动。
-  部件 id：`bw-port` `bw-stb` `bridge-unit` `order-printer` `cr-unit` `cr-lever` `cr-indicator`
-  `local-panel` `mei` `esu` `rai` `dgu` `servo` `rpm-units` `actuator` `engine` `prop`。
+- **`Ac600PneumaticSystem`**（1600 × **870**）：气动操纵系统图，**照参考图（AC 600 气动操纵系统）逐块还原**，
+  术语已按要求统一为「起动空气 / 盘车机 / 阻塞」。
+  **本组件点击不弹浮动提示**（`_tip()` 为空实现）——反馈只靠阀位切换、绿填充、指示灯与数值变化。
+  · **左上** 空气干燥器组（虚线框）：左截止阀 → 两条并联支路（**止回阀 → 减压阀 → 滤器菱形**）+ 中竖支两位阀
+    → **右立管（一条连通竖管，上面不再挂阀）** 汇合 → 出口截止阀 → 数值框；两条支路 `y = 50 / 176`。
+  · **单向止回阀画法（`_check(cx, cy, r, dir)`，共 3 处）**：**球（圆）+ V 形**，
+    斜线与水平夹角 **26.9°**（`CHK_TH`，比原 `atan(r/23)` 每边大 10°）；
+    **尖端位置由「球与两斜线相切」反算**：`CHK_TIP(cx, r, dir) = cx + dir·r/sinθ`；
+    两条斜线**相交于尖端**（尖端即下游管路接点），并从尖端画到**越过切点再延伸 10 px**
+    （`tanLen + 10`，`tanLen = r/tanθ`）—— 延伸段穿到球的外侧可见，形成"球被两条斜线夹住"的符号；
+    **球先画、斜线后画**（否则延伸段会被白球盖掉）。
+    · **工作逻辑（气源键）**：`dry1/dry2` = 角侧（V 尖、下游）有气 = `vin && riserN && vout`；
+      **圆侧（上游）`dryIn1/dryIn2` = `v.vin || dry1/dry2`** ——
+      **角这头有气 → 圆那头一定有气**；角这头没气时再看圆侧管路自身是否导通。
+    · **管路不在 V 形内部穿行**：干燥器组两条支路的管路在止回阀处断开——
+      上游止于**球左缘**（`185 - r`），下游自**尖端**（`CHK_TIP(185, 8)`）续出；
+      排气阀那处的入口管直接接在**尖端**（`CHK_TIP(251.5, 7, -1)`）。
+    · ⚠ `150, DRY_MID` 的竖直段**两条支路都要画**（`→ DRY_Y1` 与 `→ DRY_Y2`），漏掉上段会导致上支路断路。
+  · **减压阀画法（照参考图）**：方框阀体 + 框内**阀座竖线 + 双向箭头**（内有两个实心小三角）
+    + 右上角**先导口小三角** + 框顶**斜置调节弹簧**（`_coilSpring(s, cx, T-4, 21)`：锯齿向左上、顶端调节钩；
+    高度 16→**21**，弹簧上的调节箭头 `L = 29`（原 24，伸长 5 px））
+    + 框底**虚线取压反馈**（向下 14 → 向左 62 → 回到上游管路）+ 右侧管路上的先导取压小箭头。
+  · **气源标注**：数值框左侧只画**短箭头**，箭头上方标「**来自主空气瓶**」（原「83」号牌已取消，牌左侧也不接任何管路）；
+  · **滤器菱形**：宽高 **29 × 29**（`r = 14.5`，比最初 26×26 各 +3px），并在**上顶点 → 下顶点**之间画一条
+    `dash [3.5, 3]` 的虚线代表**过滤网**；
+  · **管线只接阀两端（硬性）**：任何管线都不得从阀体中间穿过，阀两侧管线止于 `cx ± TRI_A`。
+  · **手动截止阀（硬性）**：全部按 `mimic-valve-symbols` 技能绘制 —— 两个**顶点相交于阀芯中心**的三角形
+    （统一 `TRI_A = 13.5` / `TRI_B = 9.5`）+ 沿 `angHandle` 伸出的阀杆（`TRI_B + 9`）+ 杆端**垂直于杆的 ±6 短棒**手轮；
+    横管用 `angAxis=180, angHandle=270`（杆朝上），竖管用 `angAxis=270, angHandle=0`（杆朝右）。
+    **禁止**再用「蝴蝶结对顶 + 侧面小圆」的老画法（`_butterfly` 已删除）。
+  · **控制空气管（细管）**：自起动空气**主管**（数值框右边缘 830 处）向右走 **25 px** 到 855，再**向下**下折、
+    然后**向左**引入到**干燥器出口截止阀的右端**（`472 + TRI_A`）；线宽 **3.5**、色 `#5aa0e0`。
+  · **粗细两套管路（硬性）**：**起动空气 30 bar** 用粗管（6~7 px、深蓝 `#1c56d6`）；
+    **控制空气 7 bar** 一律用细管（**3.5 px、浅蓝 `#5aa0e0`**）—— 包括从主管到出口截止阀的引入线、
+    **干燥器组内自 `vin` 出口起的全部管路**（分叉竖段 + 两条减压阀支路 + 右立管 + 出口汇合段）、
+    底部控制空气总管（4.5 px）、两只五通阀的向下引线、盘车机支管、两只手动阀接管。
+    干燥器组内只有最左侧「左干管 → `vin` 进油侧」那一段仍是粗管（属 30 bar 进气主干）。
+    数值框左侧只有「来自主空气瓶」文字 + 短箭头，**左侧不接任何管路**。
+  · **截止阀可手动操作（硬性）**：干燥器组内共**四只**——`vin`（左）/ `vout`（出口）/ `riser1` `riser2`（右立管上下），
+    点击即切换开/闭，公开方法 `toggleValve(id)`，状态存 `this._valves`；
+    **导通时两个三角形填充绿 `#2ecc40`**、关闭为白。阀体节点必须建在**动态层**
+    （静态层 `cache='fixed'` 已烘焙，改 `fill()` 不生效）。
+    热区 id：`valve-vin` `valve-vout` `valve-riser1` `valve-riser2`。
+    （中间支路上的那个两位阀件及其竖管已按要求删除，干燥器组内只剩两条并联支路。）
+    ⚠ **热区注册顺序**：干燥器组的整框热区 `dryer` **必须先注册**，四个阀门热区后注册才能盖在其上——
+    Konva 同层后加者在上，若反过来注册，`dryer` 会吞掉阀门点击（表现为“阀点不动”）。
+  · **主起动阀 `MSV = (936.5, 55, r=26)`**、**慢转起动阀 `STV = (1085, 145, r=26)`（右移 30）**；
+**上中** 起动空气数值框（`startAir`，「起动空气」29.8 Bar，左侧箭头指示流向）→ **主起动阀**
+    （圆阀 + 下置执行机构；上方「**工作**」绿灯 / 「**阻塞**」灰灯，**不再是“报警”**；标注 `_cap(MSV.x-70, 10, 140, '主起动阀')` 已下移 8）；
+  · **右上** **慢转起动阀与主起动阀并联**（左端 `[900,55]→[900,145]→慢转阀左口`，右端 `[慢转阀右口]→[1081,55]`
+    接回顶部总管）；**不再**从顶部总管下引至 A/B/C 左母线（该管已删除，A/B/C 左母线只连 A/B/C 三只阀）。
+    **PS 压力开关及其附属小弹簧阀已按要求删除**（含两条取气管与热区 `ps`）；1 号气缸起动阀 / 2号
+    （**`CV1 = (1230,260,170×200)`、2 号灰块 `(1428,250,48×200)`、主机转速 `RPM = (1265,500,175×75)`**
+    —— 三者已整体**下移 100 px**）；
+    · **手动两位两通阀（空气分配器，`_twoWayManual(cx,cy,W,H,key)`，1 号气缸起动阀上方）**：
+      `this._twoWayManual(CV1.x + CV1.w*0.1 + 22, 115, 44, 34, 'mv2a')`——**横置两格**，
+      **左格**＝竖直直通箭头（绿＝工作）、**右格**＝上下两个 T（切断）；右端**手动手柄**与左下角两只
+      两位三通阀**同一套画法**（`_paintTwoWayHandle`：两根横杆 + 斜杆/竖杆 + 圆点 r=3.6）；
+      点击 `toggleTwoWay('mv2a')` → 阀体左移一格 + 手柄转垂直 + 工作格换色；
+      管路均**细管**：入口 `[1247, TOP_Y → 98]`（`airAfter`）、出口 `[1247, 132 → CV1.y]`（`mv2aOut`，切断即灰）；
+      名称标注「**空气分配器**」在阀体**右上角**（`_cap(1282, 79, 88)`，已左移 30、随阀上移 15）；热区 `mv2a`。
+      **出口管中途分支**：`[1247, 190] → [1444, 190] → [1444, 250]`（接 **2 号上边缘 1/3 处**，同为 `mv2aOut`）。
+      **工作逻辑**：`mv2aOut = this._airTest('airAfter') && !mv2a.shift` ——
+      **上方入口有气 且 工作于左位** → 下方出口有气（切到右位即切断，下游管路全部变灰）。
+    · **框内先导两位三通阀（电磁控制，`cv1-pilot`）**：复用 `_threeWayManual(CV1.x+40, CV1.y+124, 40, 34, 90, 'cv1-pilot',
+      { **swap:false**, coil:true, spring:true, initShift:false, fillOnLeft:true, **flipCS:true** })`——
+      **上格＝卸放（斜箭头 + T + ▽）、下格＝直通（右箭头）**（与 A/B/C 相反，`swap:false`）；
+      `flipCS` 把弹簧放到上端、线圈放到下端；**默认工作在上位**（`fillOnLeft:true` → 上格绿）；
+      可点击切换（热区 `cv1-pilot`）；阀体在 `cy = CV1.y+124`；
+      **`upShift: true`** —— 点击/通电时阀体**向上平移一格**（`off = -W`），工作位落到**下位**（下格绿、线圈变红）；
+      阀体在 `CV1.x + 50`（已右移 10）；名称标注「**1号起动电磁阀**」在**右上角**（`_cap(1286, 278, 100)`，已左移 10）；
+      **入口**改由上游细管从**上方引下并右折进入阀体左缘**（`mv2aOut`：`[1247,132] → [1247, CV1.y+84] → [CV1.x+33, CV1.y+84]`）；
+      **出口** `[CV1.x+67, CV1.y+84] → [exC-22, CV1.y+84]` 从**上格右侧**（正对 T 的入口）引出到执行器横梁。
+    · **1 号进气管**在框**上边缘 9/10** 处（`CV1.x + CV1.w*0.9`）下来，进框后在 `CV1.y+84` 处左拐，
+      接到执行器横梁右缘（`CV1.x + 138`）；**2 号进气管**在灰块**上边缘 2/3** 处（`1428 + 48*2/3` = **1460**）——
+      ⚠ 顶部总管右端 `TOP_X2` 必须 ≥ 1460（已由 1450 改为 **1460**），否则总管与竖管之间会留 10 px 间隙。
+  · **中** 气缸起动阀组 **A / B / C**（复用 `_threeWayManual`，参数
+    `(GRP.x + GRP.w/2 - 60, cy, **47**, 42, 90, 'abc0/1/2', { embed 选项 })`——
+    **宽度仍 42、每格高 52→47**（总高 104→94，两格各减 5），
+    `CYL_YS = [227, 432, 632]`（阀体位置不变），
+    分组矩形外框已删，原 A/B/C 字母标签已换成**完整名称标注**（见下）：
+    · `swap: true` —— **两块矩形图形整体平移 W 互换**（上格＝卸放、下格＝直通），
+      注意是**图形互换位置**，不是改格内内容；
+    · `coil: true` —— 左端（旋转后在**上方**）画**线圈**（18×18 方框 + 左上→右下对角线），
+      **线圈直接贴住阀体、无短引线**；
+      **通电指示**：阀工作于**上位**（`shift=true`）时线圈**红色填充 `#e53935`**，默认白底——
+      由 `_mv3Parts[key].coil` 引用驱动，`toggleThreeWay()` 内更新；
+    · `spring: true` —— 右端（旋转后在**下方**）画**弹簧**（**8 折、波高 ±5.3**，
+      **8 折、波高 ±5.3**，舒展 **27 px**、压缩 **14 px**）；
+    · `initShift: false` + `fillOnLeft: false` —— **默认工作位在「弹簧侧」那格（下格）**；
+      旋转 90° 顺时针后**右格落在下方**，故 `fillOnLeft` 必须为 **false** 才能让下格绿；
+      此时 `shift=false`、**弹簧处于舒展（27 px）状态**；点击后切到上格并压缩到 14 px；
+    · **点击整只阀任意处**（热区 `abc-valve-0/1/2`，`(cx-26, cy-72, 52, 122)`；
+      早期覆盖整组的大热区 `cyl-valve` 已删除）
+      → `toggleThreeWay('abc'+i)`：**阀体平移一格 + 弹簧压缩**（32 → 19 px），绿格随工作位切换。
+      **不是靠改填充来换阀位。**
+    · **名称标注**（`_cap`，字号 13.5，静态层）：A = **「起动电磁阀A」在阀体左边**（`575, cy-9, 100`）；
+      B = **「起动电磁阀B」在右下角**（`775, cy+14, 100`）；C = **「慢转电磁阀」在右下角**（`775, cy+14, 100`，与 B 同一版式）；
+    · **慢转电磁阀 C 的出口管路**：从 **C 下格右边缘 3/4 处**（`[769, CYL_YS[2]]`，即 `y = cy = 632`）
+      **水平**直连到慢转控制阀**气动控制接口的左缘** `[769, cy, V5B.x-18, cy]`（细管 3.5 px）——
+      为保持水平，V5B 的 `y = 612`，使控制接口中心正好落在 `cy`；
+    · **进气管路**：盘车机左侧机械两位三通阀出口 `[680,729]` **一直向上**到 `CYL_YS[0]`，
+      在每只阀 **`cy`**（阀体中心线）处右转 `[680, cy] → [727, cy]` **直接接到阀口**
+      （`727` 即阀体左缘，接口落在绿格工作位一侧）；**原「机械阀 → 盘车机顶部」的管路已删除**。
+    五通阀仍经底边引线接底部总管。
+  · **双座止回阀（梭阀，`_shuttle()`，`SV = (823.5,292,32.5×75)`，中心 (839.75,329.5)）—— 在起动控制阀前面（左侧）**：
+    **竖置矩形** + **上阀座 ∧**（**顶点直接落在顶边** `y`、两脚 `0.28h`、`±0.44w`）+ **中间球**（`r = 0.30w`）
+    + **下阀座 ∨**（**顶点直接落在底边** `y + h`、两脚 `0.72h`）—— **框内框外一律不画竖线**；
+    **两个三角的底边不画线**：三角用**闭合填充层（`strokeEnabled: false`）**再加上**单独描边的两条斜边**，
+    因此底边（两脚连线）没有任何描边、也不会出现白色覆盖线，只有填充色与白底的自然交界；
+    **顶部入口**来自**起动电磁阀 A**、**底部入口**来自**起动电磁阀 B**、**右侧出口**去**起动控制阀气动接口**；
+    · A / B 的输出管（静态层，`_drawPipes`）：从各阀**右缘**（`769`）在**下边矩形右边缘 3/4**（即 `cy`）引出 →
+      右行至 `SV.x + 0.5w` → 上下分别**直接接到梭阀的顶边 / 底边**（无短接头）；
+      **两路入口管的竖直段等长**（各 65 px）：A `227 → 292`、B `432 → 367`，
+      因此梭阀与起动控制阀整体下移（`SV.y = 292`、`V5A.y = 309`）使 `V5A` 接口中心（329.46）与梭阀出口（329.5）齐平；
+    · 梭阀出口 → 起动控制阀接口的管子为**动态管 `_aPipe`**，`toggleFiveWay('V5A')` 时终点随 `inner.x()` 伸缩。
+    · **两位三通阀（A / B / C）工作逻辑**：**下位**（`shift=false`）＝**出口卸放、无气**；
+      **上位**（`shift=true`）**且入口有气**＝出口有气。入口气来自盘车机左侧的机械两位三通阀
+      （左位导通 `!this._mechShift` → 有气；盘车机 engaged 时机械阀断开 → 全路无气）；
+    · **动态工作特性（`_updateShuttle()`，梭阀画在动态层）**：`topOn = supply && A.shift`、`botOn = supply && B.shift`；
+      · 上下同时有气 / 都没气 → **钢球停在中间**；同时有气时**两个三角都绿 `#2ecc40`**；
+      · 只有上部有气 → 钢球下移到**与下三角两边相切**处（`SV.y + h - d`，`d = r / sin θ`，`θ = atan(0.44w / 0.28h)`），**上三角绿**；
+      · 只有下部有气 → 钢球上移到**与上三角两边相切**处（`SV.y + d`），**下三角绿**；
+      · 任一路有气 → 输出有气 → **起动控制阀自动工作在左位**（阀体右移、左格绿、弹簧压缩、控制接口蓝色），
+        由 `_applyFiveWay('V5A', out)` 驱动；**慢转电磁阀 C 同理**（`cOn = supply && C.shift`）
+        直接决定慢转控制阀 V5B 的工作位；
+      A / B / C 切换（`toggleThreeWay()` 末尾）、盘车机状态变化（`tick()` 内机械阀切换后）与初始化都会调用 `_updateShuttle()`。
+  · **主起动阀 / 慢转起动阀（`_startValve(g, cx, cy, r, v5, key)`，照参考图重设计）**—— 画在**动态层** `_svGroup`：
+    · **阀体圆**（描边 2.4）+ 圆内**粗黑竖条**＝**起动空气通道**（`0.30r × 1.92r`，初始**竖直**，左右进出口不通）；
+    · 圆下方**齿条**（底线 + **11 个三角齿**朝上，`y = cy + 1.26r`，`cx - 1.4r … cx + 1.72r - 20`）
+      → **横杆** → 右侧**执行气缸**（`cx + 2.03r - 10` 起，宽 `2.56r - 10`、高 `1.13r`，白底描边 2）——
+      **气缸纵向位置由齿条反推**：`cylY = rackY − cylH/2`，使**齿条正好接到活塞中央**；
+    · 气缸内**活塞**（竖线，**默认在 `2/10`＝最左**，即右入口进气时被推到左端）；齿条 + 横杆 + 活塞同在一个 `rackG` 里整体平移；
+      **气缸进气着色**（`fillL` / `fillR`，`C_AIR_ON` 蓝）：**哪边入口有气就亮哪半边**——
+      左进气（`open && inAir`）→ 左半蓝；右进气（`!open && inAir`）→ 右半蓝。
+      **填充始终贴到活塞边缘**（不是固定半宽）：创建时按初始活塞位 `p0 = cylX + cylW*0.2` 定宽，
+      `_stepStartValve()` 每帧按 `px = pistonX + rackG.x()` 重算 `fillL.width = px − (cylX+2)`、
+      `fillR.x = px; fillR.width = (cylX+cylW−2) − px`，活塞移动时填充动态伸缩。
+    · 气缸下边缘 **1/10 / 9/10** 两个入口 → 细管（3.5 px）接所控两位五通阀顶部两个出口
+      （主起动阀 → V5A、慢转起动阀 → V5B，`x` 偏差 <0.6 走直线，否则在 `气缸底 +14` 折一次）；
+    · **工作逻辑（`_syncStartValve(key, open)` + `_stepStartValve(key, dt)`）**：
+      **默认 / 右侧入口进气** → 活塞在 **`2/10`**（最左，`rackG.x = 0`）、通道**竖直**＝不导通；
+      **左侧入口进气**（五通阀左位）→ 活塞用 **3 s** 匀速**右移到 `8/10`**（`rackG.x = travel·pos`），
+      齿条带动阀芯逆时针转 90° → 通道**水平**＝**导通**。
+    · **导通判定**：`pos > 0.98`（活塞已到 **8/10**）。`airAfter`（顶部总管）＝ **主阀或慢转阀任一导通**；
+      `slowOut`＝慢转阀自身导通（用于其右侧出口粗管着色）。
+    · **气缸两根进气管的着色按五通阀工作位**（`_syncStartValve`）：
+      **右位**（气动接口无气）→ **左管通大气（灰）**、**右管通入口（蓝，有气）**；
+      **左位**（气动接口有气）→ **右管通大气（灰）**、**左管通入口（蓝，有气）**。
+      ⚠ `_svParts[key].target` 初始必须为 **`null`**，否则首次 `_syncStartValve` 会因 `target === open` 早退、颜色不更新。
+    · **来气管着色**：`_aPipe`（梭阀→起动控制阀）、`_cPipe`（C 阀→慢转控制阀）在 `_updateShuttle()` 中按输出变蓝/灰；
+      ⚠ `_updateShuttle()` 的**首次调用必须放在这两根管子创建之后**，否则颜色不生效（原顺序有误，已修正）。
+  · **两只气动控制的横向两位五通换向阀（`_fiveTwo()`，V5A `(900,309)`＝起动控制阀 / V5B `(1060,612)`＝慢转控制阀（已右移 25），均 135×44）**：
+    · **左端气动先导控制头**：矩形 **18×20**（在 `0.111w + 3` × `0.34h + 5`，中心 `0.465h`）；
+      框内**右向空心三角**（高 `0.56·0.34h + 5`、宽 `0.52·0.111w + 2`），**三角左边缘与矩形左边缘重合**；
+    · 阀体白底、描边 2.2；中间**一条竖直实线**（`0.5w`、**线宽 3**、贯通 `0h…1h`）把阀体分成左右两格；
+    · **左格**：T 形在**下边缘 1/4**（横线 `0.76h`、半宽 `0.055w`）；
+      箭头「下边缘 1/2 → 上边缘 1/4」；箭头「上边缘 3/4 → 下边缘 3/4」（竖直向下）；
+    · **右格（与左格镜像）**：T 形在**下边缘 3/4**；箭头「下边缘 1/2 → 上边缘 3/4」；
+      箭头「上边缘 1/4 → 下边缘 1/4」（竖直向下）；箭头头部对称双翼（头长 8、半翼 3.8）；
+    · **管路接口（世界坐标固定，不随阀体平移）**：
+      **入口＝右边矩形下边缘的 1/2（`0.75w`）**，由 `_drawPipes` 引线接底部控制空气总管
+      （`BOT_X2 = V5B.x + V5B.w*0.75`，总管右端即慢转控制阀引线处，不再外伸）；
+      **出口＝右边矩形上边缘的 1/4、3/4（`0.625w` / `0.875w`）**——
+      **不再画短竖线**，改由所控起动阀执行器下方的两根**细管**直接接到阀体顶边；
+      **名称标注**：V5A = 「起动控制阀」（**左下方**，`V5A.x-8, +h+8, 84`）；
+      V5B = 「慢转控制阀」（**右下方**，`V5B.x+w-18, +h+8, 84`，避开底部引线）；
+    · **右端复位弹簧**：`_springPts(w, 27)`（8 折、波高 ±5.3、长 27），自 `(x+w, h/2)` 水平伸出；
+    · **可点击切换工位**（画在**动态层** `_v5Group`，状态存 `_v5State` / `_v5Parts`，`toggleFiveWay(key)`）：
+      **默认右位**（右格绿 `#c8e6c9`、弹簧舒展 27、控制接口白底）；
+      **点击 → 左位**：**整个阀体（两格 + 符号 + 控制接口 + 弹簧）向右平移一格（`w/2`）**
+      —— 管路固定不动，接口因此自动对应到左格同样的 1/4、1/2、3/4 位置；
+      同时左格绿、弹簧压缩 27→**14**、左端控制接口**蓝色填充 `#3fa3e8`**（表示有先导气体）；
+      **慢转控制阀左侧来气管随阀位伸缩**：该管画在**动态层**（`_cPipe`，`_drawPipes` 里已不画），
+      `toggleFiveWay('V5B')` 中把终点更新为 `V5B.x - 18 + inner.x()`，切换后仍接在新位置的控制接口左缘；
+      热区 `distributor`（V5A）/ `v5-b`（V5B）**已取消手动切换**（`onClick = null`，仅作部件标识）——
+      两只控制阀的阀位**只由左侧气动接口的气压决定**（`_updateShuttle()` 自动设置）。
+      V5B 在 `(1035,612)`，右移一格后弹簧仍不压「主机转速」框。
+  · **1 号气缸起动阀执行器（`_cylStartValve()`，照参考图重绘）**——框内只有一只**单作用气缸**：
+    **宽度为原尺寸的 2/3 再减 6**：顶部矩形宽 `BW = 76×2/3 − 6 ≈ 44.7`（`cx=x+118`）——
+    **只画上边与左右两条竖边，下边缘完全隐藏**；左右竖边**向下延长到与拱弧相接**
+    （`yJoin = ACY − √(AR² − (BW/2)²)`）；矩形内**下缘粗横条**（同宽 × 7，`#1b2430`＝活塞）；
+    **中部粗竖线**（活塞杆，宽 5）；**下部拱形缸体**（`AR = 44×2/3 ≈ 29.3` 半圆 + 两侧竖边 + 底部粗横条 `2·AR × 6`）；
+    **左上接口** `[x+67, y+84] → [cx-BW/2, y+84]` 接**1 号起动电磁阀出口**；
+    **右下接口** `[1386, TOP_Y] → [1386, CV1.y+152] → [cv1x+AR, CV1.y+152]`（粗管 6 px）接缸体右侧；
+    名称标注「1号气缸起动阀」已移到**虚线框外下方**（`_cap(x, y+h+6, w)`）。
+    · 整只阀画在**动态层** `_cv1Group`（`_cylStartValve(g, b)`）。**固定部分**：顶部矩形三条边（左右边延长到拱弧，
+      `yJoin = ACY − √(AR²−(BW/2)²)`）+ 拱形半圆与两侧竖边（竖边下端 **`y+169`**，即延长到工字下横线两端，按初始 `pist.y = 5`）。
+      **可动的「黑色工字结构」** = **上横（活塞粗条）+ 竖杆 + 下横（底部粗条）**，三者同放 `pist` 组，**初始 `y = 5`**；
+      动作时**只有它下移**，其余部位不动。
+    · **缸头起动阀逻辑（`_syncCylPiston(hasAir)`）**：入口有气 → `pist.y = 5 + stroke`
+      （`stroke = (ACY−AR) − (y+93) − 5`，即活塞上横下缘刚好顶到拱弧上端）；无气 → 回到 `y = 5`。
+    · **进气流动效果（`_cv1Flows`）**：工字下移后，**拱形两侧竖边下端（`y+169`）与下移后的下横之间**
+      形成左右两个开口；各画一条**斜向外下**的虚线（`[cx∓AR±2, y+172] → [cx∓AR∓22, y+192]`，起点落在开口中央，
+      `C_PIPE_LP`、**6 px**（原 3 px 加粗一倍）、`dash [10,8]`），`tick()` 中 `dashOffset(-phase)` 滚动表示气流源源流出；
+      **工字还原时一并隐藏**（`_syncCylPiston` 里 `visible(hasAir)`）。
+    · **绿色填充（`_cv1Charge`）**：入口有气时，**工字上横上方**的矩形内区域填 `#c8e6c9`（宽 `BW-4`）；
+      **高度随工字下移动态调整**：`h = (y+86 + pist.y) − (topY+2)`，始终贴到活塞上横上缘；无气隐藏。
+    · **1 号起动电磁阀逻辑**：`hasAir = _airTest('mv2aOut') && cv1-pilot.shift`（入口有气**且**线圈得电/手动切到**下位**）；
+      有气时左上接口线变蓝 `C_PIPE_LP`、否则灰 `#c3ccd4`。`tick()` 每帧同步。
+  · **1 号气缸排气阀（照参考图重画，`_cylExhValve()`）**：框内自左至右 ——
+    **入口单向止回阀**（球 + V，**方向反向：尖朝左**，`_check(cx, cy, r, -1)`）
+    → **细管直线**接气缸左颈 → **气动执行器**（上杆头 + 中环 + 中杆 + 下大腔体，整体**下移 10 px**）
+    → **细管直线**接右侧**减压阀**（`_reduceValve(cx, cy, 46, 42, -1, 40)` 镜像版：左进右出）。
+    ⚠ 止回阀与气缸之间**不再画波纹软管/弹簧**；减压阀虚线取压反馈方向按 `cx - dir*fb` 计算，
+    保证正向（dir=1）仍向左、镜像（dir=-1）才向右。
+    标注文字移到**部件框下方**（`y + h + 6`）。
+    ⚠ 外框**不填充**（`rgba(0,0,0,0)`），否则会遮住框内下引到止回阀的供气管；
+    供气管 `[230,265] → [230,344] → [244,344]` 从框顶进入后接止回阀入口。
+  · **盘车机联锁的机械二位三通阀**（`_mech3Way()`，中心 `cy=750`、管路 `x=680`，**与手动两位三通阀同尺寸 52×42**）：
+    **当前工作位所在格绿色填充**（`#c8e6c9`）；右侧小圆与盘车机之间有一段**蓝色推杆**（`#3fa3e8`），
+    盘车机 engaged 时推杆**向左增长**顶动阀芯（阀体左移一格）。
+    **左右阀位与手动阀互换**，两格内部都按手动阀的画法加箭头：
+    · **左格**：3/4 处竖线 + **向上箭头**（两翼开度 `±W*0.11`，与手动阀右格箭头完全一致）；
+    · **右格**：**斜箭头自右上 3/4 引到左下 1/4**；**T 形横线下移 6 px**、只保留向下的竖线
+      （接到下方底边，上方连线已删除）；**T 横线位于 `cy+9`、宽 14**；**▽ 卸放位于下边缘 1/4 处**；
+    左端为**弹簧（12 折、宽度 48 px、波高 ±8 px 即总高 16 px）**——切到右位时压缩到 **28 px**，压缩效果非常明显；
+    右端为**机械碰触柄**：两根横线围绕中线对称、**间距 = 边长的 1/8**，收拢到一个小圆。
+    · **初始**（盘车机 Disengaged）工作在**左位**——阀体 `bx=641`，管路通、弹簧舒展（48px）；
+    · **盘车机 engaged** 时工作在**右位**——阀体左移到 `bx=589`、**弹簧压缩到 28px**，
+      下方气路堵死，上方气经 ▽ 卸放。状态由 `tick()` 比对 `!M.turningGearOut` 自动切换。
+    阀体**不填充**（否则会盖住穿过的管路）。
+  · **左中** 1 号气缸排气阀 / **2号**；**下** 盘车机（`TG` **790,725 / 130×60**，Engaged / Disengaged）、
+    控制空气 7.0 Bar（`CA` **505,780 / 130×50**，位于 40 L 气瓶之后；框底 830 不贴总线，
+    由**下端中心** `[570,830] → [570,BOT_Y]` 一段细管接入）、40 L 气瓶（`BTL` 365,822 / 140×36）。
+    `_valBox()` 的标签区高度与字号已改为随框高自适应（`lh = clamp(17, 0.34h, 26)`），小尺寸框不再溢出。
+    **底部整排（`BOT_Y` = 840）**：控制空气总管、40 L 气瓶（`BTL` 365,**822 / 140×36**，以总线为中心）、控制空气框（`CA` 505,**780**）
+    与左下两只两位三通阀（`a` 中心 y=**760**、`b` 中心 y=BOT_Y）同步位于该行。
+    ⚠ 组件高度已加到 870，竖置的 `b` 阀（高 104）下缘约 892，超出组件底边约 22 px（可拖动查看）。
+    **左下手动两位三通阀**（`_threeWayManual()`，管路 `x=140`、**每格宽 52**、**高 42**，总宽 104；
+    热区 `valve-mv3` 为 `(20,626,190,90)`，右侧未用部分已裁掉）：
+    两格方框 + 左侧手柄；**管路对准「当前格 3/4 位置」的上下边缘**；
+    · **右格（直通位）**：3/4 处竖直箭头，上下顶到边缘；
+    · **左格（卸放位）**：斜箭头自「上边 3/4」引到「下边 1/4」（两端顶到边缘，**箭柄画到尖端不留空**；
+      **T 形横线为 `H*0.04+7`（T 高比原版少 4px）、总宽 `2*W*0.11`（比原版宽 2px）**；
+      **箭头两翼必须按箭柄方向用 `ux/uy + 法向` 计算**，不得硬编码偏移，否则箭头尖会歪）、
+      3/4 处 T 形阀座连到底边、1/4 处 ▽ 卸放口；
+    · **当前工作位所在格绿色填充**（`#c8e6c9`，`_syncThreeWay()` 切换）。
+    · **初始**：右格对准管路（`x=140`），**上下相通**；手柄第二根横杆在 1/2 处、与斜杆相接不冒头；
+      切到左阀位后手柄**垂直向下**，第二根横杆与第一根等长；
+    · **40 L 气瓶前另有一只同型阀**（`_threeWayManual(305, BOT_Y, 52, 42, 90, 'b')`，热区 `valve-mv3b` 260,728）——
+      顺时针旋转 90° 成竖置，管路水平进出；热区 `valve-mv3b`；两只阀状态独立（`_mv3Parts[key].shift`）。
+    · **点击手柄**（热区 `valve-mv3` → `toggleThreeWay('a')`）：管路不动、**阀体沿格排列方向平移一格**，
+      左格对准管路 → **上下切断**，气体从 ▽ 卸放。
+    下口接底部总管、上口（`x=125`）向上 → `y=265` → 右行 → 从**顶部**进入 1 号排气阀（`x=320`）/ …2（`x=512`）。
+    ⚠ 两个排气阀已整体**右移 50 px**；排气阀入口只从这只阀上端引出；左下角不接左干管（`x=10`）。
+    **右下** 主机转速。
+  · **两只手动两位三通阀的名称标注与工作逻辑**：
+    · 左下阀（`_threeWayManual(140,760,…,'a')`）= 「**排气阀气源**」（`_cap(19, 715, 92)`，阀体**左上方**）——
+      **下边＝入口**（接底部总管，`ctrl` 常通）；**入口有气 且 工作于右位（`shift=false`，默认）** → 出口才有气。
+      气源键 `exhSrc = _airTest('ctrl') && !a.shift`，出口侧三根管（`[140,739]→[140,265]→[512,265]`、
+      `[230,265]→…344`、`[512,265]→[512,275]`）都挂该键；切到左位（卸放）后全部变灰。
+    · 40 L 前竖置阀（`'b'`）= 「**控制气源**」（`_cap(334, 760, 82)`，阀体**右边**）——
+      **左边＝入口**；**入口有气 且 工作于下位（`shift=false`，默认）** → 出口才有气。
+      「控制空气」数值框随之显示：**通 → 7.0 Bar，断 → 0.0 Bar**（`tick()` 中按 `b.shift` 取值）。
+      **底部总管在阀 b 处拆成两段**：`[10,BOT_Y]→[305,BOT_Y]` 挂 `ctrl`（常通）；
+      `[305,BOT_Y]→[BOT_X2,BOT_Y]` 挂 **`ctrlB`**（`= ctrl && !b.shift`），切到上位即变灰。
+      **挂在总管右段（40 L 之后）的分支全部同挂 `ctrlB`**，共 **5 条**：
+      总管右段本身、CA 框引管、**起动控制阀 V5A 底部引线**、**慢转控制阀 V5B 底部引线**、**机械二位三通阀下口**。
+      （阀 a 下口在阀 b 左侧，仍为 `ctrl` 常通。）
+  · **管路「有气 / 无气」着色（`_pipe()` 第 5 参 `airKey` + `_syncPipes()`）**：
+    所有管路画在**不缓存的 `_pipeGroup`**（`_init()` 中创建，位于 `_bgNode` 之上、`_staticGroup` 之下），
+    每帧按 `_airTest(airKey)` 结果上色：**有气＝原色**（`C_PIPE` / `C_PIPE_LP`），**无气＝灰 `#c3ccd4`**。
+    气源分段键：`ctrl`（控制空气总管＝**`dryFinal`**，即气源来自干燥器出口左干管，出口截止阀关闭则整条总管无气）、`dryUp`（左截止阀前）、`dry1` / `dry2`（两条干燥支路，
+    需 `vin + riserN`）、`dryOut`（任一支路通）、`dryFinal`（`dryOut && vout`，出口截止阀后）、
+    `airMain`（主空气瓶→主起动阀，常通）、
+    **四只截止阀的逐段逻辑（气流方向：主空气 → 出口阀 472 → 两分支 → 入口阀 108 → 左干管）**：
+    `dryOut = airMain && vout`（出口阀左侧出口→右立管）→ `dry1/dry2 = dryOut && riser1/2`（两分支）
+    → `dryUp = dry1 || dry2`（汇合→入口阀右入口）→ `dryFinal = dryUp && vin`（入口阀左侧出口→左干管）；
+    **`ctrl` ＝ `dryFinal`**，所以出口截止阀一关，最下方那段水平总管也跟着变灰。
+    `airAfter`（主起动阀后＝`mainStartValveOpen && !blocked`）、`mech`（盘车机机械阀导通）、
+    `abA` / `abB` / `abC`（对应电磁阀上位且有气）。执行气缸的两根入口管在 `_syncStartValve()` 内单独着色。
+    · **入口无气则出口必无气（链路闭合要求）**：
+      `mech`（盘车机机械阀出口）＝ **阀导通 且 `ctrlB`**；`abA/B/C` 继承该条件；
+      `_syncStartValve()` 里 `inAir = _airTest('ctrlB')`，**入口断气时五通阀两根出口管一律变灰**
+      （并把 `inAir` 纳入早退比较，否则断气不刷新）；`tick()` 中检测 `mech` 变化会重算 `_updateShuttle()`。
+    · ⚠ **禁止在 `_airTest()` 内再调用 `this._airTest('mech')`**（局部变量 `mech` 必须写 `!this._mechShift`），
+      否则无限递归、组件初始化失败（`window.sys` 不存在）。
+    ⚠ **层序用 `zIndex()`**（`_bgNode.zIndex(0)`、`_pipeGroup.zIndex(1)`）；
+    不要用 `moveTo(rect)` —— Konva 的 `moveTo()` 参数必须是**容器**，传 Rect 会抛 `newContainer.add is not a function`。
+    ⚠ `tick()` **没有形参**，动画步长在方法内取 `const dt = 1 / 20`（consys 固定 20 fps）。
+  · **布线规则（硬性）**：所有管线为正交折线，端点一律落在设备端口 / 母管 / 圆阀圆周上，
+    不得悬空；坐标常量集中在文件头（`DRY` `MSV` `STV` `TOP_Y` `GRP` `CYL_L/R` `V5A/B` `TG` `CA` `BOT_Y`…），
+    新增管件一律引用常量。A/B/C 分组框与干燥器虚线框允许管线穿过（仅作分组用）。
+  · 部件 id：`dryer` `bottle` `main-valve` `slow-valve` `ps` `cyl-valve` `distributor`
+    `turning-gear` `ctrl-air` `rpm-tag`（旧的 `start-air` / `valve-58` 已取消，工作流请用新 id）。
+  · **「工作 / 阻塞」两键（可点击，`setBlock(on)`）**：位于主起动阀上方 `(1062,22)` / `(1136,22)`，均 30×18
+    （已左移 30 px，标签「工作」「阻塞」随之为 `1056` / `1130`），热区 `work-btn` / `block-btn`：
+    · **默认工作**：工作键亮绿 `#16c60c`、阻塞键暗 `#d8dcdd`；
+    · 按**阻塞** → 工作键还原为灰 `#c9ccce`、阻塞键**红 `#e53935`**，并**把主起动阀锁死在断开状态**：
+      强制 `mainStartValveOpen = false`、`mainStartValveOk = false`，同时置
+      **`startBlocked = true`（Start Blocked / 报警项）、`engineReady = false`（Eng. Not Ready）**，
+      `M.acked = false` 并把报警栏写成 **`START FAIL/BLOCK, ACTIVE`**；
+      Engine State 页随之：STATE 的 `Start Blocked` 红、START FAIL/BLOCK 的 `Start Blocked`/`Engine Blocked` 红、
+      ENGINE NOT READY 的 `Main start valve blocked` 红；
+    · 按**工作**（解除）→ `mainStartValveOk = true`、`startBlocked = false`、
+      `engineReady = turningGearOut && airDistributorOk && !startFail && !shutDown && !emStopped`，
+      **Engine State 页立即恢复正常、`Ready for Start` 亮（不需要应答）**；
+      报警栏：已应答 → 直接清除；**未应答 → 改写为 `START FAIL/BLOCK, NORMAL`（红字记忆）**，
+      该项在 Alarms→Sys. Non-Crit 保持红色、Value 为 `NORMAL`、无 `AL. CLOSE`，**必须按 ACK 才消失**；
+    · ⚠ **应答不清除仍在的故障**：`AC600Solver._anyFaultActive()` 已加入 `startBlocked` ——
+      阻塞期间按 ACK 只把该项转黄，报警栏仍保留 `START FAIL/BLOCK, ACTIVE`，**只有恢复工作状态才自动消失**；
+    · **同一套逻辑也用于「空气分配器右位（不导通）」**：`_syncStartBlock()` 统一处理
+      `blocked || mv2a.shift` → `airDistributorOk = false`、`startBlocked = true`、`engineReady = false`、
+      报警栏 `START FAIL/BLOCK, ACTIVE`；两种故障的处理与报警语义完全相同，
+      仅 Engine State 的 ENGINE NOT READY 组不同：主起动阀阻塞亮 **`Main start valve blocked`**，
+      空气分配器右位亮 **`Start air distributor blocked`**（`!M.airDistributorOk`）；
+      该组里的 **`Engine not ready ECS` 在起动阻塞期间不亮**（`!engineReady && !startBlocked`）；
+    · **四种起动阻塞源，报警相同、Engine State 灯不同**（`_syncStartBlock()` 统一置 `startBlocked` / `engineReady`）：
+      | 故障源 | 条件 | START FAIL/BLOCK 组 | ENGINE NOT READY 组 |
+      |---|---|---|---|
+      | 主起动阀阻塞（按钮） | `_blocked` | Start Blocked 红 + **Engine Blocked 红** | **Main start valve blocked** 红 |
+      | 空气分配器右位 | `mv2a.shift` | Start Blocked 红 + Engine Blocked 红 | **Start air distributor blocked** 红 |
+      | **盘车机 Engaged** | `!M.turningGearOut` | Start Blocked 红，**Engine Blocked 白** | **Turning gear engaged** 红 |
+      | **控制气源阀上位** | `mv3Parts.b.shift` → `M.controlAirVented` | Start Blocked 红 + **Engine Blocked 红** | **Control air vented** 红 |
+      ⚠ **只有「主起动阀阻塞」按钮**才把 `mainStartValveOk/Open` 锁死；其余三种不改主起动阀状态，
+      否则 `Main start valve blocked` 会误亮。`Engine Blocked = !(mainStartValveOk && airDistributorOk) || controlAirVented`。
+    · **主机运行中（`M.running || M.starting`）阻塞不产生报警**：`wantAlarm = blk && !running` 才写
+      `M.messages` / `M.alarm` —— 运行时只让状态条显示 `Eng. Not Ready`、Engine State 页按上表点亮，
+      **报警栏保持空白**；恢复工作状态后状态与页面立即恢复（`_blkAlarm` 记录上一次报警态，避免重复触发）。
+    · **运行中盘车机不可切换**：`turning-gear` 点击处理里 `if (M.running || M.starting) return;`，
+      按下无反应、不切换、也不产生报警。
+    · ⚠ **主起动阀已开启（`mainStartValveOpen`）时按阻塞无效**（`setBlock(true)` 直接 return false）；
+  · 动态：主起动阀「工作」灯亮绿 = 非阻塞；
+    起动中/工作中顶部总管叠加绿色色带淡入；盘车机文字随 `turningGearOut` 在 Engaged / Disengaged 间切换，
+    点击 `turning-gear` 走 `M.toggleTurningGear()`。
+- **`Ac600Mimic`**（842 × 800，页 5）：**直接显示 `images/ac600.png`（原图 1024×973，contain 等比缩放）**的
+  系统结构图，整块可拖动（`_addDragPlate()`）；组件坐标 = 图片像素 × `K`（`K = min(W/1024, H/973)`），
+  `PARTS` 表按**原图像素**填 `x1,y1,x2,y2`，由 `mx()/my()` 换算 —— 换图时只改这张表即可。
+  · **模块识别**：图面 19 个装置都注册成可点击部件（`addClickablePart`），**点击即在图上框出该模块
+    （绿框 + 半透明绿底）并弹出深色标注框（英文名 + 中文名 + 一句话功能），4 s 后自动淡出**
+    （`_identify()` / `_hideIdentify()`，节点画在 `_dynamicGroup`、`listening:false`）；
+    也可以 `comp.identifyPart(id)` 程序化触发；点击同时记录 `sys.lastClickedId / lastClickedPartId`。
+    工作流 `find` 步骤用 `subTarget:'<部件 id>'` 即可让箭头指向该模块（`getClickablePartCenter()`）。
+  · **部件 id**（= `_parts` 键）：`bmu`（Bridge Manoeuvring Unit 桥楼操纵单元）、`cmu`（Control Room Manoeuvring Unit
+    集控室操纵单元）、`bwu-port` / `bwu-stb`（Bridge Wing Manoeuvring Unit 两翼操纵单元）、`op`（Order Printer 车令打印机）、
+    `ssl`（Start/Stop Speedset Lever 起动/停车与转速设定手柄）、`ipu`（Indicating Panel Unit 指示面板单元）、
+    `lcp`（Local Control Panel with Engine Telegraph 机旁控制面板）、`dpu`（nn. 通用 DPU 分布式处理单元，编号 nn.）、
+    `rai16`（遥控模拟量输入模块）、`mei`（Main Engine Interface 主机接口单元）、`esu`（Engine Safety Unit 主机安全单元）、
+    `dgu`（Digital Governor Unit 数字调速器）、`servo`（Servo Unit 伺服单元）、`actuator`（Electric Actuator 电动执行器）、
+    `rpmu`（Dual RPM Units incl. Overspeed 双转速单元）、`rpmdet`（RPM Detectors 转速探头）、
+    `engine`（MAN B&W MC 主机）、`prop`（Propeller 螺旋桨）。
+    ⚠ 旧的绘图版部件 id（`bw-port` `bridge-unit` `cr-unit` `cr-lever` `cr-indicator` `local-panel` `rai`
+    `rpm-units`）已随图片化改造**不再存在**，工作流请用上面的新 id。
+  · **双击跳页**（`DBL_PAGE`）：**双击 BMU → 第 1 页**（驾控台）、**双击 CMU → 第 2 页**（集控台）、
+    **双击 LCP → 第 3 页**（机旁面板）、**双击主机（`engine`）→ 第 4 页**（气动操纵系统）；
+    处理在热区 `dblclick` 里调 `goPage(n)`（内部走 `sys.navigateTo`）。单击仍是识别（框选 + 名称标注）。
+  · **螺旋桨动画**（`_drawPropeller()` + `tick(dt)`）：原图叶片用白块遮掉（`PROP_MASK`，避开左侧
+    「Propeller」文字后由组件重画该文字），改画**三片桨叶（0°/120°/240°）+ 桨毂 + 尾锥**：
+    · 几何常量 `PROP = { hubX: 918, hubY: 913, L: 52, W: 14 }`（原图像素）——**桨毂中心与尾轴中心线对齐**
+      （尾轴在图上 y 904~923，中心 913.5）、桨毂左端压住轴端（x 894~940），尾锥 936~960；
+    · **转速与转向跟随 `sys.ac600.rpm`**：`角速度 = rpm × π/30`（rad/s，与真机一致：68 rpm ≈ 1.13 r/s），
+      正车顺时针、倒车（rpm 为负）逆时针，**主机停车（rpm = 0）时桨叶静止**；
+    · 叶片组 `_propSpin` 绕桨毂中心转动，桨毂/尾锥画在其上遮住叶片根部，`listening:false` 不挡点击；
+    · 该区域热区常态**不再显示 3% 绿底**（白底上会显成淡绿方块），只在鼠标悬停时显示。
 
 ## 船舶机舱监视报警系统（K-Chief 600，页 6~10）
 
@@ -459,10 +1094,26 @@ pnpm run preview  # 预览构建产物
   两台冷却泵 `cw1 cw2`（含面板起动/停止按钮）、三通调节阀 `rv-cooler rv-bypass`、仪表 `tc pt ps gauge`；
   PID 面板部件：`am`（A/M 切换）/`set`/`up`/`down`/`reset`、`pv`/`sv`/`out`、`alarm-reset`；
   控制量 = 三通阀冷却口开度 `m.manip`（0 % 全旁通最热 / 100 % 全经冷却器最冷），PI + 负荷前馈 + 积分分离，SV 默认 85 ℃。
+  **面板增减按钮**（`CoolingWaterPID._level0`）：**AUTO 每次改设定值 ±1 ℃**；
+  **MANU 每次改 OUT ±1 %**（`CoolingWaterSolver.stepManip`）。
+  **系统起动默认工况：驾驶台车钟 NAV FULL、集控室/机旁手柄在 STOP，主机稳定全速运行** ——
+  `AC600Solver` 构造（与 `reset()`）中 `leverRpm = { BRIDGE: 68, ECR: 0, LOCAL: 0 }`（即
+  `TELEGRAPH[0]` / `TELEGRAPH[5]`）、`leverIdx = 0`（驾驶台在 NAV FULL）、控制权在 `BRIDGE`、
+  `rpmCmd = setp = rpm = 68`、`load = 22 + 0.9×68 = 83.2 %`、`running = true`、
+  `engineMode = 'SEA'`（At Sea）、`stateText = 'Running'`，无报警、蜂鸣器不响。
+  · **转数计数 Rev 与运行小时只在主机转动时累加**：`|rpm| > 1` 才执行
+    `rev += dt × 1.7 × |rpm|/68`、`runHours += dt/3600` —— **停机（rpm = 0）时两者都保持不变**
+    （原来无条件累加，停车后 Rev 还会一直涨）。
   **默认即为稳定运行工况**（`CoolingWaterSolver.createModel()` 的初值）：
   `engineSw/engineOn = true`（柴油机运转，负荷 50 %）、两台泵 `mode 'AUTO'` 且 **1# 泵运行**（`autoLead='cw1'`，2# 备用）、
   `psUp=true`（排出 2.05 bar / 41 m³/h）、LDCL `mode='AUTO'` 且 `tempCtrl='AUTO'`、
   `temp = tcMeas = setTemp = 85 ℃`、阀位 `manip = outCmd = 32 %`（50 % 负荷的前馈稳态开度），无报警。
+- **滑油温度调节器 TIC-101（页 10 MIMIC 面板，`MainEngineLubeOilMimic._pidPanel()`）**：
+  面板 `(650,320,250,190)`，三行 PV/SV/OUT 数值框 + 第 4 行「手动 / 自动 / ▲ / ▼」
+  （部件 `pid-man` `pid-auto` `pid-sv-up` `pid-sv-dn`）。
+  **增减按钮步长**：**自动（`pid.auto === true`）每次改设定值 SV ±1 ℃**（35~70 ℃）；
+  **手动每次改输出 OUT ±5 %**（0~100 %）—— 手动时 OUT 固定不变，PID 不再自动调节
+  （`tick()` 中只有 `m.pid.auto` 为真才按偏差改 `m.pid.out`）。
 - **滑油流动动画（页 10 MIMIC）**：`_createDynamic()` 里按管路走向建立 18 条 `Konva.Line` 流动虚线
   （`stroke '#e2a020'`、`dash [9,7]`、`dashOffset` 滚动、`listening:false`，存入 `this._flows`），
   `tick()` 中 `this._flowPhase = (phase + 1) % 16` —— **速度为冷却水 MIMIC 的一半**（那边是 `+2`）；
@@ -484,6 +1135,33 @@ pnpm run preview  # 预览构建产物
     `< 88 ℃` → `safetyClear('SLD','CW-T')`；
   · AC600 侧 `sldCauses` 记录减速原因；存在原因时 `_stepSetp()` 把 `setp` **压到 40 rpm** 并按减速度（3 rpm/s）下降，
     `activeLimiter = 'Slow Down'`；
+  · **预报警（可取消弹窗）**：温度越限立即 `ac600.sldPreAlarm(tagId)` → 报警栏 `<TAG>, SLOWDN`，
+    主机遥控面板液晶区弹出 `_popupGroup`（红标题 `SLOW DOWN ACTIVE` + 灰底 `SLOWDOWN ALARM` / `CANCELLABLE` /
+    `Engine load will be reduced`）；显示条件 `M.sldPre && !M.cancelSLD`，6 s 延时内温度回落（`sldPreAlarmClear`）或按 Cancel SLD 即消失；
+  · 延时到执行动作后：报警栏两行 **`<TAG>, SLOWDN`** + **`SLOWDOWN ACTIVE, ACTIVE`**（`safetyAction('SLD')` 直接设 messages）；
+  · Slow Down 页：`SLOWDOWN ACTIVE` = `ACTIVE`，原因行（`MAIN L.O.INLET TEMP HIGH` / `JACKET C.F.W. OUTLET TEMP HIGH`，注意 L.O. 后无空格）**值显示 `SLOWDN`**；
+  · Engine State 页 `Runing` 绿灯只看 `M.running`（不再要求 > 50 rpm）；
+  · **菜单指示灯**：慢降只点亮 **Safety System**（主菜单）与 **Slow Down**（二级菜单），
+    **Alarms / Misc Menu 不亮**；`_updateBandLamps()` 里 `alarms` 改为"报警列表确有触发项"（按 `_alm` 状态判定，不再看 `M.alarm`），
+    `misc` 恒 false，`safety` 含 `slowDown`；I/O Fail 页的 `EICU A/B SLOWDOWN` **不再随慢降动作点亮**（恒 false）；
+  · **报警复位（`safetyClear`）**：温度 / 压力回到回差值以内时，**报警栏里该条信息直接移除**
+    （不再区分是否已应答 —— 原先「未应答 → 改写成 `, NORMAL` 留在栏里」，会出现「温度已降到 88 ℃ 以下、
+    报警栏那条仍挂着」的问题）；Alarm History 里仍保留一条绿色 `NORMAL` 记录（面板 `_histRows`）；
+    `SLOWDOWN ACTIVE` 仍按锁存保留到车钟拉到 40 rpm 以下。
+  · **预报警期间按 Cancel SLD**（`setCancel('SLD', true)` 且尚未真正减速）：弹窗消失、计时清零，
+    **该条预报警信息同时从报警栏移除**（只留 `SLOWDOWN CANCELLED, ACTIVE` 这条越控记录）；
+    否则 `sldPre` 已被置空，温度回落后 `sldPreAlarmClear()` 无从清除，信息会永远挂在栏里。
+  · **应答与自动还原**：按 **ACK** 后 Slow Down 页两项变**黄色**（故障仍在，报警栏保留两行）；
+    温度回落（故障消失）→ 已应答的原因行**自动消失**（无需再次 ACK），`SLOWDOWN ACTIVE` 因锁存保持黄色；
+    车钟拉到 40 以下解除锁存时，`SLOWDOWN ACTIVE` 行同时消失并清掉报警栏的 `SLOWDOWN ACTIVE, ACTIVE`；
+    `_anyFaultActive()` 已包含 `sldPre` / `slowDown`，因此故障期间按 ACK 不会清空报警栏；
+  · **Cancel SLD 语义（只对"未触发的减速"有效）**：
+    预报警期间按 Cancel SLD → `sldCancelled = true`、清 `sldPre`（弹窗消失）、装置侧计时清零，**本次减速被取消（暂停）**，
+    温度仍越限也不会触发；**再按一次释放** Cancel SLD → `sldCancelled = false`，若温度仍越限会**重新弹出预报警并重新计时 6 s**；
+    **已触发减速后按 Cancel SLD 对本次无效**：`_stepSetp()` / `solve()` 已不再看 `cancelSLD`，仍需把车钟拉到 40 以下才复位；
+    面板侧 Slow Down 行的 `live`、菜单灯 `safety` / `sld`、主页原因行都只看 `M.slowDown`（不再显示 Overridden）；
+  · **锁存期间报警栏必须保留 `SLOWDOWN ACTIVE, ACTIVE`**：`solve()` 中只要 `slowDown && !cancelSLD && sldAwaitReset`
+    就检查 `messages` 里是否有该行，缺失则补回并令 `alarm = true`（防止任何路径把它清空，出现"温度已恢复但报警栏空白"）；
   · **减速动作不自动复位（锁存）**：`safetyClear()` 只清原因并把报警信息改写（已应答→清除，未应答→`, NORMAL`），
     同时置 `sldAwaitReset = true`，`slowDown` 保持——**必须由拥有控制权的面板把车令 `rpmCmd` 拉到 40 rpm 以下**
     （`solve()` 中 `|rpmCmd| < 40` 判定）才解除自动减速；正好 40 不复位；
@@ -501,6 +1179,17 @@ pnpm run preview  # 预览构建产物
   → 安保延时 6 s 到且未被越控 → `kc.safetyActions` 记录 SHD → MIMIC `m.shdTrip = true`、`m.engOn = false`（主机停车）；
   **延时内触点断开（压力回升）→ `_safetyTimers` 立即删除、报警转 RTN，不触发停车**（`KChiefSolver.solve()` 的 `back` 分支）；
   越控：K-Chief Operate → `Cancel Shut Down`（Cancel SHD）。
+- **安保停车状态联动（页面 10 → K-Chief）**：滑油 MIMIC 的 `m.shdTrip` **跟随 `sys.ac600.shutDown`**
+  （`if (acM && typeof acM.shutDown === 'boolean') m.shdTrip = !!acM.shutDown;`），
+  由它驱动测点 `ME-GEN-SHDN`（M/E SAFETY SHUTDOWN ACTIVE）的 `normal` 值。因此
+  **驾控台把车钟拉回 STOP 复位自动停车后，报警系统这条也会一起恢复**（已应答 → 自动清除、
+  未应答 → 转 RTN）；之前 `shdTrip` 只在滑油 MIMIC 的 engine-switch 打开时才清，导致 K-Chief 报警一直挂着。
+- **主机动作 → 报警系统（K-Chief）**：`consys.js` 每帧在 `ac600.solve()` 之后把三项状态推给 `sys.kchief`：
+  `setExternal('ME-GEN-EMSTOP', emStopped || emStopLatched)`（**M/E EMERGENCY STOP**）、
+  `setExternal('ME-GEN-TRIP', shutDown)`（**M/E AUTO STOP ACTIVE**）、
+  `setExternal('ME-GEN-SLOWDN', slowDown)`（**M/E SLOW DOWN ACTIVE**），三者在 **M/E GENERAL** 组；
+  `KChiefSolver.setExternal(tagId, on)` 让开关量测点接受外部信号（`solve()` 中 `tag.external` 优先），
+  走同一套延时/未确认/已确认/RTN 状态机（`delay: 0` 立即报警）。
 - **安保动作联锁到主机遥控模型**：`KChiefSolver` 执行安保动作时调用 `sys.ac600.safetyAction(kind, tagId)` ——
   SHD → 燃油切断、主机停车（`shutDown`、`rpm=0`、`engineReady=false`、`startBlocked=true`，报警信息 `<TAG>, SHUTDN`），
   SLD → 自动减速 `<TAG>, SLDN`；`ME-LO-PR-SW` 会置 `loLowLowShd`，AC600 的 Shut Down 页因此多亮一行

@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="640" viewBox="0 0 980 640" font-family="Microsoft YaHei,PingFang SC,sans-serif">
+  <defs>
+    <marker id="aA" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#16a085"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="980" height="640" fill="#fbfcfe"/>
+
+  <text x="24" y="34" font-size="20" font-weight="bold" fill="#0e6655">图 1 · 工程分层架构（3D 只是另一种视图，电路规则完全复用平台）</text>
+  <text x="24" y="58" font-size="13" fill="#7f8c8d">上层只描述“器件在哪、3D 长什么样”；拓扑、求解、连线、撤销仍由平台内核负责。</text>
+
+  <!-- ① 项目配置层 -->
+  <rect x="40" y="74" width="640" height="62" rx="10" fill="#eaf2fd" stroke="#1c56d6" stroke-width="2"/>
+  <text x="58" y="99" font-size="15" font-weight="bold" fill="#14428f">① 项目配置层　project2/three001.js</text>
+  <text x="58" y="121" font-size="12.5" fill="#2c3e50">componentConfigs（器件与位置）· applyAllPresets 自动接线 · applyStartSystem 起动 · fiveStep 5 点步进</text>
+
+  <line x1="360" y1="136" x2="360" y2="170" stroke="#16a085" stroke-width="2.5" marker-end="url(#aA)"/>
+  <text x="376" y="158" font-size="12" fill="#0e6655">new cfg.Class(cfg, sys)　—— 按配置实例化组件</text>
+
+  <!-- ② 3D 组件层 -->
+  <rect x="40" y="176" width="640" height="124" rx="10" fill="#e8f6f3" stroke="#16a085" stroke-width="2"/>
+  <text x="58" y="200" font-size="15" font-weight="bold" fill="#0e6655">② 3D 组件层　3dcomps/（Konva 侧隐形实例，继承 BaseComponent）</text>
+
+  <g stroke="#16a085" stroke-width="1.6" fill="#ffffff">
+    <rect x="58" y="212" width="118" height="50" rx="8"/>
+    <rect x="182" y="212" width="118" height="50" rx="8"/>
+    <rect x="306" y="212" width="118" height="50" rx="8"/>
+    <rect x="430" y="212" width="118" height="50" rx="8"/>
+    <rect x="554" y="212" width="118" height="50" rx="8"/>
+  </g>
+  <g font-size="12.5" font-weight="bold" fill="#0b5345" text-anchor="middle">
+    <text x="117" y="232">Battery3D</text>
+    <text x="241" y="232">Switch3D</text>
+    <text x="365" y="232">Rheostat3D</text>
+    <text x="489" y="232">Bulb3D</text>
+    <text x="613" y="232">Multimeter3D</text>
+  </g>
+  <g font-size="11" fill="#4a6f68" text-anchor="middle">
+    <text x="117" y="250">source · p/n</text>
+    <text x="241" y="250">switch · l/r</text>
+    <text x="365" y="250">resistor · l/r</text>
+    <text x="489" y="250">resistor · l/r</text>
+    <text x="613" y="250">multimeter · 3 孔</text>
+  </g>
+  <text x="58" y="284" font-size="12" fill="#31706a">端口全名 id_wire_port（如 bat_wire_p）与 2D 工程完全一致 → 连线路由、电压回读、撤销栈零改动复用。</text>
+
+  <line x1="360" y1="300" x2="360" y2="336" stroke="#16a085" stroke-width="2.5" marker-end="url(#aA)"/>
+  <text x="376" y="318" font-size="12" fill="#0e6655">registerDevice(comp) → comp.buildThree(THREE)</text>
+  <text x="376" y="334" font-size="12" fill="#0e6655">→ { root, footprint, terminals, pickables }</text>
+
+  <!-- ③ 3D 宿主层 -->
+  <rect x="40" y="342" width="640" height="94" rx="10" fill="#f9f0fb" stroke="#8e44ad" stroke-width="2"/>
+  <text x="58" y="367" font-size="15" font-weight="bold" fill="#6c3483">③ 3D 宿主层　Circuit3DScene（组件 id：lab3d）</text>
+  <text x="58" y="391" font-size="12.5" fill="#3d566e">absolute 定位的 DOM 视窗挂在 #container 上，与 Konva group 同点对齐（z-index 10，盖在 2D 画布之上）</text>
+  <text x="58" y="413" font-size="12.5" fill="#3d566e">three.js 场景与实验桌 · 射线拾取 · 3D 电缆 sagCurve · OrbitControls 相机 · 脏标记按需渲染</text>
+
+  <line x1="360" y1="436" x2="360" y2="472" stroke="#16a085" stroke-width="2.5" marker-end="url(#aA)"/>
+  <text x="376" y="452" font-size="12" fill="#0e6655">handlePortClick(comp,'bat_wire_p','wire')　·　addConnWithHistory</text>
+  <text x="376" y="468" font-size="12" fill="#0e6655">getVoltageBetween('bulb_wire_l','bulb_wire_r')　·　getClickablePartCenter()</text>
+
+  <!-- ④ 平台内核 -->
+  <rect x="40" y="478" width="640" height="94" rx="10" fill="#fdedec" stroke="#c0392b" stroke-width="2"/>
+  <text x="58" y="503" font-size="15" font-weight="bold" fill="#922b21">④ 平台内核　consys.js —— ControlSystem</text>
+  <text x="58" y="527" font-size="12.5" fill="#5b2c26">ConnectionManager（连线状态与预览）· CircuitSolver（MNA 求解）· HistoryManager（撤销 / 重做）</text>
+  <text x="58" y="549" font-size="12.5" fill="#5b2c26">CircuitTopology（并查集并簇）· Renderer（2D 画线，跳过 custom 连线）· UIManager · Workflow</text>
+
+  <text x="24" y="604" font-size="12" fill="#7f8c8d">四个 3D 器件在 Konva 侧各有一个不可见组件实例（group.draggable(false)、与宿主同原点），只为继承端口的创建、</text>
+  <text x="24" y="622" font-size="12" fill="#7f8c8d">tick 生命周期与配置对话框，从而“零改动”接入平台服务。</text>
+</svg>

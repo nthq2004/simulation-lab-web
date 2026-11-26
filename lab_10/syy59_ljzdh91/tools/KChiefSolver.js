@@ -130,8 +130,10 @@ export const ALARM_TAGS = [
     T('ME-GEN-SAIR', '主机起动空气压力', 'M/E START AIR PRESS LOW', 'ME-GEN', 'MPa', 'low', 1.5, 2.4, [0, 3.5], { db: 0.05, delay: 5, prio: 'A' }),
     T('ME-GEN-TORQ', '主机轴扭矩', 'M/E SHAFT TORQUE HIGH', 'ME-GEN', '%', 'high', 100, 82, [0, 120], { db: 2, delay: 5 }),
     T('ME-GEN-SDEV', '主机转速偏差', 'M/E SPEED DEVIATION HIGH', 'ME-GEN', 'r/min', 'high', 5, 1, [0, 15], { db: 0.5, delay: 8, prio: 'C' }),
+    D('ME-GEN-EMSTOP', '主机紧急停车', 'M/E EMERGENCY STOP', 'ME-GEN', { delay: 0, prio: 'A' }),
     D('ME-GEN-SHDN', '主机安全保护动作', 'M/E SAFETY SHUTDOWN ACTIVE', 'ME-GEN', { delay: 1, prio: 'A' }),
-    D('ME-GEN-TRIP', '主机自动停车动作', 'M/E AUTO STOP ACTIVE', 'ME-GEN', { delay: 1, prio: 'A' }),
+    D('ME-GEN-TRIP', '主机自动停车动作', 'M/E AUTO STOP ACTIVE', 'ME-GEN', { delay: 0, prio: 'A' }),
+    D('ME-GEN-SLOWDN', '主机自动减速动作', 'M/E SLOW DOWN ACTIVE', 'ME-GEN', { delay: 0, prio: 'B' }),
     D('ME-GEN-START-F', '主机起动失败', 'M/E START FAILURE', 'ME-GEN', { delay: 5, prio: 'B' }),
 
     // ── ② M/E COOL FW SYS 主机高温冷却水 ──
@@ -363,6 +365,7 @@ export class KChiefSolver {
             inhibit: false,         // 闭锁（Inhibit）
             override: false,        // 越控（Override）
             fault: false,           // 故障注入（过程量被强制拉向 faultVal）
+            external: false,        // 外部设备（主机遥控 AC600）送来的开关信号
         }));
 
         this.alarms = [];      // 当前报警（state: UNACK / ACK / RTN）
@@ -423,7 +426,7 @@ export class KChiefSolver {
     solve(dt) {
         this.t += dt;
         for (const tag of this.tags) {
-            const target = tag.fault ? tag.faultVal : tag.normal;
+            const target = tag.external ? 1 : (tag.fault ? tag.faultVal : tag.normal);
             // 一阶惯性趋近：模拟量约 2.5 s 时间常数；开关量约 0.4 s（触点动作）
             tag.value += (target - tag.value) * Math.min(1, dt / (tag.digital ? 0.4 : 2.5));
             // 微小波动，让读数"活着"，幅值小于死区，不会误触发（开关量不波动）
@@ -847,6 +850,19 @@ export class KChiefSolver {
             if (al) this._clear('DEADMAN');
             this._log('轮机员安全系统：DEADMAN 报警复位');
         }
+    }
+
+    /**
+     * 外部开关信号（主机遥控 AC600 的紧急停车 / 自动停车 / 自动减速动作 → 报警系统）
+     * @param {string} tagId 测点 id（如 'ME-GEN-TRIP'）
+     * @param {boolean} on   动作 / 复位
+     */
+    setExternal(tagId, on) {
+        const tag = this.tag(tagId);
+        if (!tag) return;
+        if (tag.external === !!on) return;
+        tag.external = !!on;
+        this._log(on ? `外部信号动作：${tag.name}` : `外部信号复位：${tag.name}`);
     }
 
     setFault(tagId, on) {

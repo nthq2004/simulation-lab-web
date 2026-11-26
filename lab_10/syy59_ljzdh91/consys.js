@@ -263,10 +263,10 @@ export class ControlSystem {
         // ── 工具栏滑块（由项目配置实现）──
         initSlider(this);
 
-        // ── 页面管理（本工程为多页工程：页 0 索引 + 页 1 报警系统主界面 + 页 2 延伸报警单元）──
+        // ── 页面管理（本工程为多页工程：页 0 索引 + 页 1~11 各装置页）──
         if (Array.isArray(PROJECT_PAGES) && PROJECT_PAGES.length) {
             this.pageMgr = new PageManager(this, PROJECT_PAGES);
-            this.pageMgr.navigateTo(1);   // 直接进入第 1 页（报警系统主界面）
+            this.pageMgr.navigateTo(1);   // 默认进入第 1 页（主机遥控系统 AC 600 驾控台）
         }
 
         this._scheduleNextPhysics();
@@ -1013,6 +1013,13 @@ export class ControlSystem {
 
         // ── 主机遥控 AC 600 模型 ──
         if (this.ac600) this.ac600.solve(1 / 20);
+        // AC600 的紧急停车 / 自动停车 / 自动减速 → 报警系统（K-Chief）对应警报
+        if (this.ac600 && this.kchief && typeof this.kchief.setExternal === 'function') {
+            const ac = this.ac600;
+            this.kchief.setExternal('ME-GEN-EMSTOP', !!(ac.emStopped || ac.emStopLatched));
+            this.kchief.setExternal('ME-GEN-TRIP', !!ac.shutDown);
+            this.kchief.setExternal('ME-GEN-SLOWDN', !!ac.slowDown);
+        }
 
         // ── 主机缸套冷却水温度控制过程模型 ──
         if (this.coolingSolver) this.coolingSolver.solve(1 / 20);

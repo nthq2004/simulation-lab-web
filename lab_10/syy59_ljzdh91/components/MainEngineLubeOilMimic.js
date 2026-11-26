@@ -576,12 +576,12 @@ export class MainEngineLubeOilMimic extends BaseComponent {
         add('pid-sv-up', 788, 457, 42, 26, () => {
             const p = this.m.pid;
             if (p.auto) p.sv = Math.min(70, p.sv + 1);      // 自动：增加设定值 SV 1℃
-            else p.out = Math.min(100, p.out + 1);          // 手动：增加输出 OUT 1%
+            else p.out = Math.min(100, p.out + 5);          // 手动：增加输出 OUT 5%
         });
         add('pid-sv-dn', 836, 457, 42, 26, () => {
             const p = this.m.pid;
             if (p.auto) p.sv = Math.max(35, p.sv - 1);      // 自动：减少设定值 SV 1℃
-            else p.out = Math.max(0, p.out - 1);            // 手动：减少输出 OUT 1%
+            else p.out = Math.max(0, p.out - 5);            // 手动：减少输出 OUT 5%
         });
 
         ['p1', 'p2'].forEach((k, i) => {
@@ -679,13 +679,30 @@ export class MainEngineLubeOilMimic extends BaseComponent {
         const acSld = this.sys && this.sys.ac600;
         if (acSld && typeof acSld.safetyAction === 'function') {
             if (m.temp > LO_SLD_ON) {
-                this._loSldT = (this._loSldT || 0) + dt;
-                if (this._loSldT >= LO_SLD_DELAY && !this._loSld) {
-                    this._loSld = true;
-                    acSld.safetyAction('SLD', 'ME-LO-T');
+                if (acSld.sldCancelled && !acSld.slowDown) {
+                    // Cancel SLD 已取消本次减速（暂停）：不计时、不弹窗；松开后重新开始
+                    this._loSldT = 0;
+                    this._loPre = false;
+                } else {
+                    // 越限立即产生预报警（主面板弹出可取消提示框），6 s 延时到才真正减速
+                    if (!this._loPre) {
+                        this._loPre = true;
+                        if (typeof acSld.sldPreAlarm === 'function') acSld.sldPreAlarm('ME-LO-T');
+                    }
+                    this._loSldT = (this._loSldT || 0) + dt;
+                    const loDelay = (typeof acSld.getSafetyDelay === 'function')
+                        ? acSld.getSafetyDelay('sld-lo-t', LO_SLD_DELAY) : LO_SLD_DELAY;
+                    if (this._loSldT >= loDelay && !this._loSld) {
+                        this._loSld = true;
+                        acSld.safetyAction('SLD', 'ME-LO-T');
+                    }
                 }
             } else if (m.temp < LO_SLD_OFF) {
                 this._loSldT = 0;
+                if (this._loPre) {
+                    this._loPre = false;
+                    if (typeof acSld.sldPreAlarmClear === 'function') acSld.sldPreAlarmClear('ME-LO-T');
+                }
                 if (this._loSld) {
                     this._loSld = false;
                     if (typeof acSld.safetyClear === 'function') acSld.safetyClear('SLD', 'ME-LO-T');
@@ -849,6 +866,10 @@ try {
             m.engOn = false;
             m.shdTrip = true;
         }
+        // 安保停车标志跟随主机遥控模型：**驾控台把车钟拉回 STOP 复位自动停车后，
+        // 这里的 shdTrip 也一并复归**，报警系统的「M/E SAFETY SHUTDOWN ACTIVE」随之恢复
+        const acM = this.sys && this.sys.ac600;
+        if (acM && typeof acM.shutDown === 'boolean') m.shdTrip = !!acM.shutDown;
         // 「主机安全保护动作」开关量：安保停车期间动作
         const shdnTag = kc && typeof kc.tag === 'function' ? kc.tag('ME-GEN-SHDN') : null;
         if (shdnTag) shdnTag.normal = m.shdTrip ? 1 : 0;

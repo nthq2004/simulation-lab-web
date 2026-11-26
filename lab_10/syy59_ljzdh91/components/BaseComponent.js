@@ -564,6 +564,12 @@ export class BaseComponent {
     getClickablePartCenter(partId) {
         const p = this._parts && this._parts[partId];
         if (!p) return null;
+        // 有命中节点时以节点的实际画面位置为准：组件内若把 _interactGroup 整体平移/旋转
+        // （如 MainEngineLubeOilMimic 三层统一 y+60），纯用 p.x/p.y 会算偏
+        if (p.node && typeof this.getNodeCenter === 'function') {
+            const c = this.getNodeCenter(p.node);
+            if (c) return c;
+        }
         const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
         // 本地坐标 → 画布绝对坐标：计入组件位移、旋转与缩放（旋转过的组件必须这样算）
         if (this.group && typeof this.group.getAbsoluteTransform === 'function') {

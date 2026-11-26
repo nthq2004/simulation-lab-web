@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="620" viewBox="0 0 980 620" font-family="Microsoft YaHei,PingFang SC,sans-serif">
+  <defs>
+    <marker id="aB" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#1c56d6"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="980" height="620" fill="#fbfcfe"/>
+
+  <text x="24" y="34" font-size="20" font-weight="bold" fill="#0e6655">图 3 · 3D 接线原理（点击接线柱 → 复用平台连线协议 → 按下垂曲线生成 3D 电缆）</text>
+
+  <!-- 左：连线协议流程 -->
+  <g stroke="#1c56d6" stroke-width="2" fill="#eaf2fd">
+    <rect x="40" y="76" width="400" height="56" rx="9"/>
+    <rect x="40" y="150" width="400" height="56" rx="9"/>
+    <rect x="40" y="224" width="400" height="68" rx="9"/>
+    <rect x="40" y="310" width="400" height="68" rx="9"/>
+    <rect x="40" y="396" width="400" height="104" rx="9"/>
+  </g>
+  <g stroke="#1c56d6" stroke-width="2.2" marker-end="url(#aB)">
+    <line x1="240" y1="132" x2="240" y2="146"/>
+    <line x1="240" y1="206" x2="240" y2="220"/>
+    <line x1="240" y1="292" x2="240" y2="306"/>
+    <line x1="240" y1="378" x2="240" y2="392"/>
+  </g>
+
+  <text x="56" y="100" font-size="13.5" font-weight="bold" fill="#14428f">① 点击接线柱（pointerup 位移 &lt; 6 px 且 &lt; 550 ms）</text>
+  <text x="56" y="120" font-size="11.5" fill="#2c3e50">射线拾取 _pickAt()：先 _syncMatrices()，端子优先于手柄</text>
+
+  <text x="56" y="174" font-size="13.5" font-weight="bold" fill="#14428f">② sys.handlePortClick(comp, 'bat_wire_p', 'wire')</text>
+  <text x="56" y="194" font-size="11.5" fill="#2c3e50">与 2D 工程同一个 ConnectionManager，3D 不另造一套连线规则</text>
+
+  <text x="56" y="248" font-size="13.5" font-weight="bold" fill="#14428f">③ 首点：建立 linkingState（接线中）</text>
+  <text x="56" y="268" font-size="11.5" fill="#2c3e50">移动时把射线与桌面的交点（y ≥ 桌面 + 0.02）作假想端点，</text>
+  <text x="56" y="284" font-size="11.5" fill="#2c3e50">实时重建预览电缆（落点不变则不重建，防每帧分配几何体）</text>
+
+  <text x="56" y="334" font-size="13.5" font-weight="bold" fill="#14428f">④ 次点命中对端：addConnWithHistory</text>
+  <text x="56" y="354" font-size="11.5" fill="#2c3e50">写入 sys.conns（可撤销 / 重做）；Esc 取消正在进行的接线</text>
+
+  <text x="56" y="420" font-size="13.5" font-weight="bold" fill="#14428f">⑤ 两端都是 3D 端子 → conn.custom = true</text>
+  <text x="56" y="440" font-size="11.5" fill="#2c3e50">2D Renderer 见到 custom 连线直接跳过不画；</text>
+  <text x="56" y="457" font-size="11.5" fill="#2c3e50">宿主 _rebuildCables() 按“端点世界坐标签名”差量生成 3D 电缆；</text>
+  <text x="56" y="474" font-size="11.5" fill="#2c3e50">新电缆带 520 ms 生长动画（TubeGeometry setDrawRange）。</text>
+  <text x="56" y="491" font-size="11.5" fill="#c0392b">双击电缆 → removeConnWithHistory 拆线（记入撤销栈）</text>
+
+  <!-- 右：sagCurve 控制点 -->
+  <text x="470" y="92" font-size="13.5" font-weight="bold" fill="#6c3483">三段式曲线 sagCurve（电缆不斜穿器件本体）</text>
+  <g font-size="11.5" fill="#3d566e">
+    <text x="470" y="116">① 足迹逃逸：端子若在器件足迹矩形内，沿“指向对端”方向</text>
+    <text x="484" y="134">射出边界，再外推 0.06 m，高度取逃逸基准 + 0.05 m。</text>
+    <text x="470" y="158">② 两段式爬升：先贴接线柱竖直升降到逃逸高度，再水平走出</text>
+    <text x="484" y="176">足迹 —— 水平段恒高于器件最高点。</text>
+    <text x="470" y="200">③ 中部下垂：m1 / m2 取两逃逸点 0.35 / 0.65 插值，</text>
+    <text x="484" y="218">高度压到 cableSagY，得到真实电缆的自然垂度。</text>
+  </g>
+
+  <!-- 示意：桌面与两件器件 -->
+  <line x1="460" y1="470" x2="952" y2="470" stroke="#c8a97e" stroke-width="3"/>
+  <text x="828" y="488" font-size="11" fill="#a9743f">桌面（世界 y = 0.82）</text>
+
+  <rect x="490" y="400" width="120" height="70" rx="5" fill="#eef3f8" stroke="#90a4ae" stroke-width="1.6"/>
+  <text x="550" y="456" font-size="11" fill="#607d8b" text-anchor="middle">足迹 A</text>
+  <rect x="850" y="400" width="80" height="70" rx="5" fill="#eef3f8" stroke="#90a4ae" stroke-width="1.6"/>
+  <text x="890" y="456" font-size="11" fill="#607d8b" text-anchor="middle">足迹 B</text>
+
+  <line x1="470" y1="340" x2="950" y2="340" stroke="#b0bec5" stroke-width="1.4" stroke-dasharray="6 5"/>
+  <text x="470" y="312" font-size="11" fill="#7f8c8d">水平段恒高于器件最高点（结构上不可能斜线擦穿本体）</text>
+  <line x1="470" y1="438" x2="950" y2="438" stroke="#b0bec5" stroke-width="1.4" stroke-dasharray="6 5"/>
+
+  <path d="M530,400 L530,340 L610,340 C 650,340 655,438 690,438 L760,438 C 795,438 795,340 830,340 L880,340 L880,400"
+        fill="none" stroke="#1c56d6" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <g font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle">
+    <circle cx="530" cy="400" r="9" fill="#1c56d6"/><text x="530" y="404">①</text>
+    <circle cx="530" cy="340" r="9" fill="#1c56d6"/><text x="530" y="344">②</text>
+    <circle cx="610" cy="340" r="9" fill="#1c56d6"/><text x="610" y="344">③</text>
+    <circle cx="690" cy="438" r="9" fill="#1c56d6"/><text x="690" y="442">④</text>
+    <circle cx="830" cy="340" r="9" fill="#1c56d6"/><text x="830" y="344">⑤</text>
+    <circle cx="880" cy="400" r="9" fill="#1c56d6"/><text x="880" y="404">⑥</text>
+  </g>
+
+  <text x="24" y="512" font-size="12" fill="#555">两条虚线：上＝逃逸高度（水平段恒高于器件最高点）　下＝cableSagY = 0.86 m（桌面上方 0.04 m）</text>
+  <text x="24" y="538" font-size="12" fill="#555">① 端子 A　② 竖直升降点（同 XZ、只改 y）　③ 逃逸点（退出足迹后再外推 0.06 m）　④ 中垂控制点 m1 / m2</text>
+  <text x="24" y="561" font-size="12" fill="#555">⑤ 对端逃逸点　⑥ 端子 B —— 控制点经 CatmullRomCurve3 平滑后，用 TubeGeometry(44 段, r = 0.016) 挤出实体电缆，任一端是电池正极则用红色材质。</text>
+  <text x="24" y="588" font-size="12" fill="#7f8c8d">逃逸高度由器件自声明：电池 / 开关 / 变阻器取接线柱柱顶，灯泡取玻璃泡顶，万用表取插孔柱高度 —— 表笔线绝不翻过表顶挡住面板。</text>
+</svg>

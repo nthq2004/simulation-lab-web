@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 560" width="940" height="560" font-family="Microsoft YaHei, sans-serif">
+  <rect x="0" y="0" width="940" height="560" fill="#ffffff"/>
+  <text x="470" y="30" text-anchor="middle" font-size="19" font-weight="bold" fill="#1a2430">超速保护功能实验流程（RPM Detector）</text>
+
+  <!-- 前置条件 -->
+  <rect x="40" y="56" width="860" height="86" rx="10" fill="#f4f7fa" stroke="#4a7ab5" stroke-width="2"/>
+  <text x="60" y="80" font-size="14" font-weight="bold" fill="#1c4a7e">① 停机备车（试验必须在停车状态下进行）</text>
+  <text x="60" y="104" font-size="13" fill="#20303c">车钟手柄拉回 STOP，等转速降到 0（运行中把试验开关打到 ON 会被拒绝并给出提示）</text>
+  <text x="60" y="128" font-size="13" fill="#20303c">确认主起动阀关闭（气动操纵系统「工作」灯，起动空气已切断）、滑油泵运行</text>
+
+  <!-- 集控台 RPM Detector -->
+  <rect x="40" y="162" width="420" height="196" rx="10" fill="#eef6ee" stroke="#2e8b3d" stroke-width="2"/>
+  <text x="60" y="186" font-size="14" font-weight="bold" fill="#1c5c28">② 集控台 Safety System → RPM Detector</text>
+  <text x="60" y="210" font-size="13" fill="#20303c">Rpm Simulate 值 = 65.0 rpm（模拟转速）</text>
+  <text x="60" y="234" font-size="13" fill="#20303c">Overspeed Test Level 值 = 78.0 rpm（试验值）</text>
+  <text x="60" y="258" font-size="13" fill="#20303c">白底数值框双击可编辑，回车确认</text>
+  <text x="60" y="282" font-size="13" fill="#20303c">把 Rpm Simulate 与 Overspeed Test 两个开关</text>
+  <text x="60" y="302" font-size="13" fill="#20303c">都打到 ON（绿灯亮）</text>
+  <text x="60" y="330" font-size="13" fill="#8a4d05">此时 65 &lt; 78，试验已武装但不应动作</text>
+
+  <!-- 触发 -->
+  <rect x="480" y="162" width="420" height="196" rx="10" fill="#fdeeee" stroke="#c0392b" stroke-width="2"/>
+  <text x="500" y="186" font-size="14" font-weight="bold" fill="#8c2418">③ 触发超速（把模拟转速调过试验值）</text>
+  <text x="500" y="210" font-size="13" fill="#20303c">双击 Rpm Simulate 值框，改为 85.0 rpm</text>
+  <text x="500" y="234" font-size="13" fill="#20303c">条件：simOn 且 osTestOn 且 85 &gt; 78</text>
+  <text x="500" y="258" font-size="13" fill="#20303c">→ 安全单元执行超速停车（燃油切断）</text>
+  <text x="500" y="286" font-size="13" font-weight="bold" fill="#8c2418">联动表现</text>
+  <text x="500" y="308" font-size="12.5" fill="#20303c">· Shut Down 页只亮 4 项：ENGINE TRIPPED、</text>
+  <text x="500" y="326" font-size="12.5" fill="#20303c">  OVERSPEED FROM RPM UNIT、SYS.1／SYS.2</text>
+  <text x="500" y="344" font-size="12.5" fill="#20303c">· 报警列统一 AL. CLOSE，Eng. Not Ready</text>
+
+  <!-- 应答 -->
+  <rect x="40" y="378" width="420" height="112" rx="10" fill="#fdf3e8" stroke="#c47a1c" stroke-width="2"/>
+  <text x="60" y="402" font-size="14" font-weight="bold" fill="#8a4d05">④ 驾控台确认（消音 + ACK）</text>
+  <text x="60" y="426" font-size="13" fill="#20303c">报警栏 OVERSPEED SYS.1／SYS.2 - SW BACKUP, SHUTDN</text>
+  <text x="60" y="450" font-size="13" fill="#20303c">先按消音停止声响，再按 ACK 确认：</text>
+  <text x="60" y="470" font-size="13" fill="#20303c">故障仍在 → 报警转黄（已确认），不会清除</text>
+
+  <!-- 复位 -->
+  <rect x="480" y="378" width="420" height="112" rx="10" fill="#eef3fd" stroke="#2b5cb8" stroke-width="2"/>
+  <text x="500" y="402" font-size="14" font-weight="bold" fill="#1c3f86">⑤ 集控台复位超速</text>
+  <text x="500" y="426" font-size="13" fill="#20303c">把模拟转速调回 65.0 rpm（低于试验值）</text>
+  <text x="500" y="450" font-size="13" fill="#20303c">→ 超速故障消失：停车解除、恢复备车</text>
+  <text x="500" y="470" font-size="13" fill="#20303c">→ 再消音 + ACK，所有警报复位</text>
+
+  <!-- 箭头 -->
+  <g stroke="#5b6a78" stroke-width="2" fill="none" marker-end="url(#ar2)">
+    <path d="M250 146 L250 158"/>
+    <path d="M690 146 L690 158"/>
+    <path d="M470 260 L476 260"/>
+    <path d="M250 362 L250 374"/>
+    <path d="M690 362 L690 374"/>
+  </g>
+  <defs>
+    <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0 0 L9 4.5 L0 9 z" fill="#5b6a78"/>
+    </marker>
+  </defs>
+
+  <rect x="40" y="506" width="860" height="38" rx="8" fill="#f4f7fa" stroke="#9fb4c9" stroke-width="1.5"/>
+  <text x="470" y="524" text-anchor="middle" font-size="12.5" fill="#20303c">安全要点：超速停车不可越控（无 Cancelled 灯）；试验开关只在停机时允许接通，主机一起动试验即自动结束</text>
+  <text x="470" y="540" text-anchor="middle" font-size="12.5" fill="#20303c">复位方式：使模拟转速回落到试验值以下，或断开任一试验开关</text>
+</svg>
